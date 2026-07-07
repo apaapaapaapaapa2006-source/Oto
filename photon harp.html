@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#050208">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="カメラで演奏する光と音の楽器 - PHOTON HARP">
+<title>PHOTON HARP</title>
+<style>
+  :root{
+    --void:#050208;
+    --deep-violet:#150a2e;
+    --cyan:#00f0ff;
+    --magenta:#ff00c8;
+    --ghost:#e8f9ff;
+    --warn:#ff3b5c;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'JetBrains Mono','SF Mono','Courier New',monospace; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #overlay{
+    position:fixed; inset:0; z-index:10;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at center, var(--deep-violet) 0%, var(--void) 75%);
+    transition:opacity .7s ease, visibility .7s ease;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  #eyebrow{
+    color:rgba(232,249,255,0.45); font-size:0.68rem; letter-spacing:0.45em;
+    margin-bottom:0.9rem; text-transform:uppercase;
+  }
+  #title{
+    font-size:2.1rem; font-weight:700; letter-spacing:0.35em; color:var(--ghost);
+    text-shadow:0 0 18px var(--cyan), 0 0 42px var(--magenta);
+    margin-bottom:1.6rem;
+  }
+  #startBtn{
+    padding:0.85rem 2.6rem; font-size:0.95rem; letter-spacing:0.25em; font-family:inherit;
+    color:var(--cyan); background:transparent; border:1px solid var(--cyan); border-radius:2px;
+    cursor:pointer; box-shadow:0 0 16px rgba(0,240,255,0.45); transition:all .2s ease;
+  }
+  #startBtn:active{ background:rgba(0,240,255,0.18); transform:scale(0.97); }
+  #errorMsg{
+    display:none; margin-top:1.4rem; max-width:78%; text-align:center;
+    color:var(--warn); font-size:0.78rem; line-height:1.6; letter-spacing:0.02em;
+  }
+  #hint{
+    position:fixed; bottom:calc(7% + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); z-index:5;
+    color:rgba(0,240,255,0.6); font-size:0.72rem; letter-spacing:0.12em; text-align:center;
+    white-space:nowrap; pointer-events:none; opacity:0; transition:opacity 1s ease;
+  }
+  #hint.show{ opacity:1; }
+  #credit{
+    position:fixed; right:calc(0.6rem + env(safe-area-inset-right)); bottom:calc(0.6rem + env(safe-area-inset-bottom));
+    z-index:5; color:rgba(232,249,255,0.28); font-size:0.6rem; letter-spacing:0.15em;
+    pointer-events:none; text-shadow:0 0 8px rgba(0,240,255,0.3);
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<video id="video" playsinline muted></video>
+<div id="hint">両手をかざして親指と指をつまむと音が鳴る</div>
+<div id="credit">PHOTON HARP — アパート</div>
+
+<div id="overlay">
+  <div id="eyebrow">CAMERA INSTRUMENT</div>
+  <div id="title">PHOTON HARP</div>
+  <button id="startBtn">START</button>
+  <div id="errorMsg">カメラを起動できませんでした。ブラウザのカメラ権限を許可してから再読み込みしてください。</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+(() => {
+  'use strict';
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hint = document.getElementById('hint');
+
+  let W = 0, H = 0;
+  function resize(){ W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  /* ---------------- Audio engine ---------------- */
+  let actx = null, master = null, compressor = null, delayBus = null;
+
+  function initAudio(){
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain();
+    master.gain.value = 0.9;
+    compressor = actx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-18, actx.currentTime);
+    compressor.ratio.setValueAtTime(4, actx.currentTime);
+    master.connect(compressor);
+    compressor.connect(actx.destination);
+
+    /* shimmer: cross-feedback delay pair standing in for reverb */
+    delayBus = actx.createGain();
+    delayBus.gain.value = 0.4;
+    const d1 = actx.createDelay(1.0); d1.delayTime.value = 0.28;
+    const d2 = actx.createDelay(1.0); d2.delayTime.value = 0.375;
+    const fb1 = actx.createGain(); fb1.gain.value = 0.34;
+    const fb2 = actx.createGain(); fb2.gain.value = 0.32;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+    delayBus.connect(d1);
+    d1.connect(lp);
+    lp.connect(fb1);
+    fb1.connect(d2);
+    d2.connect(fb2);
+    fb2.connect(d1);
+    d1.connect(compressor);
+    d2.connect(compressor);
+  }
+
+  /* quantized pentatonic-minor scale spanning ~2.25 octaves from A2 */
+  const SCALE = [0,3,5,7,10,12,15,17,19,22,24,27];
+  const ROOT = 110;
+  function noteFreq(t){
+    const clamped = Math.max(0, Math.min(0.999, t));
+    const idx = Math.floor(clamped * SCALE.length);
+    return ROOT * Math.pow(2, SCALE[idx] / 12);
+  }
+
+  function createDrone(){
+    const g = actx.createGain(); g.gain.value = 0;
+    const filt = actx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 900;
+    const o1 = actx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 220;
+    const o2 = actx.createOscillator(); o2.type = 'triangle'; o2.detune.value = 8; o2.frequency.value = 220;
+    o1.connect(filt); o2.connect(filt);
+    filt.connect(g);
+    g.connect(master); g.connect(delayBus);
+    o1.start(); o2.start();
+    return { g, filt, o1, o2, active:false, lastSeen:0, landmarks:null };
+  }
+
+  function droneOn(v, freq){
+    const now = actx.currentTime;
+    v.o1.frequency.setTargetAtTime(freq, now, 0.03);
+    v.o2.frequency.setTargetAtTime(freq, now, 0.03);
+    v.g.gain.setTargetAtTime(0.22, now, 0.08);
+    v.active = true;
+  }
+  function droneOff(v){
+    const now = actx.currentTime;
+    v.g.gain.setTargetAtTime(0.0, now, 0.35);
+    v.active = false;
+  }
+  function droneFilter(v, cutoff){
+    v.filt.frequency.setTargetAtTime(cutoff, actx.currentTime, 0.06);
+  }
+
+  function pluck(freq, pan){
+    const now = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq * 2;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.5, now + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+    const p = actx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan));
+    o.connect(g); g.connect(p);
+    p.connect(master); p.connect(delayBus);
+    o.start(now);
+    o.stop(now + 0.55);
+  }
+
+  /* ---------------- Hand tracking ---------------- */
+  const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+  hands.setOptions({ maxNumHands:2, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+
+  const dronePool = {};
+  const pinchState = {};
+  let hasPlayed = false;
+  function markPlayed(){
+    if (!hasPlayed){ hasPlayed = true; hint.classList.remove('show'); }
+  }
+
+  function dist(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
+
+  const ON_T = 0.045, OFF_T = 0.07;
+
+  function processHand(hand, lm){
+    if (!actx) return;
+    if (!dronePool[hand]) dronePool[hand] = createDrone();
+    if (!pinchState[hand]) pinchState[hand] = { droneOn:false, pluckOn:false };
+
+    const thumb = lm[4], index = lm[8], middle = lm[12], wrist = lm[0];
+    const dIndex = dist(thumb, index);
+    const dMiddle = dist(thumb, middle);
+
+    const tips = [4,8,12,16,20];
+    let openSum = 0;
+    tips.forEach((ti) => { openSum += dist(wrist, lm[ti]); });
+    const openness = Math.max(0, Math.min(1, (openSum / 5) / 0.35));
+
+    const y = 1 - ((index.y + thumb.y) / 2);
+    const x = 1 - ((index.x + thumb.x) / 2); /* mirrored for selfie view */
+
+    const v = dronePool[hand];
+    const st = pinchState[hand];
+
+    const reg = hand === 'Right' ? 2 : 1; /* 両手が同音域で鳴り続けると単調なので右手は1オクターブ上に固定 */
+
+    if (!st.droneOn && dIndex < ON_T){
+      st.droneOn = true;
+      droneOn(v, noteFreq(y) * reg);
+      markPlayed();
+    } else if (st.droneOn && dIndex > OFF_T){
+      st.droneOn = false;
+      droneOff(v);
+    } else if (st.droneOn){
+      droneOn(v, noteFreq(y) * reg);
+    }
+    if (st.droneOn) droneFilter(v, 400 + openness * 3000);
+
+    if (!st.pluckOn && dMiddle < ON_T){
+      st.pluckOn = true;
+      pluck(noteFreq(y) * 1.5 * reg, (x - 0.5) * 1.6);
+      spawnBurst(x * W, (1 - y) * H, hand === 'Left' ? [0,240,255] : [255,0,200]);
+      triggerGlitch();
+      markPlayed();
+    } else if (dMiddle > OFF_T){
+      st.pluckOn = false;
+    }
+
+    v.lastSeen = performance.now();
+    v.landmarks = lm;
+  }
+
+  hands.onResults((results) => {
+    const seen = { Left:false, Right:false };
+    if (results.multiHandLandmarks){
+      results.multiHandLandmarks.forEach((lm, i) => {
+        const label = results.multiHandedness[i].label;
+        seen[label] = true;
+        processHand(label, lm);
+      });
+    }
+    ['Left','Right'].forEach((h) => {
+      if (!seen[h] && dronePool[h] && dronePool[h].active){
+        droneOff(dronePool[h]);
+        pinchState[h] = { droneOn:false, pluckOn:false };
+      }
+    });
+  });
+
+  /* ---------------- Particles ---------------- */
+  const MAX_PARTICLES = 260;
+  let particles = [];
+  function spawnBurst(x, y, rgb){
+    for (let i = 0; i < 18; i++){
+      const a = Math.random() * Math.PI * 2;
+      const sp = 1 + Math.random() * 4;
+      particles.push({ x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life:1, rgb });
+    }
+    if (particles.length > MAX_PARTICLES){
+      particles.splice(0, particles.length - MAX_PARTICLES);
+    }
+  }
+
+  /* 何も演奏していない時に画面が死なないよう常時漂う微光の粒 */
+  const idleMotes = Array.from({ length: 46 }, () => ({
+    x: Math.random(), y: Math.random(),
+    vx: (Math.random() - 0.5) * 0.00035, vy: (Math.random() - 0.5) * 0.00035,
+    ph: Math.random() * Math.PI * 2
+  }));
+  function drawIdleMotes(t, dim){
+    const mul = dim ? 0.35 : 1; /* 演奏中は控えめにして手の光を主役に譲る */
+    idleMotes.forEach((m) => {
+      m.x += m.vx; m.y += m.vy;
+      if (m.x < 0) m.x = 1; if (m.x > 1) m.x = 0;
+      if (m.y < 0) m.y = 1; if (m.y > 1) m.y = 0;
+      const tw = (0.25 + 0.2 * Math.sin(t * 0.0012 + m.ph)) * mul;
+      const hueShift = (t * 0.01 + m.ph * 40) % 360;
+      ctx.fillStyle = `hsla(${180 + Math.sin(hueShift * 0.017) * 60},100%,75%,${tw})`;
+      ctx.beginPath();
+      ctx.arc(m.x * W, m.y * H, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  /* ---------------- Glitch accent ---------------- */
+  let glitchUntil = 0;
+  function triggerGlitch(){ glitchUntil = performance.now() + 130; }
+  function drawGlitch(){
+    if (performance.now() > glitchUntil) return;
+    const bands = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < bands; i++){
+      const by = Math.floor(Math.random() * H);
+      const bh = Math.min(H - by, 3 + Math.floor(Math.random() * 16));
+      const shift = Math.round((Math.random() - 0.5) * 46);
+      if (bh <= 0) continue;
+      try{
+        const strip = ctx.getImageData(0, by, W, bh);
+        ctx.putImageData(strip, shift, by);
+      } catch (e) { /* out-of-bounds edge case, safely ignored */ }
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(0,240,255,0.05)';
+    ctx.fillRect(-3, 0, W, H);
+    ctx.fillStyle = 'rgba(255,0,200,0.05)';
+    ctx.fillRect(3, 0, W, H);
+    ctx.restore();
+  }
+
+  /* ---------------- Render loop ---------------- */
+  function drawHandWeb(lm, rgb){
+    const pts = [4,8,12,16,20].map((i) => ({ x:(1 - lm[i].x) * W, y: lm[i].y * H }));
+    const wrist = { x:(1 - lm[0].x) * W, y: lm[0].y * H };
+    const col = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.75)`;
+    ctx.shadowBlur = 16; ctx.shadowColor = col; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    pts.forEach((p) => { ctx.moveTo(wrist.x, wrist.y); ctx.lineTo(p.x, p.y); });
+    for (let i = 0; i < pts.length - 1; i++){
+      ctx.moveTo(pts[i].x, pts[i].y);
+      ctx.lineTo(pts[i+1].x, pts[i+1].y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    pts.forEach((p) => {
+      ctx.beginPath(); ctx.fillStyle = col; ctx.shadowBlur = 10; ctx.shadowColor = col;
+      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.shadowBlur = 0;
+  }
+
+  function draw(){
+    const t = performance.now();
+    ctx.fillStyle = 'rgba(5,2,8,0.18)';
+    ctx.fillRect(0, 0, W, H);
+
+    let anyHand = false;
+    ['Left','Right'].forEach((h) => {
+      const v = dronePool[h];
+      if (v && v.landmarks && t - v.lastSeen < 250){
+        anyHand = true;
+      }
+    });
+    drawIdleMotes(t, anyHand);
+    ['Left','Right'].forEach((h) => {
+      const v = dronePool[h];
+      if (v && v.landmarks && t - v.lastSeen < 250){
+        drawHandWeb(v.landmarks, h === 'Left' ? [0,240,255] : [255,0,200]);
+      }
+    });
+
+    ctx.save();
+    particles.forEach((p) => {
+      p.x += p.vx; p.y += p.vy; p.vx *= 0.94; p.vy *= 0.94; p.life -= 0.02;
+      ctx.globalAlpha = Math.max(0, p.life);
+      const col = `rgb(${p.rgb[0]},${p.rgb[1]},${p.rgb[2]})`;
+      ctx.fillStyle = col; ctx.shadowBlur = 12; ctx.shadowColor = col;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
+    particles = particles.filter((p) => p.life > 0);
+
+    drawGlitch();
+
+    requestAnimationFrame(draw);
+  }
+
+  /* ---------------- Start ---------------- */
+  let camera = null;
+  startBtn.addEventListener('click', async () => {
+    try{
+      initAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      camera = new Camera(video, {
+        onFrame: async () => { await hands.send({ image: video }); },
+        width:640, height:480
+      });
+      await camera.start();
+      overlay.classList.add('hidden');
+      hint.classList.add('show');
+      requestAnimationFrame(draw);
+    } catch (err){
+      errorMsg.style.display = 'block';
+      console.error('PHOTON HARP init error:', err);
+    }
+  });
+})();
+</script>
+</body>
+</html>
