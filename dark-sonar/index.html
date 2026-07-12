@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#02040a">
+  <title>DARK SONAR — 音だけが光</title>
+  <style>
+    :root{color-scheme:dark;--cyan:#7deaff;--violet:#a88cff;--glass:rgba(7,12,23,.64)}
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#02040a;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eafcff}
+    body{touch-action:none}canvas,video{position:fixed;inset:0;width:100%;height:100%}video{opacity:0;pointer-events:none}
+    #stage{cursor:crosshair}.vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 45%,transparent 25%,rgba(0,0,0,.4) 72%,rgba(0,0,0,.82) 100%)}
+    header{position:fixed;left:max(20px,env(safe-area-inset-left));right:max(20px,env(safe-area-inset-right));top:max(18px,env(safe-area-inset-top));display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;text-shadow:0 2px 18px #000}
+    .brand{letter-spacing:.24em;font-size:13px;font-weight:700}.sub{margin-top:6px;color:#9eb7c6;font-size:11px;letter-spacing:.16em}.status{display:flex;align-items:center;gap:7px;font-size:11px;color:#acc4ce;letter-spacing:.1em}.dot{width:7px;height:7px;border-radius:50%;background:#52616a;box-shadow:0 0 0 transparent}.dot.on{background:var(--cyan);box-shadow:0 0 15px var(--cyan)}
+    #intro{position:fixed;inset:0;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 42%,#0b1324 0,#03060d 45%,#010205 100%);transition:.8s opacity;z-index:4}.card{text-align:center;max-width:430px}.mark{width:82px;height:82px;margin:0 auto 24px;border:1px solid rgba(125,234,255,.55);border-radius:50%;display:grid;place-items:center;box-shadow:0 0 40px rgba(125,234,255,.1),inset 0 0 30px rgba(125,234,255,.07);font-size:28px}.card h1{font-size:clamp(27px,8vw,43px);letter-spacing:.14em;margin:0}.card p{font-size:13px;line-height:1.9;color:#9cb2c0;margin:18px 0 28px}.start{appearance:none;border:1px solid rgba(125,234,255,.65);border-radius:999px;background:rgba(125,234,255,.08);color:#eaffff;padding:15px 30px;font-weight:700;letter-spacing:.16em;box-shadow:0 0 32px rgba(70,210,255,.12);cursor:pointer}.start:active{transform:scale(.98)}
+    #hint{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:12px;letter-spacing:.14em;color:rgba(220,246,255,.8);text-align:center;pointer-events:none;transition:opacity 1s;text-shadow:0 2px 15px #000}.controls{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px;border:1px solid rgba(150,220,255,.15);border-radius:22px;background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 12px 45px rgba(0,0,0,.45);transition:.3s opacity}
+    .controls button{appearance:none;border:0;background:transparent;color:#bcd1db;border-radius:14px;padding:10px 12px;min-width:44px;font-size:12px;letter-spacing:.08em;cursor:pointer}.controls button.active{color:#fff;background:rgba(125,234,255,.13);box-shadow:inset 0 0 0 1px rgba(125,234,255,.18)}.divider{width:1px;height:22px;background:rgba(255,255,255,.12)}
+    .panel{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:86px;width:min(270px,calc(100vw - 32px));padding:16px 17px;border:1px solid rgba(150,220,255,.16);border-radius:18px;background:var(--glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);opacity:0;pointer-events:none;transform:translateY(8px);transition:.25s}.panel.open{opacity:1;pointer-events:auto;transform:none}.row{display:grid;grid-template-columns:74px 1fr 32px;align-items:center;gap:8px;margin:11px 0;font-size:11px;color:#b7cad4}.row output{text-align:right;color:#e5fbff}input[type=range]{accent-color:#7deaff;width:100%}
+    #message{position:fixed;top:70px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 32px);padding:9px 14px;border-radius:999px;background:rgba(0,0,0,.6);color:#bcd3dd;font-size:11px;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap}#message.show{opacity:1}
+    @media(max-width:500px){.controls{width:calc(100% - 24px);justify-content:center}.controls button{padding:10px 8px;flex:1}.brand{font-size:11px}.sub{font-size:9px}.panel{bottom:84px}}
+  </style>
+</head>
+<body>
+  <video id="camera" playsinline muted></video><canvas id="stage"></canvas><div class="vignette"></div>
+  <header><div><div class="brand">DARK SONAR</div><div class="sub">音だけが光</div></div><div class="status"><span id="dot" class="dot"></span><span id="status">SLEEPING</span></div></header>
+  <div id="hint">画面に触れるか、手を叩いてください</div><div id="message"></div>
+  <div class="controls">
+    <button id="pulseBtn" class="active">◎ PULSE</button><div class="divider"></div>
+    <button id="micBtn">♩ CLAP</button><div class="divider"></div>
+    <button id="camBtn">◉ CAMERA</button><div class="divider"></div>
+    <button id="setBtn">⌁ TUNE</button>
+  </div>
+  <div id="panel" class="panel">
+    <div class="row"><label>暗さ</label><input id="darkness" type="range" min="2" max="30" value="12"><output>12%</output></div>
+    <div class="row"><label>輪郭感度</label><input id="edge" type="range" min="15" max="100" value="42"><output>42</output></div>
+    <div class="row"><label>残響</label><input id="reverb" type="range" min="0" max="95" value="68"><output>68%</output></div>
+    <div class="row"><label>手拍子感度</label><input id="clap" type="range" min="8" max="70" value="30"><output>30</output></div>
+  </div>
+  <div id="intro"><div class="card"><div class="mark">◎</div><h1>DARK SONAR</h1><p>目の前の空間を、音で探る楽器。<br>波紋が輪郭に触れた場所だけが光り、鳴ります。</p><button id="start" class="start">空間を聴く</button></div></div>
+<script>
+(()=>{
+ const video=document.querySelector('#camera'),canvas=document.querySelector('#stage'),ctx=canvas.getContext('2d',{alpha:false});
+ const intro=document.querySelector('#intro'),hint=document.querySelector('#hint'),statusEl=document.querySelector('#status'),dot=document.querySelector('#dot'),msg=document.querySelector('#message'),panel=document.querySelector('#panel');
+ const darkness=document.querySelector('#darkness'),edgeCtl=document.querySelector('#edge'),reverbCtl=document.querySelector('#reverb'),clapCtl=document.querySelector('#clap');
+ let W=0,H=0,dpr=1,running=false,camOn=false,micOn=false,lastClap=0,last=0,frame=0;
+ let audio,master,convolver,wet,dry,analyser,micStream; const pulses=[],sparks=[];
+ const scales=[[0,2,5,7,9],[0,3,5,7,10],[0,2,4,7,11]]; let scale=scales[0];
+ const work=document.createElement('canvas'),wctx=work.getContext('2d',{willReadFrequently:true}); work.width=160;work.height=100;
+ function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
+ function toast(t){msg.textContent=t;msg.classList.add('show');clearTimeout(msg.t);msg.t=setTimeout(()=>msg.classList.remove('show'),2600)}
+ function initAudio(){if(audio)return;audio=new (AudioContext||webkitAudioContext)();master=audio.createGain();master.gain.value=.52;dry=audio.createGain();wet=audio.createGain();convolver=audio.createConvolver();
+   const len=audio.sampleRate*2.8,b=audio.createBuffer(2,len,audio.sampleRate);for(let c=0;c<2;c++){let d=b.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.7)}convolver.buffer=b;dry.connect(master);convolver.connect(wet).connect(master);master.connect(audio.destination);setReverb()}
+ function setReverb(){if(!audio)return;let v=+reverbCtl.value/100;wet.gain.value=v*.75;dry.gain.value=1-v*.38}
+ function note(x,y,strength=.65){if(!audio)return;let now=audio.currentTime,oct=Math.max(0,Math.min(2,Math.floor((1-y/H)*3))),idx=Math.max(0,Math.min(scale.length-1,Math.floor(x/W*scale.length)));let midi=43+scale[idx]+oct*12,f=440*Math.pow(2,(midi-69)/12);
+   const osc=audio.createOscillator(),o2=audio.createOscillator(),g=audio.createGain(),filter=audio.createBiquadFilter(),pan=audio.createStereoPanner?audio.createStereoPanner():audio.createGain();osc.type='sine';o2.type='triangle';osc.frequency.value=f;o2.frequency.value=f*2.002;filter.type='lowpass';filter.frequency.value=700+strength*2400;filter.Q.value=2; if(pan.pan)pan.pan.value=x/W*2-1;
+   g.gain.setValueAtTime(.0001,now);g.gain.exponentialRampToValueAtTime(.08+strength*.1,now+.018);g.gain.exponentialRampToValueAtTime(.0001,now+1.5+strength*2);osc.connect(g);o2.connect(g);g.connect(filter).connect(pan);pan.connect(dry);pan.connect(convolver);osc.start(now);o2.start(now);osc.stop(now+4);o2.stop(now+4)}
+ function pulse(x,y,power=1){initAudio();if(audio.state==='suspended')audio.resume();pulses.push({x,y,r:2,prev:0,speed:260+power*90,life:1,power,hit:new Set()});hint.style.opacity=0;note(x,y,.25)}
+ function demoBackground(t){let grad=ctx.createRadialGradient(W*.5,H*.45,10,W*.5,H*.45,Math.max(W,H)*.7);grad.addColorStop(0,'#091321');grad.addColorStop(1,'#010205');ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);ctx.strokeStyle='rgba(70,115,145,.08)';ctx.lineWidth=1;for(let i=0;i<9;i++){ctx.beginPath();for(let x=0;x<=W;x+=12){let y=H*(.18+i*.085)+Math.sin(x*.012+i+t*.0003)*10;ctx.lineTo(x,y)}ctx.stroke()}}
+ function getEdges(){if(!camOn||video.readyState<2)return null;wctx.save();let vr=video.videoWidth/video.videoHeight,sr=work.width/work.height,sx=0,sy=0,sw=video.videoWidth,sh=video.videoHeight;if(vr>sr){sw=sh*sr;sx=(video.videoWidth-sw)/2}else{sh=sw/sr;sy=(video.videoHeight-sh)/2}wctx.translate(work.width,0);wctx.scale(-1,1);wctx.drawImage(video,sx,sy,sw,sh,0,0,work.width,work.height);wctx.restore();return wctx.getImageData(0,0,work.width,work.height)}
+ function renderCamera(img){ctx.save();ctx.globalAlpha=+darkness.value/100;ctx.filter='grayscale(1) contrast(1.25) brightness(.7)';ctx.drawImage(work,0,0,W,H);ctx.restore();ctx.fillStyle='rgba(1,3,8,.42)';ctx.fillRect(0,0,W,H)}
+ function sampleEdge(img,x,y){if(!img)return .35+Math.random()*.2;let ix=Math.max(1,Math.min(158,Math.floor(x/W*160))),iy=Math.max(1,Math.min(98,Math.floor(y/H*100))),p=(iy*160+ix)*4,d=img.data;let lum=(q)=>d[q]*.299+d[q+1]*.587+d[q+2]*.114;let a=lum(p),b=lum(p+4),c=lum(p+640);return Math.min(1,(Math.abs(a-b)+Math.abs(a-c))/110)}
+ function loop(t){if(!running)return;requestAnimationFrame(loop);let dt=Math.min(.034,(t-last)/1000||.016);last=t;let img=(frame++%2===0)?getEdges():window._edgeImg;window._edgeImg=img||window._edgeImg;if(camOn&&window._edgeImg)renderCamera(window._edgeImg);else demoBackground(t);
+   ctx.globalCompositeOperation='lighter';for(let p of pulses){p.prev=p.r;p.r+=p.speed*dt;p.life-=dt*.19;let a=Math.max(0,p.life);ctx.lineWidth=1.3;ctx.strokeStyle=`rgba(110,230,255,${a*.48})`;ctx.shadowColor='#67dfff';ctx.shadowBlur=16;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.stroke();ctx.shadowBlur=0;
+     let n=Math.max(22,Math.floor(p.r*.2));for(let i=0;i<n;i++){let ang=i/n*Math.PI*2,x=p.x+Math.cos(ang)*p.r,y=p.y+Math.sin(ang)*p.r;if(x<0||y<0||x>W||y>H)continue;let e=sampleEdge(window._edgeImg,x,y);if(e>+edgeCtl.value/100){let key=(i>>2)+'_'+Math.floor(p.r/35);if(!p.hit.has(key)&&Math.random()<.16){p.hit.add(key);sparks.push({x,y,a:1,size:2+e*7});note(x,y,e)}}}}
+   for(let s of sparks){s.a-=dt*.72;s.size+=dt*18;ctx.fillStyle=`rgba(170,235,255,${Math.max(0,s.a)})`;ctx.shadowColor='#9f8cff';ctx.shadowBlur=22;ctx.beginPath();ctx.arc(s.x,s.y,s.size,0,Math.PI*2);ctx.fill()}ctx.shadowBlur=0;ctx.globalCompositeOperation='source-over';pulses.splice(0,pulses.length,...pulses.filter(p=>p.life>0&&p.r<Math.hypot(W,H)*1.25));sparks.splice(0,sparks.length,...sparks.filter(s=>s.a>0));}
+ async function camera(on=true){if(!on){if(video.srcObject)video.srcObject.getTracks().forEach(t=>t.stop());video.srcObject=null;camOn=false;document.querySelector('#camBtn').classList.remove('active');statusEl.textContent='DEMO SPACE';return}try{let s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}},audio:false});video.srcObject=s;await video.play();camOn=true;document.querySelector('#camBtn').classList.add('active');statusEl.textContent='SPACE FOUND';dot.classList.add('on')}catch(e){camOn=false;toast('カメラを使えないため、デモ空間で演奏します');statusEl.textContent='DEMO SPACE'}}
+ async function microphone(){initAudio();if(micOn){micStream.getTracks().forEach(t=>t.stop());micOn=false;document.querySelector('#micBtn').classList.remove('active');toast('手拍子検出 OFF');return}try{micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});let src=audio.createMediaStreamSource(micStream);analyser=audio.createAnalyser();analyser.fftSize=512;src.connect(analyser);micOn=true;document.querySelector('#micBtn').classList.add('active');toast('手拍子検出 ON');detectClap()}catch(e){toast('マイクの使用が許可されていません')}}
+ function detectClap(){if(!micOn)return;let d=new Uint8Array(analyser.fftSize);analyser.getByteTimeDomainData(d);let sum=0;for(let v of d){let q=(v-128)/128;sum+=q*q}let rms=Math.sqrt(sum/d.length),now=performance.now();if(rms>+clapCtl.value/500&&now-lastClap>650){lastClap=now;pulse(W/2,H/2,Math.min(1.6,rms*5))}requestAnimationFrame(detectClap)}
+ document.querySelector('#start').onclick=async()=>{initAudio();running=true;intro.style.opacity=0;setTimeout(()=>intro.remove(),850);requestAnimationFrame(loop);await camera(true);setTimeout(()=>{if(hint.style.opacity!=='0')hint.style.opacity=.72},800)};
+ canvas.addEventListener('pointerdown',e=>{if(running)pulse(e.clientX,e.clientY,1)});document.querySelector('#pulseBtn').onclick=()=>pulse(W/2,H/2,1.15);document.querySelector('#micBtn').onclick=microphone;document.querySelector('#camBtn').onclick=()=>camera(!camOn);document.querySelector('#setBtn').onclick=()=>panel.classList.toggle('open');
+ [darkness,edgeCtl,reverbCtl,clapCtl].forEach(i=>i.oninput=()=>{i.nextElementSibling.value=i.id==='darkness'||i.id==='reverb'?i.value+'%':i.value;if(i===reverbCtl)setReverb()});
+ document.addEventListener('visibilitychange',()=>{if(audio&&document.hidden)audio.suspend()});
+})();
+</script>
+</body>
+</html>
