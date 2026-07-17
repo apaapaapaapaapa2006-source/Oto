@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#05030a">
+<meta name="description" content="Oto — カメラとマイクで奏でる光と音の楽器コレクション">
+<title>Oto ─ 光と音の楽器たち</title>
+<style>
+  :root{
+    --void:#05030a; --haze:#160c26; --ghost:#eef2ff; --accent:#8affe0;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ min-height:100%; background:var(--void);
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif;
+    color:var(--ghost); }
+  body{
+    background:radial-gradient(ellipse at 50% 0%, var(--haze) 0%, var(--void) 70%);
+    display:flex; flex-direction:column; align-items:center;
+    padding:clamp(2rem,8vh,5rem) 1.4rem 3rem;
+  }
+  .orb{ position:fixed; border-radius:50%; filter:blur(48px); opacity:.32; pointer-events:none; z-index:0;
+    animation:drift 16s ease-in-out infinite alternate; }
+  .o1{ width:40vmin; height:40vmin; left:4%;  top:8%;  background:radial-gradient(circle,#ff5470,transparent 70%); }
+  .o2{ width:48vmin; height:48vmin; right:2%; top:34%; background:radial-gradient(circle,#6c8cff,transparent 70%); animation-delay:-6s; }
+  .o3{ width:36vmin; height:36vmin; left:26%; bottom:4%; background:radial-gradient(circle,#8affe0,transparent 70%); animation-delay:-11s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1);} to{ transform:translate(5vmin,-4vmin) scale(1.12);} }
+
+  header{ position:relative; z-index:1; text-align:center; margin-bottom:clamp(2rem,6vh,3.5rem); }
+  .eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; }
+  h1{
+    font-size:clamp(2.4rem,7vw,3.4rem); font-weight:800; letter-spacing:0.18em;
+    background:linear-gradient(90deg,#ff5470,#ffb84d,#8affe0,#6c8cff,#c86bff,#ff5470);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  .sub{ color:rgba(238,242,255,0.55); font-size:0.85rem; letter-spacing:0.1em; margin-top:0.6rem; }
+
+  main{ position:relative; z-index:1; display:grid; gap:1.1rem; width:100%; max-width:26rem; }
+  a.card{
+    display:block; text-decoration:none; color:var(--ghost);
+    background:rgba(10,6,20,0.55); border:1px solid rgba(180,180,255,0.16); border-radius:18px;
+    padding:1.15rem 1.3rem; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+  }
+  a.card:hover, a.card:focus-visible{
+    transform:translateY(-2px); border-color:rgba(138,255,224,0.55);
+    box-shadow:0 6px 32px rgba(120,110,255,0.25);
+  }
+  .card .name{ font-size:1.05rem; font-weight:800; letter-spacing:0.14em; }
+  .card .name span{ margin-right:.5rem; }
+  .card .desc{ margin-top:0.4rem; font-size:0.76rem; line-height:1.7; color:rgba(238,242,255,0.6); }
+  .card .tag{ display:inline-block; margin-top:0.55rem; font-size:0.6rem; letter-spacing:0.18em;
+    color:var(--accent); border:1px solid rgba(138,255,224,0.35); border-radius:100px; padding:0.2rem 0.7rem; }
+
+  footer{ position:relative; z-index:1; margin-top:3rem; font-size:0.62rem; letter-spacing:0.2em;
+    color:rgba(238,242,255,0.35); text-align:center; line-height:2; }
+</style>
+</head>
+<body>
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+
+  <header>
+    <div class="eyebrow">CAMERA &amp; SOUND INSTRUMENTS</div>
+    <h1>Oto</h1>
+    <div class="sub">カメラとマイクで奏でる、光と音の楽器たち</div>
+  </header>
+
+  <main>
+    <a class="card" href="rainbow-ayatori/">
+      <div class="name"><span>🌈</span>RAINBOW YARN</div>
+      <div class="desc">両手の指先に虹色のあやとりが生まれる。指の本数と手の広げ具合で音色が変わり、両手グーで音が止まる。</div>
+      <div class="tag">HANDS ・ 虹あやとり</div>
+    </a>
+    <a class="card" href="dark-sonar/">
+      <div class="name"><span>🌑</span>DARK SONAR</div>
+      <div class="desc">暗闇に響くソナーの楽器。動きが波紋になり、手拍子にも反応する。</div>
+      <div class="tag">MOTION ・ ソナー</div>
+    </a>
+    <a class="card" href="photon%20harp.html">
+      <div class="name"><span>✨</span>PHOTON HARP</div>
+      <div class="desc">カメラで演奏する光のハープ。手の動きが弦をはじく。</div>
+      <div class="tag">HANDS ・ ハープ</div>
+    </a>
+  </main>
+
+  <footer>MADE WITH CAMERA · MICROPHONE · WEB AUDIO</footer>
+</body>
+</html>
