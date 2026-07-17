@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05030a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="カメラの前で手を広げると虹色のあやとりが生まれ、指の本数と手の伸ばし具合で音色が変わる楽器 - RAINBOW YARN">
+<title>RAINBOW YARN ─ 虹あやとり</title>
+<style>
+  :root{
+    --void:#05030a;
+    --haze:#160c26;
+    --ghost:#eef2ff;
+    --warn:#ff5470;
+    --accent:#8affe0;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; }
+  #title{
+    font-size:2.2rem; font-weight:800; letter-spacing:0.12em; line-height:1.2;
+    background:linear-gradient(90deg,#ff5470,#ffb84d,#8affe0,#6c8cff,#c86bff,#ff5470);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite; text-shadow:0 0 40px rgba(140,140,255,0.25);
+    margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:2rem; }
+  #startBtn{
+    padding:0.9rem 2.8rem; font-size:0.98rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,#8affe0,#c86bff); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(140,120,255,0.5); transition:transform .18s ease, box-shadow .18s ease;
+  }
+  #startBtn:active{ transform:scale(0.96); box-shadow:0 0 14px rgba(140,120,255,0.4); }
+  #hint{
+    margin-top:2.2rem; max-width:22rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--accent); font-weight:700; }
+  #errorMsg{ display:none; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(10,6,20,0.42); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(180,180,255,0.14); border-radius:16px; padding:0.6rem 0.85rem;
+    color:var(--ghost); min-width:96px;
+  }
+  .panel .lab{ font-size:0.58rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.25rem; }
+  .panel .cnt{ font-size:1.7rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .panel .cnt small{ font-size:0.7rem; font-weight:600; color:rgba(238,242,255,0.55); margin-left:.15rem; }
+  .panel .tim{ font-size:0.64rem; letter-spacing:0.14em; margin-top:0.35rem; color:var(--accent); min-height:0.8em; }
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.62rem; letter-spacing:0.26em; color:rgba(238,242,255,0.6);
+    padding:0.32rem 0.9rem; border-radius:100px; border:1px solid rgba(180,180,255,0.16);
+    background:rgba(10,6,20,0.4); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease;
+  }
+  #stateDot.playing{ color:#8affe0; border-color:rgba(138,255,224,0.5); }
+  #stateDot.silent{ color:#ff5470; border-color:rgba(255,84,112,0.45); }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(10,6,20,0.5); border:1px solid rgba(180,180,255,0.18);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(138,255,224,0.16); border-color:rgba(138,255,224,0.5); color:#8affe0; }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.24em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+
+  <div id="brand"><div class="b1">RAINBOW YARN</div><div class="b2">虹あやとり / 手で奏でる</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="fogBtn">靄 ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" id="leftPanel">
+      <div class="lab">LEFT / 左手</div>
+      <div class="cnt"><span id="lCount">0</span><small>本</small></div>
+      <div class="tim" id="lTim"></div>
+    </div>
+    <div class="panel" id="rightPanel" style="text-align:right">
+      <div class="lab">RIGHT / 右手</div>
+      <div class="cnt"><span id="rCount">0</span><small>本</small></div>
+      <div class="tim" id="rTim"></div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">RAINBOW YARN</div>
+    <div id="sub">虹あやとり — 手で奏でる光と音</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・カメラに<b>両手</b>をかざすと指先に<b>虹色のあやとり</b>が生まれます<br>
+      ・<b>指の本数</b>と<b>手の広げ具合</b>で音色が変化<br>
+      ・例）右5+左1 / 右3+左4 …組み合わせで音が変わる<br>
+      ・<b>両手グー（0本）</b>にすると音が止まります
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const fogBtn   = document.getElementById('fogBtn');
+  const lCountEl = document.getElementById('lCount');
+  const rCountEl = document.getElementById('rCount');
+  const lTimEl   = document.getElementById('lTim');
+  const rTimEl   = document.getElementById('rTim');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  //  right hand fingers -> timbre (waveform), left hand fingers -> harmonic body,
+  //  total fingers -> pitch (pentatonic), openness -> brightness & volume.
+  //  both fists (total === 0) -> silence.
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null;
+  let osc1 = null, osc2 = null, sub = null, filter = null, voiceGain = null;
+  let lfo = null, lfoGain = null;
+  let delay = null, fbGain = null, wet = null;
+  let audioReady = false;
+
+  // pentatonic (minor) scale spanning ~2 octaves; index 0 = silence placeholder
+  const BASE = 146.83; // D3
+  const SCALE = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24]; // semitone steps for 0..10 fingers
+  const WAVES = ['sine','sine','triangle','square','sawtooth','sawtooth'];
+
+  function midiRatio(semi){ return Math.pow(2, semi / 12); }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain();      master.gain.value = 0.0;
+    comp   = actx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 22; comp.ratio.value = 3.2;
+    comp.attack.value = 0.004;  comp.release.value = 0.25;
+
+    filter = actx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 900; filter.Q.value = 6;
+
+    voiceGain = actx.createGain(); voiceGain.gain.value = 0.9;
+
+    osc1 = actx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = BASE;
+    osc2 = actx.createOscillator(); osc2.type = 'triangle'; osc2.frequency.value = BASE; osc2.detune.value = 7;
+    sub  = actx.createOscillator(); sub.type  = 'sine';     sub.frequency.value  = BASE / 2;
+
+    const g1 = actx.createGain(); g1.gain.value = 0.5;
+    const g2 = actx.createGain(); g2.gain.value = 0.32;
+    const gs = actx.createGain(); gs.gain.value = 0.22;
+    osc1.connect(g1); osc2.connect(g2); sub.connect(gs);
+    g1.connect(filter); g2.connect(filter); gs.connect(filter);
+    filter.connect(voiceGain);
+
+    // vibrato LFO
+    lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5.2;
+    lfoGain = actx.createGain(); lfoGain.gain.value = 0;
+    lfo.connect(lfoGain); lfoGain.connect(osc1.detune); lfoGain.connect(osc2.detune);
+
+    // dreamy feedback delay -> misty tail
+    delay  = actx.createDelay(1.0); delay.delayTime.value = 0.33;
+    fbGain = actx.createGain();     fbGain.gain.value = 0.34;
+    wet    = actx.createGain();     wet.gain.value = 0.28;
+    voiceGain.connect(delay); delay.connect(fbGain); fbGain.connect(delay); delay.connect(wet);
+
+    voiceGain.connect(master);
+    wet.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    osc1.start(); osc2.start(); sub.start(); lfo.start();
+    audioReady = true;
+  }
+
+  // smoothed audio targets
+  let curWaveIndex = 4;
+  function applySound(g){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+
+    if (g.total === 0 || g.hands === 0){
+      // silence — both fists / no hands
+      master.gain.setTargetAtTime(0.0, t, 0.08);
+      return;
+    }
+
+    // pitch from total fingers
+    const semi = SCALE[Math.max(1, Math.min(10, g.total))];
+    const freq = BASE * midiRatio(semi);
+    osc1.frequency.setTargetAtTime(freq,      t, 0.05);
+    osc2.frequency.setTargetAtTime(freq,      t, 0.05);
+    sub.frequency.setTargetAtTime(freq / 2,   t, 0.05);
+
+    // timbre (waveform) from the DOMINANT hand fingers (right preferred)
+    const timbreN = g.rPresent ? g.r : g.l;
+    const wIdx = Math.max(0, Math.min(5, timbreN));
+    if (wIdx !== curWaveIndex){
+      osc1.type = WAVES[wIdx];
+      osc2.type = (wIdx >= 4) ? 'sawtooth' : (wIdx >= 2 ? 'square' : 'triangle');
+      curWaveIndex = wIdx;
+    }
+
+    // harmonic body from the OTHER hand -> detune spread
+    const bodyN = g.rPresent ? g.l : g.r;
+    osc2.detune.setTargetAtTime(4 + bodyN * 6, t, 0.1);
+
+    // brightness & vibrato from openness (伸ばし具合)
+    const cutoff = 320 + g.openness * 4200 + timbreN * 260;
+    filter.frequency.setTargetAtTime(cutoff, t, 0.06);
+    lfoGain.gain.setTargetAtTime(2 + g.motion * 26, t, 0.1);
+    lfo.frequency.setTargetAtTime(4.5 + g.openness * 3.5, t, 0.15);
+
+    // volume swells with openness
+    const vol = 0.14 + g.openness * 0.30;
+    master.gain.setTargetAtTime(vol, t, 0.07);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND ANALYSIS
+  // ---------------------------------------------------------------------------
+  const FINGERS = [[8,6,5],[12,10,9],[16,14,13],[20,18,17]]; // tip, pip, mcp
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+  function analyzeHand(lm){
+    const wrist = lm[0];
+    const palm  = dist(lm[0], lm[9]) || 1e-4;
+    const extended = [];
+
+    // thumb: tip farther from wrist than IP joint AND spread away from index MCP
+    const thumbRadial = dist(lm[4], wrist) > dist(lm[2], wrist) * 1.02;
+    const thumbSpread = dist(lm[4], lm[5]) / palm > 0.72;
+    extended.push(thumbRadial && thumbSpread);
+
+    for (const [tip, pip] of FINGERS){
+      extended.push(dist(lm[tip], wrist) > dist(lm[pip], wrist) * 1.03);
+    }
+    const count = extended.reduce((a,b)=>a+(b?1:0), 0);
+
+    // openness: mean normalized tip distance from wrist
+    let sum = 0; for (const t of [4,8,12,16,20]) sum += dist(lm[t], wrist) / palm;
+    const openRaw = sum / 5;                        // ~0.6 (fist) .. ~2.4 (spread)
+    const openness = Math.max(0, Math.min(1, (openRaw - 0.75) / 1.35));
+
+    return { extended, count, openness, center:{ x:lm[9].x, y:lm[9].y } };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MEDIAPIPE HANDS
+  // ---------------------------------------------------------------------------
+  const RESULT = { hands: [], t: 0 };
+  let prevCenters = null, motionEMA = 0;
+
+  let hands = null;
+  function initHands(){
+    hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands:2, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+    hands.onResults(onHandResults);
+  }
+
+  function onHandResults(results){
+    const out = [];
+    const lms = results.multiHandLandmarks || [];
+    const handed = results.multiHandedness || [];
+    let motionSum = 0, motionCount = 0;
+    const centers = [];
+
+    for (let i = 0; i < lms.length; i++){
+      const lm = lms[i];
+      const info = analyzeHand(lm);
+      // MediaPipe labels handedness on the raw (unflipped) image; we mirror the
+      // display, so "Right" label == user's left hand visually. We flip the label
+      // so panel L/R matches what the user sees on a mirrored front camera.
+      let label = handed[i] && handed[i].label ? handed[i].label : 'Right';
+      if (mirror) label = (label === 'Right') ? 'Left' : 'Right';
+      out.push({ lm, label, ...info });
+      centers.push(info.center);
+    }
+
+    // motion estimate (for vibrato)
+    if (prevCenters && prevCenters.length === centers.length){
+      for (let i = 0; i < centers.length; i++){
+        motionSum += dist(centers[i], prevCenters[i]); motionCount++;
+      }
+    }
+    prevCenters = centers;
+    const motion = motionCount ? motionSum / motionCount : 0;
+    motionEMA = motionEMA * 0.8 + Math.min(1, motion * 14) * 0.2;
+
+    RESULT.hands = out;
+    RESULT.t = performance.now();
+    RESULT.motion = motionEMA;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function startCameraLoop(){
+    if (mpCamera) { mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    prevCenters = null;
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let fogOn = true;
+  fogBtn.addEventListener('click', () => {
+    fogOn = !fogOn;
+    fogBtn.textContent = fogOn ? '靄 ON' : '靄 OFF';
+    fogBtn.classList.toggle('active', fogOn);
+  });
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  const HAND_CONNECTIONS = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [5,9],[9,10],[10,11],[11,12],
+    [9,13],[13,14],[14,15],[15,16],
+    [13,17],[17,18],[18,19],[19,20],
+    [0,17]
+  ];
+  const TIPS = [4,8,12,16,20];
+
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  function drawVideoDarkHaze(){
+    // base frame
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    // cover-fit the video
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    // darken
+    ctx.fillStyle = 'rgba(6,3,12,0.46)';
+    ctx.fillRect(0, 0, W, H);
+    // cool desaturating tint
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(40,30,70,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (fogOn) drawFog();
+
+    // vignette
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.18, W/2, H*0.5, Math.max(W,H)*0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(3,1,7,0.82)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // drifting fog blobs
+  const blobs = Array.from({length:5}, (_,i) => ({
+    x: Math.random(), y: Math.random(),
+    r: 0.28 + Math.random()*0.22,
+    sx:(Math.random()-0.5)*0.00006, sy:(Math.random()-0.5)*0.00004,
+    hue: 200 + Math.random()*120, ph: Math.random()*Math.PI*2
+  }));
+  function drawFog(){
+    const now = performance.now()*0.001;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (const b of blobs){
+      b.x += b.sx; b.y += b.sy;
+      if (b.x < -0.4) b.x = 1.4; if (b.x > 1.4) b.x = -0.4;
+      if (b.y < -0.4) b.y = 1.4; if (b.y > 1.4) b.y = -0.4;
+      const cx = b.x * W, cy = b.y * H, rr = b.r * Math.max(W,H);
+      const puls = 0.5 + 0.5*Math.sin(now*0.4 + b.ph);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
+      g.addColorStop(0, `hsla(${b.hue},60%,60%,${0.05 + puls*0.05})`);
+      g.addColorStop(1, 'hsla(0,0%,0%,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function rainbowStroke(x1,y1,x2,y2,hueShift,width,alpha){
+    const g = ctx.createLinearGradient(x1,y1,x2,y2);
+    for (let s=0; s<=1; s+=0.25){
+      g.addColorStop(s, `hsla(${(hueShift + s*300)%360},95%,64%,${alpha})`);
+    }
+    ctx.strokeStyle = g; ctx.lineWidth = width; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+
+  function drawAyatori(hands, t){
+    if (!hands.length) return;
+    const hueShift = (t * 0.05) % 360;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // --- strings within each hand (skeleton as rainbow yarn) ---
+    for (const h of hands){
+      const lm = h.lm;
+      // glow underlay
+      ctx.shadowBlur = 22; ctx.shadowColor = 'rgba(180,150,255,0.9)';
+      for (const [a,b] of HAND_CONNECTIONS){
+        rainbowStroke(px(lm[a]),py(lm[a]),px(lm[b]),py(lm[b]), hueShift + a*12, 3.4, 0.85);
+      }
+      // web between finger tips (the "あやとり" cradle)
+      for (let i=0;i<TIPS.length;i++){
+        for (let j=i+1;j<TIPS.length;j++){
+          const a=lm[TIPS[i]], b=lm[TIPS[j]];
+          rainbowStroke(px(a),py(a),px(b),py(b), hueShift + i*40 + j*20, 1.6, 0.42);
+        }
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    // --- strings stretched BETWEEN the two hands (classic cat's cradle) ---
+    if (hands.length === 2){
+      const A = hands[0].lm, B = hands[1].lm;
+      ctx.shadowBlur = 26; ctx.shadowColor = 'rgba(140,255,224,0.85)';
+      for (let k=0;k<TIPS.length;k++){
+        const a=A[TIPS[k]], b=B[TIPS[k]];
+        // gentle sag using a quadratic curve for a real string feel
+        const mx=(px(a)+px(b))/2, my=(py(a)+py(b))/2 + 26 + k*6;
+        const g = ctx.createLinearGradient(px(a),py(a),px(b),py(b));
+        for (let s=0;s<=1;s+=0.2) g.addColorStop(s, `hsla(${(hueShift + k*55 + s*260)%360},95%,66%,0.9)`);
+        ctx.strokeStyle=g; ctx.lineWidth=2.4; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(px(a),py(a)); ctx.quadraticCurveTo(mx,my, px(b),py(b)); ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    // --- glowing beads on fingertips ---
+    for (const h of hands){
+      for (let i=0;i<TIPS.length;i++){
+        const on = h.extended[i];
+        const p = h.lm[TIPS[i]];
+        const x=px(p), y=py(p);
+        const rad = on ? 8 : 4;
+        const g = ctx.createRadialGradient(x,y,0,x,y,rad*2.4);
+        const hue = (hueShift + i*55) % 360;
+        g.addColorStop(0, `hsla(${hue},100%,${on?78:60}%,${on?1:0.6})`);
+        g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,rad*2.4,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle=`hsla(${hue},100%,90%,${on?0.95:0.5})`;
+        ctx.beginPath(); ctx.arc(x,y,rad*0.5,0,Math.PI*2); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  function computeGesture(){
+    let l = null, r = null;
+    for (const h of RESULT.hands){
+      if (h.label === 'Left')  l = h;
+      if (h.label === 'Right') r = h;
+    }
+    // if two hands share a label (rare), assign by x position
+    if (RESULT.hands.length === 2 && (!l || !r)){
+      const s = [...RESULT.hands].sort((a,b)=>a.center.x - b.center.x);
+      // mirrored view: smaller x (screen-left) is user's... keep simple
+      l = mirror ? s[1] : s[0];
+      r = mirror ? s[0] : s[1];
+    }
+    const lC = l ? l.count : 0;
+    const rC = r ? r.count : 0;
+    let openSum = 0, openN = 0;
+    if (l){ openSum += l.openness; openN++; }
+    if (r){ openSum += r.openness; openN++; }
+    const openness = openN ? openSum/openN : 0;
+    return {
+      l:lC, r:rC, total:lC+rC,
+      lPresent:!!l, rPresent:!!r,
+      hands: RESULT.hands.length,
+      openness, motion: RESULT.motion || 0
+    };
+  }
+
+  let lastG = { l:0,r:0,total:0 };
+  function frame(){
+    requestAnimationFrame(frame);
+    ctx.clearRect(0,0,W,H);
+    drawVideoDarkHaze();
+
+    const t = performance.now();
+    const fresh = (t - RESULT.t) < 400;
+    const drawHands = fresh ? RESULT.hands : [];
+    drawAyatori(drawHands, t);
+
+    const g = computeGesture();
+    if (!fresh){ g.hands = 0; g.total = 0; g.l = 0; g.r = 0; }
+    applySound(g);
+
+    // HUD
+    lCountEl.textContent = g.l;
+    rCountEl.textContent = g.r;
+    const silent = (g.total === 0 || g.hands === 0);
+    lTimEl.textContent = g.lPresent ? `広げ ${Math.round(g.openness*100)}%` : '';
+    rTimEl.textContent = g.rPresent ? WAVES[Math.min(5,g.r)].toUpperCase() : '';
+
+    if (silent){
+      stateDot.textContent = (g.hands===0) ? '手をかざしてください' : '✊ MUTED / 音停止';
+      stateDot.className = 'silent';
+    } else {
+      stateDot.textContent = `♪ ${WAVES[Math.min(5, g.rPresent?g.r:g.l)].toUpperCase()} · note ${g.total}`;
+      stateDot.className = 'playing';
+    }
+    lastG = g;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+        throw new Error('手検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+      }
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!hands) initHands();
+      await startStream();
+      await startCameraLoop();
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      fogBtn.classList.add('active');
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
