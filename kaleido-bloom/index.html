@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05030a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="あなたの動きが万華鏡になり、光の曼荼羅が旋律を奏でる楽器 - KALEIDO BLOOM">
+<title>KALEIDO BLOOM ─ 万華鏡</title>
+<style>
+  :root{
+    --void:#05030a;
+    --haze:#160c26;
+    --ghost:#eef2ff;
+    --warn:#ff5470;
+    --accent:#8affe0;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  .vignette{ position:fixed; inset:0; pointer-events:none; z-index:2;
+    background:radial-gradient(circle at 50% 50%, transparent 30%, rgba(2,1,6,.45) 74%, rgba(2,1,6,.9) 100%); }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(42px); opacity:.4; pointer-events:none;
+    animation:drift 14s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,#ff5470,transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,#6c8cff,transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,#8affe0,transparent 70%); animation-delay:-9s; }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(6vmin,-4vmin) scale(1.15); }
+  }
+  #mark{
+    position:relative; width:86px; height:86px; margin-bottom:1.6rem; border-radius:50%;
+    border:1px solid rgba(138,255,224,.5); display:grid; place-items:center; font-size:34px;
+    box-shadow:0 0 44px rgba(138,255,224,.14), inset 0 0 28px rgba(138,255,224,.08);
+    animation:spinSlow 22s linear infinite;
+  }
+  @keyframes spinSlow{ to{ transform:rotate(360deg); } }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.22em; position:relative;
+    background:linear-gradient(90deg,#ff5470,#ffb84d,#8affe0,#6c8cff,#c86bff,#ff5470);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #titleSub{ margin-top:.7rem; color:rgba(238,242,255,.6); font-size:.86rem; letter-spacing:.3em; }
+  #lead{
+    position:relative; margin:1.6rem 0 2.1rem; max-width:24rem;
+    color:rgba(238,242,255,.62); font-size:.82rem; line-height:2; letter-spacing:.06em;
+  }
+  #startBtn{
+    position:relative; padding:1rem 3rem; font-size:.95rem; letter-spacing:.3em; font-family:inherit;
+    font-weight:700; color:var(--void); background:var(--accent); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 34px rgba(138,255,224,.4); transition:transform .15s ease, box-shadow .15s ease;
+  }
+  #startBtn:active{ transform:scale(.96); box-shadow:0 0 18px rgba(138,255,224,.3); }
+  #errorMsg{
+    display:none; position:relative; margin-top:1.4rem; max-width:80%;
+    color:var(--warn); font-size:.78rem; line-height:1.8; letter-spacing:.02em;
+  }
+
+  /* ---- HUD ---- */
+  header{
+    position:fixed; z-index:5; pointer-events:none;
+    left:max(1rem, env(safe-area-inset-left)); right:max(1rem, env(safe-area-inset-right));
+    top:max(.9rem, env(safe-area-inset-top));
+    display:flex; justify-content:space-between; align-items:flex-start;
+    text-shadow:0 2px 16px rgba(0,0,0,.9);
+    opacity:0; transition:opacity 1s ease;
+  }
+  header.show{ opacity:1; }
+  .brand{ color:var(--ghost); font-size:.74rem; font-weight:800; letter-spacing:.3em; }
+  .brand small{ display:block; margin-top:.35rem; font-weight:400; font-size:.6rem; letter-spacing:.22em; color:rgba(238,242,255,.45); }
+  .status{ display:flex; align-items:center; gap:.45rem; color:rgba(238,242,255,.55); font-size:.62rem; letter-spacing:.16em; }
+  .dot{ width:7px; height:7px; border-radius:50%; background:#3a4152; transition:all .4s ease; }
+  .dot.on{ background:var(--accent); box-shadow:0 0 12px var(--accent); }
+
+  #hint{
+    position:fixed; z-index:5; left:50%; transform:translateX(-50%);
+    bottom:calc(6.4rem + env(safe-area-inset-bottom));
+    color:rgba(238,242,255,.6); font-size:.72rem; letter-spacing:.18em; text-align:center;
+    pointer-events:none; opacity:0; transition:opacity 1.2s ease; text-shadow:0 2px 12px rgba(0,0,0,.9);
+    white-space:nowrap;
+  }
+  #hint.show{ opacity:1; }
+
+  #controls{
+    position:fixed; z-index:6; left:50%; transform:translateX(-50%);
+    bottom:calc(1.2rem + env(safe-area-inset-bottom));
+    display:flex; gap:.7rem; opacity:0; transition:opacity 1s ease;
+  }
+  #controls.show{ opacity:1; }
+  .ctl{
+    min-width:4.6rem; padding:.62rem .95rem; font-family:inherit; font-size:.66rem; letter-spacing:.12em;
+    color:var(--ghost); background:rgba(10,6,20,.55); border:1px solid rgba(180,180,255,.22);
+    border-radius:100px; cursor:pointer; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:border-color .2s ease, transform .1s ease; text-align:center;
+  }
+  .ctl:active{ transform:scale(.95); border-color:rgba(138,255,224,.6); }
+  .ctl .ico{ display:block; font-size:.9rem; margin-bottom:.2rem; }
+
+  #toast{
+    position:fixed; z-index:7; left:50%; top:22%; transform:translate(-50%,-50%) scale(.9);
+    padding:.7rem 1.6rem; border-radius:100px; pointer-events:none;
+    color:var(--ghost); font-size:.8rem; letter-spacing:.24em; font-weight:700;
+    background:rgba(10,6,20,.6); border:1px solid rgba(138,255,224,.4);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    box-shadow:0 0 30px rgba(138,255,224,.18);
+    opacity:0; transition:opacity .35s ease, transform .35s ease;
+  }
+  #toast.show{ opacity:1; transform:translate(-50%,-50%) scale(1); }
+
+  #credit{
+    position:fixed; z-index:5; right:calc(.7rem + env(safe-area-inset-right)); top:auto;
+    bottom:calc(.55rem + env(safe-area-inset-bottom));
+    color:rgba(238,242,255,.25); font-size:.56rem; letter-spacing:.14em; pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div class="vignette"></div>
+<video id="video" playsinline muted autoplay></video>
+
+<header id="hud">
+  <div class="brand">KALEIDO BLOOM<small>万華鏡 ─ MOTION MANDALA</small></div>
+  <div class="status"><span id="statusText">LIVE</span><span class="dot" id="statusDot"></span></div>
+</header>
+
+<div id="hint">手をかざして、ゆっくり動かしてみて</div>
+
+<div id="controls">
+  <button class="ctl" id="btnScale"><span class="ico">♪</span><span id="scaleName">宙</span></button>
+  <button class="ctl" id="btnMirror"><span class="ico">✳</span><span id="mirrorName">8面</span></button>
+  <button class="ctl" id="btnCam"><span class="ico">🔄</span>カメラ</button>
+</div>
+
+<div id="toast"></div>
+<div id="credit">KALEIDO BLOOM · WEB AUDIO</div>
+
+<div id="overlay">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+  <div id="mark">💠</div>
+  <div id="eyebrow">CAMERA MANDALA INSTRUMENT</div>
+  <div id="title">KALEIDO BLOOM</div>
+  <div id="titleSub">─ 万華鏡 ─</div>
+  <p id="lead">
+    カメラに映るあなたが、回転する光の万華鏡になる。<br>
+    動きは花のように咲いて、音階を奏でる。<br>
+    中心に近いほど低く、外側ほど高く。<br>
+    大きく動けば、世界はもっと速く回る。
+  </p>
+  <button id="startBtn">はじめる</button>
+  <div id="errorMsg"></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================================================================
+   KALEIDO BLOOM ─ 万華鏡
+   カメラ映像を万華鏡としてレンダリングし、フレーム差分で検出した
+   動きを極座標ビンに集計して音階にマッピングする。
+   角度 = 音程 / 半径 = オクターブ / 動きの強さ = 音量。
+   外部ライブラリ不使用。
+================================================================ */
+
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const startBtn = document.getElementById('startBtn');
+const errorMsg = document.getElementById('errorMsg');
+const hud = document.getElementById('hud');
+const hint = document.getElementById('hint');
+const controls = document.getElementById('controls');
+const toast = document.getElementById('toast');
+const statusDot = document.getElementById('statusDot');
+const scaleName = document.getElementById('scaleName');
+const mirrorName = document.getElementById('mirrorName');
+
+/* ---------- 表示まわり ---------- */
+let W = 0, H = 0, DPR = 1, CX = 0, CY = 0, RMAX = 0;
+
+// 万華鏡ソース(正方形に切り出したカメラ映像)
+const SRC_SIZE = 512;
+const srcC = document.createElement('canvas');
+srcC.width = srcC.height = SRC_SIZE;
+const srcX = srcC.getContext('2d');
+
+// パーティクル用グロー・レイヤー(残像を残すため別キャンバス)
+const glowC = document.createElement('canvas');
+const glowX = glowC.getContext('2d');
+
+// モーション解析用の縮小フレーム
+const AW = 72, AH = 54;
+const anaC = document.createElement('canvas');
+anaC.width = AW; anaC.height = AH;
+const anaX = anaC.getContext('2d', { willReadFrequently: true });
+let prevLuma = new Float32Array(AW * AH);
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = Math.floor(innerWidth * DPR);
+  H = Math.floor(innerHeight * DPR);
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  glowC.width = W; glowC.height = H;
+  CX = W / 2; CY = H / 2;
+  RMAX = Math.hypot(W, H) / 2;
+}
+addEventListener('resize', resize);
+resize();
+
+/* ---------- 音階とスケール ---------- */
+const SCALES = [
+  { key: '宙',  label: '宙 ─ ペンタトニック', notes: [0, 2, 4, 7, 9],      root: 261.63 },
+  { key: '雅',  label: '雅 ─ 都節',           notes: [0, 1, 5, 7, 8],      root: 293.66 },
+  { key: '琉球', label: '琉球音階',            notes: [0, 4, 5, 7, 11],     root: 261.63 },
+  { key: '夢',  label: '夢 ─ 全音音階',       notes: [0, 2, 4, 6, 8, 10],  root: 246.94 },
+];
+let scaleIdx = 0;
+
+const MIRROR_STEPS = [8, 10, 12, 6];
+let mirrorIdx = 0;
+
+/* ---------- Web Audio ---------- */
+let AC = null;
+let master, delaySend, padFilter, padGain;
+let padOscs = [];
+let activeVoices = 0;
+const MAX_VOICES = 14;
+
+function initAudio() {
+  AC = new (window.AudioContext || window.webkitAudioContext)();
+
+  const comp = AC.createDynamicsCompressor();
+  comp.threshold.value = -18;
+  comp.knee.value = 24;
+  comp.ratio.value = 6;
+  comp.connect(AC.destination);
+
+  master = AC.createGain();
+  master.gain.value = 0.9;
+  master.connect(comp);
+
+  // 空間を作るフィードバック・ディレイ
+  const delay = AC.createDelay(1);
+  delay.delayTime.value = 0.29;
+  const fb = AC.createGain();
+  fb.gain.value = 0.42;
+  const tone = AC.createBiquadFilter();
+  tone.type = 'lowpass';
+  tone.frequency.value = 2600;
+  delay.connect(tone); tone.connect(fb); fb.connect(delay);
+  const wet = AC.createGain();
+  wet.gain.value = 0.38;
+  delay.connect(wet); wet.connect(master);
+  delaySend = AC.createGain();
+  delaySend.connect(delay);
+
+  // 動きに呼応して息づくパッド
+  padFilter = AC.createBiquadFilter();
+  padFilter.type = 'lowpass';
+  padFilter.frequency.value = 240;
+  padFilter.Q.value = 0.7;
+  padGain = AC.createGain();
+  padGain.gain.value = 0;
+  padFilter.connect(padGain);
+  padGain.connect(master);
+
+  for (let i = 0; i < 3; i++) {
+    const o = AC.createOscillator();
+    o.type = i === 2 ? 'sine' : 'triangle';
+    const g = AC.createGain();
+    g.gain.value = i === 2 ? 0.5 : 0.34;
+    o.detune.value = (i - 1) * 7;
+    o.connect(g); g.connect(padFilter);
+    o.start();
+    padOscs.push(o);
+  }
+  tunePad();
+}
+
+function tunePad() {
+  if (!AC) return;
+  const s = SCALES[scaleIdx];
+  const base = s.root / 4; // 低いところで支える
+  const degrees = [0, Math.min(2, s.notes.length - 1), s.notes.length - 1];
+  padOscs.forEach((o, i) => {
+    const semi = s.notes[degrees[i]] + (i === 2 ? 12 : 0);
+    const f = base * Math.pow(2, semi / 12);
+    o.frequency.cancelScheduledValues(AC.currentTime);
+    o.frequency.setTargetAtTime(f, AC.currentTime, 0.6);
+  });
+}
+
+function pluck(freq, vel, pan) {
+  if (!AC || activeVoices >= MAX_VOICES) return;
+  activeVoices++;
+  const t = AC.currentTime;
+  const dur = 1.4 + vel * 0.8;
+
+  const o1 = AC.createOscillator();
+  o1.type = 'sine';
+  o1.frequency.value = freq;
+  o1.detune.value = Math.random() * 8 - 4;
+
+  const o2 = AC.createOscillator();
+  o2.type = 'triangle';
+  o2.frequency.value = freq * 2.003;
+  const g2 = AC.createGain();
+  g2.gain.value = 0.28 + vel * 0.25; // 強く弾くほど倍音がきらめく
+
+  const env = AC.createGain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(vel, t + 0.006);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+  o1.connect(env);
+  o2.connect(g2); g2.connect(env);
+
+  let out = env;
+  if (AC.createStereoPanner) {
+    const p = AC.createStereoPanner();
+    p.pan.value = Math.max(-0.85, Math.min(0.85, pan));
+    env.connect(p);
+    out = p;
+  }
+  out.connect(master);
+  out.connect(delaySend);
+
+  o1.start(t); o2.start(t);
+  o1.stop(t + dur + 0.1); o2.stop(t + dur + 0.1);
+  o1.onended = () => { activeVoices--; };
+}
+
+// 角度ビン・半径ビン → 周波数
+function binToFreq(binA, binR) {
+  const s = SCALES[scaleIdx];
+  const L = s.notes.length;
+  const deg = Math.min(L - 1, Math.floor(binA / ANG_BINS * L));
+  const semi = s.notes[deg];
+  return s.root * Math.pow(2, binR - 1) * Math.pow(2, semi / 12);
+}
+
+/* ---------- カメラ ---------- */
+let stream = null;
+let facing = 'user';
+let camReady = false;
+
+async function openCamera() {
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  camReady = false;
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } },
+    audio: false,
+  });
+  video.srcObject = stream;
+  await video.play();
+  camReady = true;
+  prevLuma.fill(0);
+}
+
+/* ---------- モーション解析 ---------- */
+const ANG_BINS = 16, RAD_BINS = 3;
+const NBINS = ANG_BINS * RAD_BINS;
+const binE = new Float32Array(NBINS);   // 動きの強さ
+const binN = new Float32Array(NBINS);   // 動いた画素数
+const binXY = new Float32Array(NBINS * 2); // 重心
+const binRGB = new Float32Array(NBINS * 3);
+const lastTrig = new Float32Array(NBINS);
+let energy = 0, energySm = 0;
+let lastNoteAt = 0;
+let idleSince = performance.now();
+let nextShimmer = 0;
+
+function analyze() {
+  const mirror = facing === 'user';
+  anaX.save();
+  if (mirror) { anaX.translate(AW, 0); anaX.scale(-1, 1); }
+  // カバークロップで縮小フレームへ
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) { anaX.restore(); return; }
+  const s = Math.max(AW / vw, AH / vh);
+  const dw = vw * s, dh = vh * s;
+  anaX.drawImage(video, (AW - dw) / 2, (AH - dh) / 2, dw, dh);
+  anaX.restore();
+
+  const img = anaX.getImageData(0, 0, AW, AH);
+  const d = img.data;
+
+  binE.fill(0); binN.fill(0); binXY.fill(0); binRGB.fill(0);
+  let total = 0;
+
+  for (let y = 0; y < AH; y++) {
+    const ny = (y / AH - 0.5) * 2;
+    for (let x = 0; x < AW; x++) {
+      const i = y * AW + x;
+      const j = i * 4;
+      const r = d[j], g = d[j + 1], b = d[j + 2];
+      const luma = r * 0.299 + g * 0.587 + b * 0.114;
+      const diff = Math.abs(luma - prevLuma[i]);
+      prevLuma[i] = luma;
+      if (diff < 26) continue;
+
+      const nx = (x / AW - 0.5) * 2;
+      const rad = Math.min(1, Math.hypot(nx, ny) / 1.1);
+      const ang = Math.atan2(ny, nx);
+      const bA = Math.min(ANG_BINS - 1, ((ang + Math.PI) / (Math.PI * 2) * ANG_BINS) | 0);
+      const bR = Math.min(RAD_BINS - 1, (rad * RAD_BINS) | 0);
+      const bi = bR * ANG_BINS + bA;
+      const e = diff - 24;
+      binE[bi] += e;
+      binN[bi]++;
+      binXY[bi * 2] += nx;
+      binXY[bi * 2 + 1] += ny;
+      binRGB[bi * 3] += r; binRGB[bi * 3 + 1] += g; binRGB[bi * 3 + 2] += b;
+      total += e;
+    }
+  }
+
+  energy = total / (AW * AH * 200);
+  if (energy > 0.004) idleSince = performance.now();
+  triggerNotes();
+}
+
+function rgbToHue(r, g, b) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  if (mx === mn) return 200;
+  let h;
+  if (mx === r) h = ((g - b) / (mx - mn)) % 6;
+  else if (mx === g) h = (b - r) / (mx - mn) + 2;
+  else h = (r - g) / (mx - mn) + 4;
+  h *= 60;
+  return h < 0 ? h + 360 : h;
+}
+
+function triggerNotes() {
+  const now = performance.now();
+  // 強い順に上位ビンを拾う
+  const order = [];
+  for (let i = 0; i < NBINS; i++) {
+    if (binE[i] > 900 && binN[i] > 4) order.push(i);
+  }
+  order.sort((a, b) => binE[b] - binE[a]);
+
+  let fired = 0;
+  for (const bi of order) {
+    if (fired >= 3) break;
+    if (now - lastTrig[bi] < 190) continue;
+    if (now - lastNoteAt < 48) break;
+    lastTrig[bi] = now;
+    lastNoteAt = now;
+    fired++;
+
+    const binA = bi % ANG_BINS;
+    const binR = (bi / ANG_BINS) | 0;
+    const n = binN[bi];
+    const cx = binXY[bi * 2] / n, cy = binXY[bi * 2 + 1] / n;
+    const hue = rgbToHue(binRGB[bi * 3] / n, binRGB[bi * 3 + 1] / n, binRGB[bi * 3 + 2] / n);
+    const vel = Math.min(0.8, 0.16 + Math.sqrt(binE[bi]) / 190);
+
+    pluck(binToFreq(binA, binR), vel, cx * 0.85);
+
+    const rad = Math.min(1, Math.hypot(cx, cy) / 1.1);
+    const ang = Math.atan2(cy, cx);
+    bloom(rad, ang, hue, vel);
+  }
+}
+
+/* ---------- パーティクルとリング ---------- */
+const particles = [];
+const rings = [];
+const MAX_PARTICLES = 70;
+
+// 色相ごとのグロースプライトをキャッシュ
+const spriteCache = new Map();
+function glowSprite(hue) {
+  const key = Math.round(hue / 30) * 30;
+  if (spriteCache.has(key)) return spriteCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,.9)');
+  g.addColorStop(0.25, `hsla(${key},95%,68%,.65)`);
+  g.addColorStop(1, `hsla(${key},95%,55%,0)`);
+  x.fillStyle = g;
+  x.fillRect(0, 0, 64, 64);
+  spriteCache.set(key, c);
+  return c;
+}
+
+function bloom(rad, ang, hue, vel) {
+  const count = 4 + Math.round(vel * 6);
+  for (let i = 0; i < count; i++) {
+    if (particles.length >= MAX_PARTICLES) particles.shift();
+    particles.push({
+      r: rad * 0.9 + Math.random() * 0.06,
+      a: ang + (Math.random() - 0.5) * 0.25,
+      vr: 0.06 + Math.random() * 0.18,   // 外へ咲く
+      va: (Math.random() - 0.5) * 0.9,
+      hue: hue + (Math.random() - 0.5) * 40,
+      size: (12 + Math.random() * 26) * (0.6 + vel),
+      life: 1,
+      decay: 0.55 + Math.random() * 0.5,
+    });
+  }
+  rings.push({ r: rad, v: 0.55, alpha: 0.28 + vel * 0.3, hue });
+}
+
+/* ---------- 万華鏡レンダリング ---------- */
+let baseRot = 0;
+let tPrev = performance.now();
+const supportsFilter = typeof ctx.filter === 'string';
+
+function drawSource(t) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+  const s = Math.max(SRC_SIZE / vw, SRC_SIZE / vh) * 1.12;
+  const dw = vw * s, dh = vh * s;
+  // ゆっくり漂うクロップ位置が模様を変え続ける
+  const ox = Math.sin(t * 0.00013) * SRC_SIZE * 0.05;
+  const oy = Math.cos(t * 0.00009) * SRC_SIZE * 0.05;
+  srcX.save();
+  if (facing === 'user') { srcX.translate(SRC_SIZE, 0); srcX.scale(-1, 1); }
+  srcX.drawImage(video, (SRC_SIZE - dw) / 2 + ox, (SRC_SIZE - dh) / 2 + oy, dw, dh);
+  srcX.restore();
+}
+
+function drawKaleido(t) {
+  const N = MIRROR_STEPS[mirrorIdx];
+  const wedge = Math.PI * 2 / N;
+  const breathe = 1 + Math.sin(t * 0.0004) * 0.04 + energySm * 0.25;
+
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(baseRot);
+  if (supportsFilter) ctx.filter = 'saturate(1.35) brightness(1.05)';
+  for (let i = 0; i < N; i++) {
+    ctx.save();
+    ctx.rotate(i * wedge);
+    if (i % 2) ctx.scale(1, -1);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, RMAX, -wedge / 2 - 0.012, wedge / 2 + 0.012);
+    ctx.closePath();
+    ctx.clip();
+    const R = RMAX * breathe;
+    ctx.drawImage(srcC, -R, -R, R * 2, R * 2);
+    ctx.restore();
+  }
+  if (supportsFilter) ctx.filter = 'none';
+  ctx.restore();
+
+  // 深みを出す薄闇
+  ctx.fillStyle = 'rgba(5,3,10,0.32)';
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawGlow(dt, t) {
+  const N = MIRROR_STEPS[mirrorIdx];
+  const wedge = Math.PI * 2 / N;
+  const Rref = Math.min(W, H) * 0.52;
+
+  // 残像をゆっくり消す
+  glowX.globalCompositeOperation = 'destination-out';
+  glowX.fillStyle = 'rgba(0,0,0,0.16)';
+  glowX.fillRect(0, 0, W, H);
+  glowX.globalCompositeOperation = 'lighter';
+
+  // ミラー数が多いほど1枚あたりを淡くして白飛びを防ぐ
+  const mirrorDim = Math.sqrt(6 / N);
+
+  // パーティクル(万華鏡と同じ対称性で 2N 回描く)
+  for (let pi = particles.length - 1; pi >= 0; pi--) {
+    const p = particles[pi];
+    p.life -= p.decay * dt;
+    if (p.life <= 0) { particles.splice(pi, 1); continue; }
+    p.r += p.vr * dt;
+    p.a += p.va * dt;
+    const sp = glowSprite(((p.hue % 360) + 360) % 360);
+    const fade = p.life < 0.6 ? p.life / 0.6 : 1;
+    const sz = p.size * (0.5 + (1 - p.life) * 0.8) * DPR;
+    glowX.globalAlpha = fade * 0.7 * mirrorDim;
+    const rr = p.r * Rref;
+    for (let i = 0; i < N; i++) {
+      for (let m = 0; m < 2; m++) {
+        const A = baseRot + i * wedge + (m ? -p.a : p.a);
+        glowX.drawImage(sp, CX + Math.cos(A) * rr - sz / 2, CY + Math.sin(A) * rr - sz / 2, sz, sz);
+      }
+    }
+  }
+  glowX.globalAlpha = 1;
+
+  // 音の波紋リング
+  for (let ri = rings.length - 1; ri >= 0; ri--) {
+    const rg = rings[ri];
+    rg.r += rg.v * dt;
+    rg.alpha -= dt * 0.35;
+    if (rg.alpha <= 0.01) { rings.splice(ri, 1); continue; }
+    glowX.strokeStyle = `hsla(${rg.hue},90%,70%,${rg.alpha})`;
+    glowX.lineWidth = 2 * DPR;
+    glowX.beginPath();
+    glowX.arc(CX, CY, rg.r * Rref, 0, Math.PI * 2);
+    glowX.stroke();
+  }
+
+  // 中心の鼓動
+  const pulse = Math.min(W, H) * (0.045 + energySm * 0.12) * (1 + Math.sin(t * 0.003) * 0.12);
+  const cg = glowX.createRadialGradient(CX, CY, 0, CX, CY, pulse * 2.4);
+  cg.addColorStop(0, `rgba(238,242,255,${0.12 + energySm * 0.5})`);
+  cg.addColorStop(1, 'rgba(138,255,224,0)');
+  glowX.fillStyle = cg;
+  glowX.beginPath();
+  glowX.arc(CX, CY, pulse * 2.4, 0, Math.PI * 2);
+  glowX.fill();
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.drawImage(glowC, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- 待機中のきらめき(アトラクトモード) ---------- */
+function attract(t) {
+  if (t - idleSince < 4000) { nextShimmer = 0; return; }
+  if (!nextShimmer) nextShimmer = t + 3500 + Math.random() * 3500;
+  if (t < nextShimmer) return;
+  nextShimmer = t + 3500 + Math.random() * 3500;
+  const binA = (Math.random() * ANG_BINS) | 0;
+  const binR = (Math.random() * RAD_BINS) | 0;
+  pluck(binToFreq(binA, binR), 0.1, Math.random() * 0.8 - 0.4);
+  bloom(0.25 + Math.random() * 0.55, Math.random() * Math.PI * 2, 160 + Math.random() * 120, 0.25);
+}
+
+/* ---------- メインループ ---------- */
+let frame = 0;
+let running = false;
+
+function loop(t) {
+  if (!running) return;
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (t - tPrev) / 1000);
+  tPrev = t;
+  frame++;
+
+  energySm += (energy - energySm) * 0.08;
+  baseRot += (0.05 + energySm * 1.6) * dt; // 動くほど速く回る
+
+  if (camReady && video.readyState >= 2) {
+    drawSource(t);
+    if (frame % 2 === 0) analyze(); // 解析は1フレームおき
+  }
+
+  ctx.fillStyle = '#05030a';
+  ctx.fillRect(0, 0, W, H);
+  drawKaleido(t);
+  drawGlow(dt, t);
+  attract(t);
+
+  // パッドが動きに合わせて息をする
+  if (AC) {
+    const g = Math.min(0.11, 0.015 + energySm * 2.0);
+    padGain.gain.setTargetAtTime(g, AC.currentTime, 0.25);
+    padFilter.frequency.setTargetAtTime(220 + energySm * 2600, AC.currentTime, 0.2);
+  }
+  statusDot.classList.toggle('on', energy > 0.004);
+}
+
+/* ---------- UI ---------- */
+let toastTimer = 0;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 1400);
+}
+
+document.getElementById('btnScale').addEventListener('click', () => {
+  scaleIdx = (scaleIdx + 1) % SCALES.length;
+  scaleName.textContent = SCALES[scaleIdx].key;
+  tunePad();
+  showToast(SCALES[scaleIdx].label);
+});
+
+document.getElementById('btnMirror').addEventListener('click', () => {
+  mirrorIdx = (mirrorIdx + 1) % MIRROR_STEPS.length;
+  mirrorName.textContent = MIRROR_STEPS[mirrorIdx] + '面';
+  showToast(`万華鏡 ${MIRROR_STEPS[mirrorIdx]}面鏡`);
+});
+
+document.getElementById('btnCam').addEventListener('click', async () => {
+  facing = facing === 'user' ? 'environment' : 'user';
+  try {
+    await openCamera();
+    showToast(facing === 'user' ? 'フロントカメラ' : 'バックカメラ');
+  } catch (e) {
+    facing = facing === 'user' ? 'environment' : 'user';
+    try { await openCamera(); } catch (_) {}
+    showToast('カメラを切替できませんでした');
+  }
+});
+
+// タップでも花が咲く
+canvas.addEventListener('pointerdown', (ev) => {
+  if (!running) return;
+  const x = (ev.clientX * DPR - CX) / (Math.min(W, H) * 0.52);
+  const y = (ev.clientY * DPR - CY) / (Math.min(W, H) * 0.52);
+  const rad = Math.min(1, Math.hypot(x, y));
+  const ang = Math.atan2(y, x);
+  const binA = Math.min(ANG_BINS - 1, ((ang + Math.PI) / (Math.PI * 2) * ANG_BINS) | 0);
+  const binR = Math.min(RAD_BINS - 1, (rad * RAD_BINS) | 0);
+  pluck(binToFreq(binA, binR), 0.5, x * 0.6);
+  bloom(rad, ang, 170 + Math.random() * 140, 0.6);
+  idleSince = performance.now();
+});
+
+/* ---------- 開始 ---------- */
+startBtn.addEventListener('click', async () => {
+  startBtn.disabled = true;
+  try {
+    initAudio();
+    if (AC.state === 'suspended') await AC.resume();
+    await openCamera();
+  } catch (e) {
+    startBtn.disabled = false;
+    errorMsg.style.display = 'block';
+    errorMsg.textContent = 'カメラを開けませんでした。ブラウザの設定でカメラの使用を許可して、もう一度お試しください。';
+    return;
+  }
+  overlay.classList.add('hidden');
+  hud.classList.add('show');
+  controls.classList.add('show');
+  hint.classList.add('show');
+  setTimeout(() => hint.classList.remove('show'), 7000);
+  running = true;
+  tPrev = performance.now();
+  idleSince = tPrev;
+  requestAnimationFrame(loop);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!AC) return;
+  if (document.hidden) AC.suspend();
+  else AC.resume();
+});
+
+})();
+</script>
+</body>
+</html>
