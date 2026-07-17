@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>CONTOUR</title>
+<style>
+  :root{
+    --ink:#08090c;
+    --paper:#e8e6df;
+    --dim:#5a5d68;
+    --cyan:#4de6d8;
+    --magenta:#ff4d8d;
+    --amber:#ffb020;
+    --violet:#b47bff;
+    --lime:#c8ff4d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--ink); color:var(--paper);
+    overflow:hidden; overscroll-behavior:none;
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  #stage{position:fixed; inset:0;}
+  video{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; transform:scaleX(-1);
+    opacity:0.14; filter:saturate(0.3) contrast(1.1);
+  }
+  canvas{
+    position:absolute; inset:0; width:100%; height:100%;
+  }
+  #vignette{
+    position:fixed; inset:0; pointer-events:none;
+    box-shadow: inset 0 0 0 0 rgba(200,255,77,0);
+    transition: box-shadow 0.08s ease-out;
+  }
+  #hud{
+    position:fixed; top:0; left:0; right:0;
+    padding: max(14px, env(safe-area-inset-top)) 16px 0 16px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    pointer-events:none;
+  }
+  #titleWrap{display:flex; align-items:center; gap:10px;}
+  #title{
+    font-size:11px; letter-spacing:0.28em; color:var(--paper); font-weight:500;
+  }
+  #lvl{display:flex; gap:3px; align-items:center;}
+  #lvl span{
+    width:3px; height:3px; background:#23262e; border-radius:1px;
+    transition: background 0.06s linear;
+  }
+  #params{display:grid; grid-template-columns:auto; gap:5px;}
+  .pRow{display:flex; align-items:center; gap:7px; justify-content:flex-end;}
+  .pRow em{
+    font-style:normal; font-size:8px; color:var(--dim);
+    letter-spacing:0.18em; width:40px; text-align:right;
+  }
+  .track{width:46px; height:2px; background:#1d2027; position:relative; overflow:hidden;}
+  .fill{position:absolute; top:0; bottom:0; left:0; width:0%; background:var(--paper); opacity:0.85;}
+  .fill.a{background:var(--amber);}
+  .fill.v{background:var(--violet);}
+  #startScreen{
+    position:fixed; inset:0; z-index:10;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:20px; background:var(--ink);
+    text-align:center; padding:0 32px;
+  }
+  #startScreen.hidden{display:none;}
+  .ring{
+    position:absolute; left:50%; top:50%;
+    width:190px; height:190px; margin:-95px 0 0 -95px;
+    border:1px solid rgba(232,230,223,0.12); border-radius:50%;
+    animation: pr 3.2s ease-out infinite;
+    pointer-events:none;
+  }
+  .ring.r2{animation-delay:-1.6s;}
+  @keyframes pr{
+    0%{transform:scale(0.55); opacity:0.55;}
+    100%{transform:scale(1.5); opacity:0;}
+  }
+  #startScreen h1{
+    font-size:14px; letter-spacing:0.45em; font-weight:500; margin:0;
+    color:var(--paper); position:relative;
+  }
+  #tagline{
+    font-size:11px; color:var(--paper); letter-spacing:0.2em; margin:0; opacity:0.85;
+  }
+  #startScreen p{
+    font-size:10.5px; color:var(--dim); line-height:1.9; margin:0; max-width:300px;
+  }
+  #startBtn{
+    margin-top:10px;
+    background:none; border:1px solid var(--dim); color:var(--paper);
+    padding:14px 32px; font-size:11px; letter-spacing:0.32em;
+    font-family:inherit; border-radius:2px;
+    animation: breathe 2.6s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{border-color:#3a3d47;}
+    50%{border-color:#8b8e99;}
+  }
+  #startBtn:active{background:var(--paper); color:var(--ink); animation:none;}
+  #status{font-size:9.5px; color:var(--dim); letter-spacing:0.15em; min-height:14px;}
+  @media (prefers-reduced-motion: reduce){
+    .ring{animation:none; opacity:0;}
+    #startBtn{animation:none;}
+  }
+  #err{
+    position:fixed; bottom:20px; left:16px; right:16px; z-index:20;
+    font-size:11px; color:var(--magenta); text-align:center; display:none;
+  }
+  #legend{
+    position:fixed; left:16px; right:16px; bottom:max(14px, env(safe-area-inset-bottom));
+    font-size:9px; color:var(--dim); line-height:1.9; letter-spacing:0.02em;
+    pointer-events:none;
+  }
+  #legend b{color:var(--paper);}
+  #legend .row{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="canvas"></canvas>
+  <div id="vignette"></div>
+</div>
+
+<div id="hud">
+  <div id="titleWrap">
+    <div id="title">CONTOUR</div>
+    <div id="lvl"><span></span><span></span><span></span><span></span><span></span></div>
+  </div>
+  <div id="params">
+    <div class="pRow"><em>JAW</em><div class="track"><div class="fill" id="bJaw"></div></div></div>
+    <div class="pRow"><em>TILT</em><div class="track"><div class="fill" id="bTilt"></div></div></div>
+    <div class="pRow"><em>DIST</em><div class="track"><div class="fill" id="bDist"></div></div></div>
+    <div class="pRow"><em>BROW</em><div class="track"><div class="fill" id="bBrow"></div></div></div>
+    <div class="pRow"><em>PUFF</em><div class="track"><div class="fill" id="bPuff"></div></div></div>
+    <div class="pRow"><em>PUCK</em><div class="track"><div class="fill" id="bPuck"></div></div></div>
+    <div class="pRow"><em>FROWN</em><div class="track"><div class="fill" id="bFrown"></div></div></div>
+    <div class="pRow"><em>YAW</em><div class="track"><div class="fill" id="bYaw"></div></div></div>
+    <div class="pRow"><em>CHOP</em><div class="track"><div class="fill a" id="bChop"></div></div></div>
+    <div class="pRow"><em>RING</em><div class="track"><div class="fill v" id="bRing"></div></div></div>
+  </div>
+</div>
+
+<div id="legend">
+  <div class="row"><b>口</b>開閉→フィルター/音量 &nbsp; <b>瞬き</b>左右→メロディ &nbsp; <b>傾き</b>→パン &nbsp; <b>眉上げ</b>→残響</div>
+  <div class="row"><b>頬膨らまし</b>→サブベース &nbsp; <b>口すぼめ</b>→エコー &nbsp; <b>しかめ面</b>→歪み &nbsp; <b>顎左右</b>→ピッチベンド</div>
+  <div class="row"><b>鼻しわ</b>→ハイハット &nbsp; <b>目見開く</b>→ライザー</div>
+  <div class="row"><b>左手</b>ピンチ→チョップ &nbsp; <b>右手</b>ピンチ→リングモッド &nbsp; <b>手の高さ</b>→速度/音程</div>
+</div>
+
+<div id="err"></div>
+
+<div id="startScreen">
+  <div class="ring"></div>
+  <div class="ring r2"></div>
+  <h1>CONTOUR</h1>
+  <p id="tagline">顔が、楽器になる。</p>
+  <p>口・瞬き・眉・頬・鼻・顎、そして両手。顔と手のジェスチャーで音と光を操ります。カメラの使用を許可してください。</p>
+  <button id="startBtn">TAP TO BEGIN</button>
+  <div id="status"></div>
+</div>
+
+<script type="module">
+import { FaceLandmarker, HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const startScreen = document.getElementById('startScreen');
+const startBtn = document.getElementById('startBtn');
+const statusEl = document.getElementById('status');
+const errBox = document.getElementById('err');
+const vignette = document.getElementById('vignette');
+const lvlDots = document.querySelectorAll('#lvl span');
+const bars = {
+  jaw: document.getElementById('bJaw'),
+  tilt: document.getElementById('bTilt'),
+  dist: document.getElementById('bDist'),
+  brow: document.getElementById('bBrow'),
+  puff: document.getElementById('bPuff'),
+  puck: document.getElementById('bPuck'),
+  frown: document.getElementById('bFrown'),
+  yaw: document.getElementById('bYaw'),
+  chop: document.getElementById('bChop'),
+  ring: document.getElementById('bRing'),
+};
+
+function showError(msg){
+  errBox.textContent = msg;
+  errBox.style.display = 'block';
+  statusEl.textContent = '';
+}
+
+function setBar(el, v){
+  el.style.left = '0%';
+  el.style.width = (v*100).toFixed(1) + '%';
+}
+function setBarBipolar(el, v){
+  const half = Math.abs(v)*50;
+  el.style.left = (v >= 0 ? 50 : 50 - half) + '%';
+  el.style.width = half + '%';
+}
+
+function resize(){
+  canvas.width = window.innerWidth * devicePixelRatio;
+  canvas.height = window.innerHeight * devicePixelRatio;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---------- Audio Engine ----------
+const PENT_LOW  = [220.00, 261.63, 293.66, 329.63, 392.00];
+const PENT_HIGH = [440.00, 523.25, 587.33, 659.25, 783.99];
+
+class Engine{
+  constructor(){
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const c = this.ctx;
+    this.baseFreq = 110;
+    this.idxL = 0; this.idxR = 0;
+
+    this.master = c.createGain();
+    this.master.gain.value = 0;
+
+    this.analyser = c.createAnalyser();
+    this.analyser.fftSize = 64;
+    this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+
+    this.panner = c.createStereoPanner();
+    this.filter = c.createBiquadFilter();
+    this.filter.type = 'lowpass';
+    this.filter.frequency.value = 400;
+    this.filter.Q.value = 4;
+
+    this.osc1 = c.createOscillator();
+    this.osc1.type = 'sawtooth';
+    this.osc1.frequency.value = this.baseFreq;
+    this.osc2 = c.createOscillator();
+    this.osc2.type = 'sawtooth';
+    this.osc2.frequency.value = this.baseFreq;
+    this.osc2.detune.value = 6;
+    this.osc3 = c.createOscillator();
+    this.osc3.type = 'sawtooth';
+    this.osc3.frequency.value = this.baseFreq * 1.5;
+    this.osc3Gain = c.createGain();
+    this.osc3Gain.gain.value = 0.3;
+
+    this.droneGain = c.createGain();
+    this.droneGain.gain.value = 0.5;
+
+    this.lfo = c.createOscillator();
+    this.lfo.type = 'sine';
+    this.lfo.frequency.value = 0.07;
+    this.lfoGain = c.createGain();
+    this.lfoGain.gain.value = 70;
+    this.lfo.connect(this.lfoGain);
+    this.lfoGain.connect(this.filter.frequency);
+
+    this.vib = c.createOscillator();
+    this.vib.type = 'sine';
+    this.vib.frequency.value = 4.5;
+    this.vibGain = c.createGain();
+    this.vibGain.gain.value = 0.7;
+    this.vib.connect(this.vibGain);
+    this.vibGain.connect(this.osc1.frequency);
+    this.vibGain.connect(this.osc2.frequency);
+
+    // --- hand FX: tremolo chop (left hand) ---
+    this.tremGain = c.createGain();
+    this.tremGain.gain.value = 1;
+    this.tremLfo = c.createOscillator();
+    this.tremLfo.type = 'sine';
+    this.tremLfo.frequency.value = 6;
+    this.tremDepth = c.createGain();
+    this.tremDepth.gain.value = 0;
+    this.tremLfo.connect(this.tremDepth);
+    this.tremDepth.connect(this.tremGain.gain);
+
+    // --- hand FX: ring mod (right hand) ---
+    this.rmCarrier = c.createOscillator();
+    this.rmCarrier.type = 'sine';
+    this.rmCarrier.frequency.value = 220;
+    this.rmMult = c.createGain();
+    this.rmMult.gain.value = 0; // signal * carrier
+    this.rmCarrier.connect(this.rmMult.gain);
+    this.rmWet = c.createGain();
+    this.rmWet.gain.value = 0;
+    this.rmDry = c.createGain();
+    this.rmDry.gain.value = 1;
+    this.fxOut = c.createGain();
+    this.fxOut.gain.value = 1;
+
+    // reverb
+    this.convolver = c.createConvolver();
+    this.convolver.buffer = this._impulse(3.2, 2.4);
+    this.wet = c.createGain();
+    this.wet.gain.value = 0.15;
+    this.dry = c.createGain();
+    this.dry.gain.value = 0.85;
+    this.fxSend = c.createGain();
+    this.fxSend.gain.value = 0.3;
+    this.fxSend.connect(this.convolver);
+
+    // distortion
+    this.shaper = c.createWaveShaper();
+    this.shaper.curve = this._distCurve(60);
+    this.shaper.oversample = '2x';
+    this.distWet = c.createGain();
+    this.distWet.gain.value = 0;
+    this.distDry = c.createGain();
+    this.distDry.gain.value = 1;
+
+    // delay
+    this.delay = c.createDelay(1.0);
+    this.delay.delayTime.value = 0.28;
+    this.delayFeedback = c.createGain();
+    this.delayFeedback.gain.value = 0.15;
+    this.delayWet = c.createGain();
+    this.delayWet.gain.value = 0;
+
+    // sub bass
+    this.subOsc = c.createOscillator();
+    this.subOsc.type = 'sine';
+    this.subOsc.frequency.value = this.baseFreq / 2;
+    this.subGain = c.createGain();
+    this.subGain.gain.value = 0;
+
+    // routing:
+    // oscs -> droneGain -> filter -> tremGain -> [rmDry + (rmMult->rmWet)] -> fxOut -> dist split -> dry/reverb/delay -> panner -> master
+    this.osc1.connect(this.droneGain);
+    this.osc2.connect(this.droneGain);
+    this.osc3.connect(this.osc3Gain);
+    this.osc3Gain.connect(this.droneGain);
+    this.droneGain.connect(this.filter);
+
+    this.filter.connect(this.tremGain);
+    this.tremGain.connect(this.rmDry);
+    this.tremGain.connect(this.rmMult);
+    this.rmMult.connect(this.rmWet);
+    this.rmDry.connect(this.fxOut);
+    this.rmWet.connect(this.fxOut);
+
+    this.fxOut.connect(this.distDry);
+    this.fxOut.connect(this.shaper);
+    this.shaper.connect(this.distWet);
+
+    this.distDry.connect(this.dry);
+    this.distDry.connect(this.convolver);
+    this.distDry.connect(this.delay);
+    this.distWet.connect(this.dry);
+    this.distWet.connect(this.convolver);
+    this.distWet.connect(this.delay);
+
+    this.convolver.connect(this.wet);
+    this.delay.connect(this.delayFeedback);
+    this.delayFeedback.connect(this.delay);
+    this.delay.connect(this.delayWet);
+
+    this.dry.connect(this.panner);
+    this.wet.connect(this.panner);
+    this.delayWet.connect(this.panner);
+
+    this.subOsc.connect(this.subGain);
+    this.subGain.connect(this.master);
+
+    this.panner.connect(this.master);
+    this.master.connect(c.destination);
+    this.master.connect(this.analyser);
+
+    this.osc1.start(); this.osc2.start(); this.osc3.start();
+    this.subOsc.start(); this.lfo.start(); this.vib.start();
+    this.tremLfo.start(); this.rmCarrier.start();
+
+    this.master.gain.setTargetAtTime(0.5, c.currentTime, 1.2);
+  }
+
+  level(){
+    this.analyser.getByteFrequencyData(this.freqData);
+    let sum = 0;
+    for(let i=0;i<this.freqData.length;i++) sum += this.freqData[i];
+    return sum / (this.freqData.length * 255);
+  }
+
+  _impulse(duration, decay){
+    const c = this.ctx;
+    const rate = c.sampleRate;
+    const len = rate * duration;
+    const buf = c.createBuffer(2, len, rate);
+    for(let ch=0; ch<2; ch++){
+      const data = buf.getChannelData(ch);
+      for(let i=0;i<len;i++){
+        data[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay);
+      }
+    }
+    return buf;
+  }
+
+  _distCurve(amount){
+    const n = 44100;
+    const curve = new Float32Array(n);
+    const k = amount;
+    for(let i=0;i<n;i++){
+      const x = (i*2)/n - 1;
+      curve[i] = (1+k) * x / (1 + k*Math.abs(x));
+    }
+    return curve;
+  }
+
+  _noiseBuffer(duration=1.0){
+    const c = this.ctx;
+    const len = c.sampleRate * duration;
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<len;i++) data[i] = Math.random()*2-1;
+    return buf;
+  }
+
+  setJaw(v){
+    const freq = 250 * Math.pow(16, v);
+    this.filter.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.03);
+    this.droneGain.gain.setTargetAtTime(0.25 + v*0.5, this.ctx.currentTime, 0.05);
+  }
+  setSmile(v){
+    this.osc2.detune.setTargetAtTime(6 + v*50, this.ctx.currentTime, 0.1);
+  }
+  setPan(v){
+    this.panner.pan.setTargetAtTime(v, this.ctx.currentTime, 0.08);
+  }
+  setDistance(v){
+    const g = 0.15 + v*0.55;
+    this.master.gain.setTargetAtTime(g, this.ctx.currentTime, 0.15);
+  }
+  setBrow(v){
+    this.wet.gain.setTargetAtTime(0.08 + v*0.55, this.ctx.currentTime, 0.15);
+  }
+  setCheekPuff(v){
+    this.subGain.gain.setTargetAtTime(v*0.45, this.ctx.currentTime, 0.08);
+  }
+  setPucker(v){
+    this.delayWet.gain.setTargetAtTime(v*0.4, this.ctx.currentTime, 0.1);
+    this.delayFeedback.gain.setTargetAtTime(Math.min(0.75, 0.1 + v*0.5), this.ctx.currentTime, 0.1);
+  }
+  setFrown(v){
+    this.distWet.gain.setTargetAtTime(v*0.7, this.ctx.currentTime, 0.1);
+    this.distDry.gain.setTargetAtTime(1 - v*0.5, this.ctx.currentTime, 0.1);
+  }
+  setYaw(v){
+    const mult = Math.pow(2, (v*2)/12);
+    this.osc1.frequency.setTargetAtTime(this.baseFreq*mult, this.ctx.currentTime, 0.05);
+    this.osc2.frequency.setTargetAtTime(this.baseFreq*mult, this.ctx.currentTime, 0.05);
+    this.osc3.frequency.setTargetAtTime(this.baseFreq*1.5*mult, this.ctx.currentTime, 0.05);
+    this.subOsc.frequency.setTargetAtTime((this.baseFreq/2)*mult, this.ctx.currentTime, 0.05);
+  }
+  setChop(depth, rate){
+    const t = this.ctx.currentTime;
+    if(rate !== null) this.tremLfo.frequency.setTargetAtTime(rate, t, 0.06);
+    this.tremGain.gain.setTargetAtTime(1 - depth*0.5, t, 0.06);
+    this.tremDepth.gain.setTargetAtTime(depth*0.5, t, 0.06);
+  }
+  setRing(mix, freq){
+    const t = this.ctx.currentTime;
+    if(freq !== null) this.rmCarrier.frequency.setTargetAtTime(freq, t, 0.05);
+    this.rmWet.gain.setTargetAtTime(mix, t, 0.06);
+    this.rmDry.gain.setTargetAtTime(1 - mix*0.85, t, 0.06);
+  }
+
+  pluck(side){
+    const c = this.ctx;
+    const now = c.currentTime;
+    let freq;
+    if(side === 'L'){ freq = PENT_LOW[this.idxL % PENT_LOW.length]; this.idxL++; }
+    else { freq = PENT_HIGH[this.idxR % PENT_HIGH.length]; this.idxR++; }
+    const o = c.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = freq;
+    const g = c.createGain();
+    g.gain.value = 0;
+    const pan = c.createStereoPanner();
+    pan.pan.value = side === 'L' ? -0.6 : 0.6;
+    o.connect(g); g.connect(pan);
+    pan.connect(this.master);
+    pan.connect(this.fxSend);
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.5, now + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    o.start(now); o.stop(now + 0.65);
+    return freq;
+  }
+
+  tick(side){
+    const c = this.ctx;
+    const now = c.currentTime;
+    if(!this._tickBuf) this._tickBuf = this._noiseBuffer(0.2);
+    const src = c.createBufferSource();
+    src.buffer = this._tickBuf;
+    const hp = c.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 5000;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.35, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    const pan = c.createStereoPanner();
+    pan.pan.value = side === 'L' ? -0.8 : 0.8;
+    src.connect(hp); hp.connect(g); g.connect(pan); pan.connect(this.master);
+    src.start(now); src.stop(now + 0.1);
+  }
+
+  riser(){
+    const c = this.ctx;
+    const now = c.currentTime;
+    if(!this._riserBuf) this._riserBuf = this._noiseBuffer(1.0);
+    const src = c.createBufferSource();
+    src.buffer = this._riserBuf;
+    src.loop = true;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(300, now);
+    bp.frequency.exponentialRampToValueAtTime(3200, now + 0.55);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(0.22, now + 0.45);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+    src.connect(bp); bp.connect(g); g.connect(this.master);
+    src.start(now); src.stop(now + 0.8);
+  }
+}
+
+let engine = null;
+
+// ---------- Landmark index sets ----------
+const LIPS = [61,146,91,181,84,17,314,405,321,375,291,308,324,318,402,317,14,87,178,88,95,185,40,39,37,0,267,269,270,409,415,310,311,312,13,82,81,42,183,78];
+const LEFT_EYE = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+const RIGHT_EYE = [263,249,390,373,374,380,381,382,362,398,384,385,386,387,388,466];
+const JAWLINE = [127,234,93,132,58,172,136,150,149,176,148,152,377,400,378,379,365,397,288,361,323,454,356];
+const LEFT_BROW = [70,63,105,66,107];
+const RIGHT_BROW = [336,296,334,293,300];
+const CHEEK_L = 50, CHEEK_R = 280, NOSE_TIP = 4, MOUTH_UP = 13, MOUTH_LOW = 14, MID = 168;
+const HAND_CONNECTIONS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+
+function ema(prev, next, a){ return prev === null ? next : prev + a*(next-prev); }
+function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+
+// ---------- Particles & rings ----------
+const particles = [];
+const rings = [];
+const MAX_P = 220;
+
+function spawnParticle(x, y, opts={}){
+  if(particles.length >= MAX_P) return;
+  particles.push({
+    x, y,
+    vx: (opts.vx ?? 0) + (Math.random()-0.5)*(opts.spread ?? 0.6),
+    vy: (opts.vy ?? -0.6) + (Math.random()-0.5)*(opts.spread ?? 0.6),
+    life: 1,
+    decay: opts.decay ?? (0.008 + Math.random()*0.012),
+    size: opts.size ?? (1 + Math.random()*1.6),
+    hue: opts.hue ?? 190,
+  });
+}
+
+function spawnBurst(x, y, count, hue, speed=2){
+  for(let i=0;i<count;i++){
+    const a = Math.random()*Math.PI*2;
+    const s = speed*(0.4+Math.random()*0.8);
+    spawnParticle(x, y, {vx:Math.cos(a)*s, vy:Math.sin(a)*s, spread:0, hue, decay:0.02+Math.random()*0.02, size:1+Math.random()*1.8});
+  }
+}
+
+function spawnRing(x, y, hue){
+  rings.push({x, y, r:6, alpha:0.85, hue});
+}
+
+function updateParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx += (Math.random()-0.5)*0.06;
+    p.vy -= 0.005;
+    p.life -= p.decay;
+    if(p.life <= 0) particles.splice(i,1);
+  }
+  for(let i=rings.length-1;i>=0;i--){
+    const r = rings[i];
+    r.r += 2.8;
+    r.alpha -= 0.028;
+    if(r.alpha <= 0) rings.splice(i,1);
+  }
+}
+
+// ---------- Main ----------
+async function main(){
+  try{
+    statusEl.textContent = 'LOADING FACE MODEL…';
+    const filesetResolver = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+    const faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+      baseOptions:{
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU"
+      },
+      outputFaceBlendshapes: true,
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+
+    statusEl.textContent = 'LOADING HAND MODEL…';
+    const handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
+      baseOptions:{
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 2
+    });
+
+    statusEl.textContent = 'STARTING CAMERA…';
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} },
+      audio:false
+    });
+    video.srcObject = stream;
+    await new Promise(res => video.onloadedmetadata = res);
+    await video.play();
+
+    engine = new Engine();
+    startScreen.classList.add('hidden');
+
+    let blinkCoolL = 0, blinkCoolR = 0, noseCoolL = 0, noseCoolR = 0, riserCool = 0;
+    let smJaw=null, smTilt=null, smDist=null, smBrow=null, smSmile=null;
+    let smPuff=null, smPuck=null, smFrown=null, smYaw=null;
+    let smChop=null, smRing=null;
+    let chopRate = 6, ringFreq = 220;
+    let flashState = {noseL:0, noseR:0};
+
+    function loop(){
+      const now = performance.now();
+      const result = faceLandmarker.detectForVideo(video, now);
+      const handResult = handLandmarker.detectForVideo(video, now);
+      const level = engine.level();
+
+      const lit = Math.round(level * 5 * 1.6);
+      lvlDots.forEach((d,i)=>{
+        d.style.background = i < lit ? 'var(--paper)' : '#23262e';
+      });
+
+      const w = window.innerWidth, h = window.innerHeight;
+
+      // ---- hands: left = chop, right = ring mod ----
+      let chopTarget = 0, ringTarget = 0;
+      let chopRateNew = null, ringFreqNew = null;
+      const handsDraw = [];
+      const labels = [];
+
+      if(handResult.landmarks){
+        for(const hand of handResult.landmarks){
+          const wrist = hand[0];
+          const mx = 1 - wrist.x; // mirrored screen x
+          const handSize = Math.hypot(hand[9].x - wrist.x, hand[9].y - wrist.y);
+          const pinchDist = Math.hypot(hand[4].x - hand[8].x, hand[4].y - hand[8].y);
+          const ratio = pinchDist / (handSize + 1e-6);
+          const depth = clamp01((1.1 - ratio) / (1.1 - 0.25));
+          const hNorm = clamp01((0.85 - wrist.y) / 0.7); // 0 bottom .. 1 top
+
+          const isLeft = mx < 0.5;
+          if(isLeft){
+            chopTarget = Math.max(chopTarget, depth);
+            chopRateNew = 1.5 + hNorm * 14;
+            handsDraw.push({hand, hue:38, depth});
+            if(depth > 0.05){
+              labels.push({x:wrist.x, y:wrist.y, text:`CHOP ${(chopRateNew).toFixed(1)}Hz`, hue:38});
+            }
+          } else {
+            ringTarget = Math.max(ringTarget, depth);
+            ringFreqNew = 60 * Math.pow(1400/60, hNorm);
+            handsDraw.push({hand, hue:270, depth});
+            if(depth > 0.05){
+              labels.push({x:wrist.x, y:wrist.y, text:`RING ${Math.round(ringFreqNew)}Hz`, hue:270});
+            }
+          }
+
+          // pinch sparkle
+          if(depth > 0.1 && particles.length < MAX_P - 4){
+            const px = (hand[4].x + hand[8].x)/2 * w;
+            const py = (hand[4].y + hand[8].y)/2 * h;
+            spawnParticle(px, py, {hue: isLeft ? 38 : 270, vy:-0.3, spread:0.9, decay:0.02, size:1+depth*1.5});
+          }
+        }
+      }
+
+      smChop = ema(smChop, chopTarget, 0.3);
+      smRing = ema(smRing, ringTarget, 0.3);
+      if(chopRateNew !== null) chopRate = chopRateNew;
+      if(ringFreqNew !== null) ringFreq = ringFreqNew;
+      engine.setChop(smChop, chopRateNew !== null ? chopRate : null);
+      engine.setRing(smRing, ringFreqNew !== null ? ringFreq : null);
+      setBar(bars.chop, smChop);
+      setBar(bars.ring, smRing);
+
+      // ---- face ----
+      if(result.faceLandmarks && result.faceLandmarks.length > 0){
+        const lm = result.faceLandmarks[0];
+        const bs = result.faceBlendshapes && result.faceBlendshapes[0]
+          ? Object.fromEntries(result.faceBlendshapes[0].categories.map(c=>[c.categoryName, c.score]))
+          : {};
+
+        const jaw = bs.jawOpen ?? 0;
+        const browIn = bs.browInnerUp ?? 0;
+        const smileV = ((bs.mouthSmileLeft ?? 0) + (bs.mouthSmileRight ?? 0)) / 2;
+        const puff = bs.cheekPuff ?? 0;
+        const pucker = bs.mouthPucker ?? 0;
+        const frown = ((bs.browDownLeft ?? 0) + (bs.browDownRight ?? 0)) / 2;
+        const yawRaw = (bs.jawLeft ?? 0) - (bs.jawRight ?? 0);
+        const sneerL = bs.noseSneerLeft ?? 0, sneerR = bs.noseSneerRight ?? 0;
+        const wideL = bs.eyeWideLeft ?? 0, wideR = bs.eyeWideRight ?? 0;
+
+        const p33 = lm[33], p263 = lm[263];
+        const dx = p263.x - p33.x, dy = p263.y - p33.y;
+        let tilt = Math.atan2(dy, dx) / (Math.PI/2);
+        tilt = Math.max(-1, Math.min(1, tilt*2.2));
+
+        const pL = lm[127], pR = lm[356];
+        const faceW = Math.hypot(pR.x-pL.x, pR.y-pL.y);
+        const distNorm = clamp01((faceW - 0.18) / (0.42-0.18));
+
+        smJaw = ema(smJaw, jaw, 0.35);
+        smTilt = ema(smTilt, tilt, 0.25);
+        smDist = ema(smDist, distNorm, 0.2);
+        smBrow = ema(smBrow, browIn, 0.25);
+        smSmile = ema(smSmile, smileV, 0.25);
+        smPuff = ema(smPuff, clamp01(puff*2.2), 0.3);
+        smPuck = ema(smPuck, clamp01(pucker*1.6), 0.3);
+        smFrown = ema(smFrown, clamp01(frown*1.8), 0.25);
+        smYaw = ema(smYaw, Math.max(-1,Math.min(1,yawRaw*2.5)), 0.3);
+
+        engine.setJaw(smJaw);
+        engine.setPan(smTilt);
+        engine.setDistance(smDist);
+        engine.setBrow(smBrow);
+        engine.setSmile(smSmile);
+        engine.setCheekPuff(smPuff);
+        engine.setPucker(smPuck);
+        engine.setFrown(smFrown);
+        engine.setYaw(smYaw);
+
+        setBar(bars.jaw, smJaw);
+        setBarBipolar(bars.tilt, smTilt);
+        setBar(bars.dist, smDist);
+        setBar(bars.brow, smBrow);
+        setBar(bars.puff, smPuff);
+        setBar(bars.puck, smPuck);
+        setBar(bars.frown, smFrown);
+        setBarBipolar(bars.yaw, smYaw);
+
+        const hue = 190 + smJaw*140 - smPuck*60;
+
+        if(smJaw > 0.08){
+          const mu = lm[MOUTH_UP], ml = lm[MOUTH_LOW];
+          const mxp = (mu.x+ml.x)/2 * w, myp = (mu.y+ml.y)/2 * h;
+          const n = Math.floor(smJaw*4);
+          for(let i=0;i<n;i++){
+            spawnParticle(mxp + (Math.random()-0.5)*smJaw*40, myp, {hue, vy:-0.4-smJaw});
+          }
+        }
+
+        const eyeL = bs.eyeBlinkLeft ?? 0;
+        const eyeR = bs.eyeBlinkRight ?? 0;
+        blinkCoolL = Math.max(0, blinkCoolL - 1);
+        blinkCoolR = Math.max(0, blinkCoolR - 1);
+        noseCoolL = Math.max(0, noseCoolL - 1);
+        noseCoolR = Math.max(0, noseCoolR - 1);
+        riserCool = Math.max(0, riserCool - 1);
+
+        if(eyeL > 0.55 && blinkCoolL === 0){
+          engine.pluck('L'); blinkCoolL = 18;
+          const e = lm[145];
+          spawnBurst(e.x*w, e.y*h, 12, 38, 2.2);
+          spawnRing(e.x*w, e.y*h, 38);
+        }
+        if(eyeR > 0.55 && blinkCoolR === 0){
+          engine.pluck('R'); blinkCoolR = 18;
+          const e = lm[374];
+          spawnBurst(e.x*w, e.y*h, 12, 335, 2.2);
+          spawnRing(e.x*w, e.y*h, 335);
+        }
+        if(sneerL > 0.4 && noseCoolL === 0){
+          engine.tick('L'); noseCoolL = 14; flashState.noseL = 1;
+          const p = lm[NOSE_TIP];
+          spawnBurst(p.x*w, p.y*h, 6, 80, 1.6);
+        }
+        if(sneerR > 0.4 && noseCoolR === 0){
+          engine.tick('R'); noseCoolR = 14; flashState.noseR = 1;
+          const p = lm[NOSE_TIP];
+          spawnBurst(p.x*w, p.y*h, 6, 80, 1.6);
+        }
+        if(wideL > 0.55 && wideR > 0.55 && riserCool === 0){
+          engine.riser(); riserCool = 45;
+          vignette.style.boxShadow = 'inset 0 0 140px 20px rgba(200,255,77,0.55)';
+          setTimeout(()=>{ vignette.style.boxShadow = 'inset 0 0 0 0 rgba(200,255,77,0)'; }, 500);
+          for(let i=0;i<50;i++){
+            spawnParticle(Math.random()*w, h + 10, {hue:80, vy:-(2.5+Math.random()*3.5), spread:0.8, decay:0.012, size:1+Math.random()*2});
+          }
+          const cc = lm[MID];
+          spawnRing(cc.x*w, cc.y*h, 80);
+        }
+
+        flashState.noseL = Math.max(0, flashState.noseL - 0.08);
+        flashState.noseR = Math.max(0, flashState.noseR - 0.08);
+
+        updateParticles();
+        draw(lm, {
+          jaw: smJaw, puff: smPuff, frown: smFrown, pucker: smPuck,
+          blinkL: blinkCoolL>10, blinkR: blinkCoolR>10,
+          flashState, level, faceW, hue
+        }, handsDraw, labels);
+      } else {
+        updateParticles();
+        drawIdle(handsDraw, labels);
+      }
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+  }catch(e){
+    console.error(e);
+    showError('カメラまたはモデルの初期化に失敗しました: ' + (e.message || e));
+  }
+}
+
+function drawHand(hd, w, h){
+  const {hand, hue, depth} = hd;
+  ctx.strokeStyle = `hsla(${hue},80%,65%,${0.35 + depth*0.5})`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for(const [a,b] of HAND_CONNECTIONS){
+    ctx.moveTo(hand[a].x*w, hand[a].y*h);
+    ctx.lineTo(hand[b].x*w, hand[b].y*h);
+  }
+  ctx.stroke();
+
+  // joints
+  ctx.fillStyle = `hsla(${hue},80%,70%,${0.5 + depth*0.4})`;
+  for(let i=0;i<hand.length;i++){
+    ctx.beginPath();
+    ctx.arc(hand[i].x*w, hand[i].y*h, 1.6, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // pinch line thumb(4) - index(8)
+  const t = hand[4], ix = hand[8];
+  ctx.strokeStyle = `hsla(${hue},95%,65%,${0.4 + depth*0.6})`;
+  ctx.lineWidth = 1.5 + depth*2.5;
+  ctx.shadowBlur = 6 + depth*14;
+  ctx.shadowColor = `hsla(${hue},95%,65%,0.9)`;
+  ctx.beginPath();
+  ctx.moveTo(t.x*w, t.y*h);
+  ctx.lineTo(ix.x*w, ix.y*h);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // pinch node
+  const px = (t.x+ix.x)/2*w, py = (t.y+ix.y)/2*h;
+  ctx.beginPath();
+  ctx.arc(px, py, 2.5 + depth*5, 0, Math.PI*2);
+  ctx.fillStyle = `hsla(${hue},95%,70%,${0.5 + depth*0.5})`;
+  ctx.fill();
+}
+
+function drawLabels(labels, w, h){
+  ctx.font = '9px ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  for(const l of labels){
+    const sx = w - l.x*w; // mirror
+    const sy = l.y*h + 24;
+    ctx.fillStyle = `hsla(${l.hue},80%,70%,0.9)`;
+    ctx.fillText(l.text, sx, sy);
+  }
+}
+
+function drawIdle(handsDraw, labels){
+  const w = window.innerWidth, h = window.innerHeight;
+  ctx.clearRect(0,0,w,h);
+  ctx.save();
+  ctx.translate(w,0);
+  ctx.scale(-1,1);
+  handsDraw.forEach(hd => drawHand(hd, w, h));
+  ctx.globalCompositeOperation = 'lighter';
+  particles.forEach(p=>{
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = `hsla(${p.hue},90%,65%,1)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+  drawLabels(labels, w, h);
+}
+
+function draw(lm, s, handsDraw, labels){
+  const w = window.innerWidth, h = window.innerHeight;
+  ctx.clearRect(0,0,w,h);
+  ctx.save();
+  ctx.translate(w,0);
+  ctx.scale(-1,1);
+
+  const {hue, jaw, level} = s;
+  const glow = 6 + jaw*22;
+
+  // landmark constellation
+  ctx.fillStyle = `hsla(${hue},60%,75%,${0.10 + level*0.28})`;
+  for(let i=0;i<lm.length;i++){
+    const p = lm[i];
+    ctx.fillRect(p.x*w, p.y*h, 1, 1);
+  }
+
+  // halo rings
+  const c = lm[MID];
+  const cx = c.x*w, cy = c.y*h;
+  const baseR = s.faceW * w * 0.85;
+  const t = performance.now();
+  ctx.save();
+  ctx.setLineDash([2, 14]);
+  ctx.lineDashOffset = t*0.02;
+  ctx.strokeStyle = `hsla(${hue},80%,65%,${0.12 + level*0.45})`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, baseR + level*26, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.lineDashOffset = -t*0.013;
+  ctx.setLineDash([1, 9]);
+  ctx.strokeStyle = `hsla(${hue+40},80%,65%,${0.08 + level*0.3})`;
+  ctx.beginPath();
+  ctx.arc(cx, cy, baseR*0.8 + level*14, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+
+  function drawLoop(indices, color, lineWidth){
+    ctx.beginPath();
+    indices.forEach((idx,i)=>{
+      const p = lm[idx];
+      if(i===0) ctx.moveTo(p.x*w, p.y*h); else ctx.lineTo(p.x*w, p.y*h);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.shadowBlur = glow;
+    ctx.shadowColor = color;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  function drawPath(indices, color, lineWidth){
+    ctx.beginPath();
+    indices.forEach((idx,i)=>{
+      const p = lm[idx];
+      if(i===0) ctx.moveTo(p.x*w, p.y*h); else ctx.lineTo(p.x*w, p.y*h);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.shadowBlur = glow*0.6;
+    ctx.shadowColor = color;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  drawLoop(JAWLINE, `hsla(${hue},70%,60%,0.35)`, 1);
+  drawLoop(LIPS, `hsla(${hue},85%,65%,0.9)`, 1.6 + jaw*2 + s.pucker*1.5);
+  drawLoop(LEFT_EYE, s.blinkL ? `rgba(255,176,32,0.95)` : `hsla(${hue+20},70%,70%,0.55)`, s.blinkL ? 2.4 : 1);
+  drawLoop(RIGHT_EYE, s.blinkR ? `rgba(255,77,141,0.95)` : `hsla(${hue+20},70%,70%,0.55)`, s.blinkR ? 2.4 : 1);
+
+  const browColor = s.frown > 0.15 ? `rgba(255,77,141,${0.4+s.frown*0.5})` : `hsla(${hue+20},60%,65%,0.4)`;
+  drawPath(LEFT_BROW, browColor, 1.2 + s.frown*2);
+  drawPath(RIGHT_BROW, browColor, 1.2 + s.frown*2);
+
+  if(s.puff > 0.02){
+    [CHEEK_L, CHEEK_R].forEach(idx=>{
+      const p = lm[idx];
+      ctx.beginPath();
+      ctx.arc(p.x*w, p.y*h, 8 + s.puff*26, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(180,123,255,${0.3+s.puff*0.5})`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    });
+  }
+
+  if(s.flashState.noseL > 0.02 || s.flashState.noseR > 0.02){
+    const p = lm[NOSE_TIP];
+    const intensity = Math.max(s.flashState.noseL, s.flashState.noseR);
+    ctx.beginPath();
+    ctx.arc(p.x*w, p.y*h, 4 + (1-intensity)*20, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(200,255,77,${intensity})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // hands
+  handsDraw.forEach(hd => drawHand(hd, w, h));
+
+  // additive glow layer
+  ctx.globalCompositeOperation = 'lighter';
+
+  if(jaw > 0.04){
+    const mu = lm[MOUTH_UP], ml = lm[MOUTH_LOW];
+    const mx = (mu.x+ml.x)/2 * w, my = (mu.y+ml.y)/2 * h;
+    const r = 20 + jaw*120;
+    const grad = ctx.createRadialGradient(mx,my,0, mx,my,r);
+    grad.addColorStop(0, `hsla(${hue},95%,62%,${jaw*0.30})`);
+    grad.addColorStop(1, `hsla(${hue},95%,62%,0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(mx,my,r,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  rings.forEach(r=>{
+    ctx.globalAlpha = r.alpha;
+    ctx.strokeStyle = `hsla(${r.hue},90%,65%,1)`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.r, 0, Math.PI*2);
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1;
+
+  particles.forEach(p=>{
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = `hsla(${p.hue},90%,65%,1)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
+  ctx.restore();
+  drawLabels(labels, w, h);
+}
+
+startBtn.addEventListener('click', () => {
+  main();
+}, {once:true});
+</script>
+</body>
+</html>
