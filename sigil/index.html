@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04030a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="手が電脳魔法陣を紡ぐ楽器。指を広げるとルーンの回路が展開して音を紡ぎ、拳を握ると呪文を詠唱する - SIGIL">
+<title>SIGIL ─ 電脳魔法陣</title>
+<style>
+  :root{
+    --void:#04030a; --haze:#160a26; --ghost:#eef2ff;
+    --cyan:#00eaff; --magenta:#ff2bd6; --violet:#8a5cff; --gold:#ffd166; --warn:#ff3860;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #scan{ position:fixed; inset:0; z-index:6; pointer-events:none; mix-blend-mode:screen; opacity:.5;
+    background:repeating-linear-gradient(to bottom, rgba(150,220,255,0.05) 0px, rgba(150,220,255,0.05) 1px, transparent 2px, transparent 3px); }
+  #flicker{ position:fixed; inset:0; z-index:7; pointer-events:none; background:rgba(200,230,255,0.02); opacity:0; }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(42px); opacity:.38; pointer-events:none;
+    animation:drift 14s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--magenta),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--cyan),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--violet),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.15); } }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.16em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta),var(--gold),var(--cyan));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:2rem; position:relative; }
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.2em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--cyan),var(--magenta)); border:none; border-radius:6px;
+    cursor:pointer; box-shadow:0 0 28px rgba(0,234,255,0.4);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 3.2s ease-in-out infinite;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(0,234,255,0.4); }
+    50%{ box-shadow:0 0 44px rgba(255,43,214,0.55); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{ position:relative; margin-top:2.2rem; max-width:22rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--cyan); font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{ position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(8,5,18,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(0,234,255,0.18); padding:0.65rem 0.9rem; color:var(--ghost); min-width:112px;
+    clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px); }
+  .panel .lab{ font-size:0.58rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.3rem; }
+  .panel .cnt{ font-size:1.6rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--cyan); }
+  .panel .cnt small{ font-size:0.7rem; font-weight:600; color:rgba(238,242,255,0.55); margin-left:.15rem; }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,242,255,0.1); margin-top:0.5rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--cyan),var(--magenta)); border-radius:2px;
+    transition:width .12s linear; }
+  .tim{ font-size:0.62rem; letter-spacing:0.08em; margin-top:0.4rem; color:var(--gold); min-height:0.85em; }
+  .panel[data-side="r"] .tim{ text-align:right; }
+
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #centerHud.show{ opacity:1; }
+  #stateDot{ font-size:0.68rem; letter-spacing:0.2em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(0,234,255,0.2);
+    background:rgba(8,5,18,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease; white-space:nowrap; }
+  #stateDot.playing{ color:var(--cyan); border-color:rgba(0,234,255,0.55); box-shadow:0 0 18px rgba(0,234,255,0.25); }
+  #stateDot.casting{ color:var(--gold); border-color:rgba(255,209,102,0.6); box-shadow:0 0 22px rgba(255,209,102,0.4); }
+  #stateDot.silent{ color:var(--warn); border-color:rgba(255,56,96,0.4); box-shadow:none; }
+
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(8,5,18,0.55); border:1px solid rgba(0,234,255,0.2);
+    padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:transform .15s ease, background .15s ease;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(0,234,255,0.16); border-color:rgba(0,234,255,0.55); color:var(--cyan); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.2em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="scan"></div>
+  <div id="flicker"></div>
+
+  <div id="brand"><div class="b1">SIGIL</div><div class="b2">電脳魔法陣 / 手で紡ぐ呪文</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="scanBtn">ノイズ ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">LEFT / 左手</div>
+      <div class="cnt"><span id="lCount">0</span><small>本</small></div>
+      <div class="meter"><b id="lMeter"></b></div>
+      <div class="tim" id="lTim"></div>
+    </div>
+    <div class="panel" data-side="r" style="text-align:right">
+      <div class="lab">RIGHT / 右手</div>
+      <div class="cnt"><span id="rCount">0</span><small>本</small></div>
+      <div class="meter"><b id="rMeter"></b></div>
+      <div class="tim" id="rTim"></div>
+    </div>
+  </div>
+
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">SIGIL</div>
+    <div id="sub">電脳魔法陣 — 手で紡ぐ呪文の楽器</div>
+    <button id="startBtn">起動する</button>
+    <div id="hint">
+      ・手をカメラにかざすと、指先を中心に<b>魔法陣</b>が展開<br>
+      ・<b>指の本数</b>でルーンの多角形と音階が変化<br>
+      ・<b>手を開閉</b>すると陣が呼吸し、音の明るさが変わる<br>
+      ・開いた手を素早く<b>握る（拳）</b>と、呪文を<b>詠唱</b>して光が弾ける<br>
+      ・両手を近づけると陣同士が電流の橋でつながる
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const scanBtn  = document.getElementById('scanBtn');
+  const scanEl   = document.getElementById('scan');
+  const flickerEl= document.getElementById('flicker');
+  const lCountEl = document.getElementById('lCount');
+  const rCountEl = document.getElementById('rCount');
+  const lTimEl   = document.getElementById('lTim');
+  const rTimEl   = document.getElementById('rTim');
+  const lMeterEl = document.getElementById('lMeter');
+  const rMeterEl = document.getElementById('rMeter');
+
+  // glow layer (trails) — drawn additively over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  //  exotic phrygian-dominant scale for a fantasy/cyberpunk feel.
+  //  fingers -> pitch, openness -> brightness, fist-close -> "cast" zap.
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, panNode = null;
+  let osc1 = null, osc2 = null, sub = null;
+  let filter = null, voiceGain = null;
+  let lfo = null, lfoGain = null;
+  let delay = null, fbGain = null, wet = null;
+  let convolver = null, revGain = null, plinkBus = null, zapBus = null;
+  let audioReady = false;
+
+  const ROOT = 110; // A2 — exotic root
+  const STEPS = [0,1,4,5,7,8,10]; // phrygian dominant
+  const SCALE = Array.from({length:11}, (_,n) => STEPS[n % STEPS.length] + 12*Math.floor(n/STEPS.length));
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  function midiRatio(semi){ return Math.pow(2, semi / 12); }
+  function noteName(semi){
+    const midi = 45 + semi; // A2 = MIDI 45
+    return NOTE_NAMES[((midi%12)+12)%12] + (Math.floor(midi / 12) - 1);
+  }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate*seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.0;
+    panNode = actx.createStereoPanner ? actx.createStereoPanner() : actx.createGain();
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.knee.value = 20; comp.ratio.value = 3.6;
+    comp.attack.value = 0.003;  comp.release.value = 0.22;
+
+    filter = actx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 700; filter.Q.value = 8;
+
+    voiceGain = actx.createGain(); voiceGain.gain.value = 0.9;
+
+    osc1 = actx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = ROOT;
+    osc2 = actx.createOscillator(); osc2.type = 'sawtooth'; osc2.frequency.value = ROOT; osc2.detune.value = -9;
+    sub  = actx.createOscillator(); sub.type  = 'sine';     sub.frequency.value  = ROOT / 2;
+
+    const g1 = actx.createGain(); g1.gain.value = 0.42;
+    const g2 = actx.createGain(); g2.gain.value = 0.38;
+    const gs = actx.createGain(); gs.gain.value = 0.3;
+    osc1.connect(g1); osc2.connect(g2); sub.connect(gs);
+    g1.connect(filter); g2.connect(filter); gs.connect(filter);
+    filter.connect(voiceGain);
+
+    // slow vibrato / circuit hum
+    lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 4.8;
+    lfoGain = actx.createGain(); lfoGain.gain.value = 0;
+    lfo.connect(lfoGain); lfoGain.connect(osc1.detune); lfoGain.connect(osc2.detune);
+
+    // robotic slap-back delay
+    delay  = actx.createDelay(1.0); delay.delayTime.value = 0.176;
+    fbGain = actx.createGain();     fbGain.gain.value = 0.4;
+    wet    = actx.createGain();     wet.gain.value = 0.3;
+    voiceGain.connect(delay); delay.connect(fbGain); fbGain.connect(delay); delay.connect(wet);
+
+    // short metallic hall
+    convolver = actx.createConvolver();
+    convolver.buffer = makeImpulse(1.7, 2.1);
+    revGain = actx.createGain(); revGain.gain.value = 0.32;
+    voiceGain.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+
+    // rune "plink" bus (bell pluck on note change)
+    plinkBus = actx.createGain(); plinkBus.gain.value = 0.9;
+    plinkBus.connect(master); plinkBus.connect(convolver);
+
+    // cast "zap" bus — bypasses the fist-silence gate partially via its own gain
+    zapBus = actx.createGain(); zapBus.gain.value = 1.0;
+    zapBus.connect(comp);
+
+    voiceGain.connect(master);
+    wet.connect(master);
+    master.connect(panNode); panNode.connect(comp); comp.connect(actx.destination);
+
+    osc1.start(); osc2.start(); sub.start(); lfo.start();
+    audioReady = true;
+  }
+
+  // rune pluck — inharmonic bell-ish tone, like a chip resonating
+  function plink(freq){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    for (const [ratio, amp, dur] of [[1, 0.22, 0.55], [2.76, 0.13, 0.4], [5.4, 0.06, 0.22]]){
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(amp, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(plinkBus);
+      o.start(t); o.stop(t + dur + 0.1);
+    }
+  }
+
+  // cast zap — filtered noise sweep + sub thump, fired on fist-close
+  const noiseBuf = { buf: null };
+  function castZap(){
+    if (!audioReady) return;
+    if (!noiseBuf.buf) noiseBuf.buf = makeNoiseBuffer(0.5);
+    const t = actx.currentTime;
+
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf; src.loop = true;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6;
+    bp.frequency.setValueAtTime(3200, t);
+    bp.frequency.exponentialRampToValueAtTime(180, t + 0.32);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.55, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+    src.connect(bp); bp.connect(g); g.connect(zapBus);
+    src.start(t); src.stop(t + 0.4);
+
+    const thump = actx.createOscillator(); thump.type = 'sine'; thump.frequency.setValueAtTime(150, t);
+    thump.frequency.exponentialRampToValueAtTime(38, t + 0.28);
+    const tg = actx.createGain();
+    tg.gain.setValueAtTime(0.5, t);
+    tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    thump.connect(tg); tg.connect(zapBus);
+    thump.start(t); thump.stop(t + 0.35);
+  }
+
+  function applySound(g, casting){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+
+    if (g.total === 0 || g.hands === 0){
+      master.gain.setTargetAtTime(0.0, t, casting ? 0.35 : 0.08);
+      return;
+    }
+
+    const semi = SCALE[Math.max(1, Math.min(10, g.total))];
+    const freq = ROOT * midiRatio(semi);
+    osc1.frequency.setTargetAtTime(freq, t, 0.05);
+    osc2.frequency.setTargetAtTime(freq, t, 0.05);
+    sub.frequency.setTargetAtTime(freq/2, t, 0.05);
+
+    const cutoff = 260 + g.openness * 3400;
+    filter.frequency.setTargetAtTime(cutoff, t, 0.06);
+    lfoGain.gain.setTargetAtTime(3 + g.motion * 30, t, 0.1);
+
+    if (panNode.pan){
+      const p = Math.max(-1, Math.min(1, (g.cx * 2 - 1) * 0.6));
+      panNode.pan.setTargetAtTime(p, t, 0.15);
+    }
+
+    const vol = 0.12 + g.openness * 0.3;
+    master.gain.setTargetAtTime(vol, t, 0.07);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND ANALYSIS
+  // ---------------------------------------------------------------------------
+  const FINGERS = [[8,6,5],[12,10,9],[16,14,13],[20,18,17]]; // tip, pip, mcp
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+  function analyzeHand(lm){
+    const wrist = lm[0];
+    const palm  = dist(lm[0], lm[9]) || 1e-4;
+    const extended = [];
+
+    const thumbRadial = dist(lm[4], wrist) > dist(lm[2], wrist) * 1.02;
+    const thumbSpread = dist(lm[4], lm[5]) / palm > 0.72;
+    extended.push(thumbRadial && thumbSpread);
+
+    for (const [tip, pip] of FINGERS){
+      extended.push(dist(lm[tip], wrist) > dist(lm[pip], wrist) * 1.03);
+    }
+    const count = extended.reduce((a,b)=>a+(b?1:0), 0);
+
+    let sum = 0; for (const t of [4,8,12,16,20]) sum += dist(lm[t], wrist) / palm;
+    const openRaw = sum / 5;
+    const openness = Math.max(0, Math.min(1, (openRaw - 0.75) / 1.35));
+
+    const angle = Math.atan2(lm[9].y - wrist.y, lm[9].x - wrist.x);
+
+    return { extended, count, openness, angle, center:{ x:lm[9].x, y:lm[9].y } };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MEDIAPIPE HANDS
+  // ---------------------------------------------------------------------------
+  const RESULT = { hands: [], t: 0 };
+  let prevCenters = null, motionEMA = 0;
+
+  let hands = null;
+  function initHands(){
+    hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands:2, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+    hands.onResults(onHandResults);
+  }
+
+  function onHandResults(results){
+    const out = [];
+    const lms = results.multiHandLandmarks || [];
+    const handed = results.multiHandedness || [];
+    let motionSum = 0, motionCount = 0;
+    const centers = [];
+
+    for (let i = 0; i < lms.length; i++){
+      const lm = lms[i];
+      const info = analyzeHand(lm);
+      let label = handed[i] && handed[i].label ? handed[i].label : 'Right';
+      if (mirror) label = (label === 'Right') ? 'Left' : 'Right';
+      out.push({ lm, label, ...info });
+      centers.push(info.center);
+    }
+
+    if (prevCenters && prevCenters.length === centers.length){
+      for (let i = 0; i < centers.length; i++){ motionSum += dist(centers[i], prevCenters[i]); motionCount++; }
+    }
+    prevCenters = centers;
+    const motion = motionCount ? motionSum / motionCount : 0;
+    motionEMA = motionEMA * 0.8 + Math.min(1, motion * 14) * 0.2;
+
+    RESULT.hands = out;
+    RESULT.t = performance.now();
+    RESULT.motion = motionEMA;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function startCameraLoop(){
+    if (mpCamera) { mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    prevCenters = null;
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let scanOn = true;
+  scanBtn.addEventListener('click', () => {
+    scanOn = !scanOn;
+    scanEl.style.display = scanOn ? 'block' : 'none';
+    scanBtn.textContent = scanOn ? 'ノイズ ON' : 'ノイズ OFF';
+    scanBtn.classList.toggle('active', scanOn);
+  });
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — magic-circle sigils
+  // ---------------------------------------------------------------------------
+  const TIPS = [4,8,12,16,20];
+
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(4,3,10,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(30,10,55,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.16, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,1,6,0.86)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // drifting "data motes" — faint rising squares
+  const motes = Array.from({length:26}, () => ({
+    x: Math.random(), y: 1 + Math.random(),
+    s: 1 + Math.random()*2.4, v: 0.00012 + Math.random()*0.00022,
+    hue: Math.random() < 0.5 ? 190 : 300, a: 0.15 + Math.random()*0.25
+  }));
+  function drawMotes(dt){
+    ctx.save(); ctx.globalCompositeOperation = 'screen';
+    for (const m of motes){
+      m.y -= m.v * dt;
+      if (m.y < -0.05){ m.y = 1.05; m.x = Math.random(); }
+      const x = m.x * W, y = m.y * H;
+      ctx.fillStyle = `hsla(${m.hue},100%,70%,${m.a})`;
+      ctx.fillRect(x, y, m.s, m.s*2.2);
+    }
+    ctx.restore();
+  }
+
+  // ---- particles: rune shards on cast ----
+  const shards = [];
+  function spawnShards(x, y, n, huePool){
+    for (let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2, s = 1.5 + Math.random()*4.5;
+      shards.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:1, decay:0.012+Math.random()*0.018,
+        hue: huePool[(Math.random()*huePool.length)|0], len: 4+Math.random()*9, rot: a });
+    }
+  }
+  function updateDrawShards(){
+    for (let i=shards.length-1;i>=0;i--){
+      const p = shards[i];
+      p.x += p.vx; p.y += p.vy; p.vx *= 0.96; p.vy *= 0.96; p.life -= p.decay;
+      if (p.life<=0){ shards.splice(i,1); continue; }
+      fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(p.rot);
+      fctx.strokeStyle = `hsla(${p.hue},100%,70%,${p.life})`;
+      fctx.lineWidth = 1.6; fctx.beginPath(); fctx.moveTo(-p.len/2,0); fctx.lineTo(p.len/2,0); fctx.stroke();
+      fctx.restore();
+    }
+  }
+
+  // ---- shockwave rings on cast ----
+  const shocks = [];
+  function spawnShock(x,y){ shocks.push({ x, y, r: 6, a: 1 }); }
+  function updateDrawShocks(){
+    for (let i=shocks.length-1;i>=0;i--){
+      const s = shocks[i]; s.r += 9; s.a *= 0.9;
+      if (s.a < 0.02){ shocks.splice(i,1); continue; }
+      for (const [dx,dy,hue] of [[-2,0,190],[2,0,320],[0,0,45]]){
+        fctx.strokeStyle = `hsla(${hue},100%,66%,${s.a*0.85})`;
+        fctx.lineWidth = 2; fctx.beginPath(); fctx.arc(s.x+dx, s.y+dy, s.r, 0, Math.PI*2); fctx.stroke();
+      }
+    }
+  }
+
+  function polygonPoints(cx,cy,r,sides,rot){
+    const pts = [];
+    for (let i=0;i<sides;i++){
+      const a = rot + i*(Math.PI*2/sides) - Math.PI/2;
+      pts.push([cx + Math.cos(a)*r, cy + Math.sin(a)*r]);
+    }
+    return pts;
+  }
+
+  function drawSigil(cx, cy, radius, count, angleBase, t, hueA, hueB, alphaMul, castPulse){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+
+    const rOuter = radius * (1 + castPulse*0.5);
+    const sides = Math.max(3, Math.min(9, 3 + count));
+
+    // outer dashed ring
+    c.shadowBlur = 20 * alphaMul; c.shadowColor = `hsla(${hueA},100%,60%,0.9)`;
+    c.strokeStyle = `hsla(${hueA},95%,65%,${0.85*alphaMul})`;
+    c.lineWidth = 2;
+    c.setLineDash([rOuter*0.09, rOuter*0.055]);
+    c.lineDashOffset = -t*0.06 - angleBase*40;
+    c.beginPath(); c.arc(cx, cy, rOuter, 0, Math.PI*2); c.stroke();
+    c.setLineDash([]);
+
+    // thin static boundary
+    c.shadowBlur = 8; c.strokeStyle = `hsla(${hueB},90%,70%,${0.4*alphaMul})`;
+    c.lineWidth = 1;
+    c.beginPath(); c.arc(cx, cy, rOuter*0.86, 0, Math.PI*2); c.stroke();
+
+    // inscribed rune polygon, counter-rotating
+    const rot1 = angleBase + t*0.00045;
+    const pts = polygonPoints(cx, cy, rOuter*0.78, sides, rot1);
+    c.shadowBlur = 16; c.shadowColor = `hsla(${hueB},100%,65%,0.9)`;
+    c.strokeStyle = `hsla(${hueB},95%,68%,${0.9*alphaMul})`;
+    c.lineWidth = 1.8;
+    c.beginPath();
+    pts.forEach(([x,y],i)=> i===0 ? c.moveTo(x,y) : c.lineTo(x,y));
+    c.closePath(); c.stroke();
+
+    // cross-star (connect every other vertex) for extra rune complexity
+    if (sides >= 5){
+      c.globalAlpha = 0.55*alphaMul;
+      c.beginPath();
+      pts.forEach(([x,y],i)=>{ const j=(i*2)%sides; const [x2,y2]=pts[j]; c.moveTo(x,y); c.lineTo(x2,y2); });
+      c.stroke();
+      c.globalAlpha = 1;
+    }
+
+    // chip pins at vertices
+    for (const [x,y] of pts){
+      c.shadowBlur = 12;
+      c.fillStyle = `hsla(${hueA},100%,75%,${0.95*alphaMul})`;
+      c.beginPath(); c.arc(x,y, 3.2, 0, Math.PI*2); c.fill();
+    }
+
+    // inner rotating tick ring
+    const rot2 = -angleBase*1.4 - t*0.0011;
+    c.shadowBlur = 6;
+    for (let i=0;i<12;i++){
+      const a = rot2 + i*(Math.PI*2/12);
+      const r1 = rOuter*0.42, r2 = rOuter*0.52;
+      const x1 = cx+Math.cos(a)*r1, y1 = cy+Math.sin(a)*r1;
+      const x2 = cx+Math.cos(a)*r2, y2 = cy+Math.sin(a)*r2;
+      c.strokeStyle = `hsla(${(hueA+hueB)/2},90%,72%,${(i%3===0?0.8:0.35)*alphaMul})`;
+      c.lineWidth = 1.4;
+      c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.stroke();
+    }
+
+    // pulsing core
+    const coreR = rOuter*0.14 * (1 + Math.sin(t*0.006)*0.12 + castPulse*0.8);
+    const g = c.createRadialGradient(cx,cy,0,cx,cy,coreR*3);
+    g.addColorStop(0, `hsla(${hueA},100%,85%,${0.95*alphaMul})`);
+    g.addColorStop(0.5, `hsla(${hueB},100%,65%,${0.4*alphaMul})`);
+    g.addColorStop(1, `hsla(${hueB},100%,50%,0)`);
+    c.fillStyle = g; c.beginPath(); c.arc(cx,cy,coreR*3,0,Math.PI*2); c.fill();
+
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  function drawBridge(A, B, t, alphaMul){
+    const c = fctx;
+    const x1=px(A.center), y1=py(A.center), x2=px(B.center), y2=py(B.center);
+    const d = Math.hypot(x2-x1,y2-y1);
+    const strength = Math.max(0, 1 - d / (Math.min(W,H)*0.7));
+    if (strength <= 0.02) return;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const segs = 10;
+    c.beginPath();
+    for (let i=0;i<=segs;i++){
+      const p = i/segs;
+      const x = x1 + (x2-x1)*p;
+      const y = y1 + (y2-y1)*p + Math.sin(p*Math.PI)* -14*strength + Math.sin(t*0.006 + p*9)*6*strength;
+      i===0 ? c.moveTo(x,y) : c.lineTo(x,y);
+    }
+    c.strokeStyle = `hsla(${(t*0.05)%360},100%,68%,${0.55*strength*alphaMul})`;
+    c.shadowBlur = 14; c.shadowColor = 'rgba(0,234,255,0.8)';
+    c.lineWidth = 1.6 + strength*2;
+    c.stroke();
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  function computeGesture(){
+    let l = null, r = null;
+    for (const h of RESULT.hands){
+      if (h.label === 'Left')  l = h;
+      if (h.label === 'Right') r = h;
+    }
+    if (RESULT.hands.length === 2 && (!l || !r)){
+      const s = [...RESULT.hands].sort((a,b)=>a.center.x - b.center.x);
+      l = mirror ? s[1] : s[0];
+      r = mirror ? s[0] : s[1];
+    }
+    const lC = l ? l.count : 0;
+    const rC = r ? r.count : 0;
+    let openSum = 0, openN = 0, cxSum = 0;
+    if (l){ openSum += l.openness; openN++; cxSum += mirror ? 1 - l.center.x : l.center.x; }
+    if (r){ openSum += r.openness; openN++; cxSum += mirror ? 1 - r.center.x : r.center.x; }
+    const openness = openN ? openSum/openN : 0;
+    return {
+      l:lC, r:rC, total:lC+rC, lPresent:!!l, rPresent:!!r, lHand:l, rHand:r,
+      hands: RESULT.hands.length, openness, motion: RESULT.motion || 0,
+      cx: openN ? cxSum/openN : 0.5
+    };
+  }
+
+  function updateHudHand(present, hand, meterEl, timEl, timText){
+    meterEl.style.width = present && hand ? Math.round(hand.openness*100)+'%' : '0%';
+    timEl.textContent = timText;
+  }
+
+  let noteStableTotal = 0, noteCandidate = 0, noteCandFrames = 0, lastPlinkT = 0;
+  let wasOpen = { l:false, r:false };
+  let castPulse = 0, castingFlash = 0, lastT = performance.now();
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+    const dt = Math.min(64, t - lastT); lastT = t;
+
+    ctx.clearRect(0,0,W,H);
+    drawVideoBase();
+    drawMotes(dt);
+
+    fctx.save();
+    fctx.setTransform(1,0,0,1,0,0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.2)';
+    fctx.fillRect(0,0,fx.width,fx.height);
+    fctx.restore();
+
+    const fresh = (t - RESULT.t) < 400;
+    const drawHands = fresh ? RESULT.hands : [];
+
+    const g = computeGesture();
+    if (!fresh){ g.hands = 0; g.total = 0; g.l = 0; g.r = 0; g.lPresent = g.rPresent = false; }
+    const silent = (g.total === 0 || g.hands === 0);
+
+    // cast detection: hand was open (>=3 fingers) and snaps to a fist
+    for (const side of ['l','r']){
+      const present = side==='l' ? g.lPresent : g.rPresent;
+      const hand = side==='l' ? g.lHand : g.rHand;
+      const openNow = present && hand.count >= 3;
+      const fistNow = present && hand.count === 0 && hand.openness < 0.32;
+      if (wasOpen[side] && fistNow){
+        castZap();
+        castPulse = 1; castingFlash = 1;
+        const cx = px(hand.center), cy = py(hand.center);
+        spawnShock(cx, cy);
+        spawnShards(cx, cy, 22, [190, 300, 45]);
+      }
+      wasOpen[side] = openNow;
+    }
+    castPulse *= 0.9; castingFlash *= 0.88;
+    flickerEl.style.opacity = String(Math.min(0.35, castingFlash*0.5));
+
+    // note-change -> rune plink
+    if (g.total === noteCandidate) noteCandFrames++;
+    else { noteCandidate = g.total; noteCandFrames = 0; }
+    if (noteCandFrames >= 3 && noteCandidate !== noteStableTotal){
+      noteStableTotal = noteCandidate;
+      if (noteStableTotal > 0 && g.hands > 0 && t - lastPlinkT > 150){
+        lastPlinkT = t;
+        const semi = SCALE[Math.max(1, Math.min(10, noteStableTotal))];
+        plink(ROOT * midiRatio(semi));
+      }
+    }
+
+    // draw a sigil per hand
+    for (const h of drawHands){
+      const cx = px(h.center), cy = py(h.center);
+      const radius = Math.max(34, h.openness * Math.min(W,H) * 0.24 + 30);
+      const hueA = h.label === 'Left' ? 190 : 320;
+      const hueB = h.label === 'Left' ? 260 : 42;
+      const alphaMul = silent ? 0.45 : 1;
+      drawSigil(cx, cy, radius, h.count, h.angle, t, hueA, hueB, alphaMul, castPulse);
+    }
+    if (drawHands.length === 2){
+      drawBridge(drawHands.find(h=>h.label==='Left')||drawHands[0], drawHands.find(h=>h.label==='Right')||drawHands[1], t, silent?0.4:1);
+    }
+
+    updateDrawShards();
+    updateDrawShocks();
+
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    applySound(g, castingFlash > 0.05);
+
+    lCountEl.textContent = g.l;
+    rCountEl.textContent = g.r;
+    updateHudHand(g.lPresent, g.lHand, lMeterEl, lTimEl, g.lPresent ? `開き ${Math.round(g.lHand.openness*100)}%` : '');
+    updateHudHand(g.rPresent, g.rHand, rMeterEl, rTimEl, g.rPresent ? `開き ${Math.round(g.rHand.openness*100)}%` : '');
+
+    if (castingFlash > 0.15){
+      stateDot.textContent = '⚡ CASTING / 詠唱';
+      stateDot.className = 'casting';
+    } else if (silent){
+      stateDot.textContent = (g.hands===0) ? '手をかざしてください' : '✊ SEALED / 陣を閉じる';
+      stateDot.className = 'silent';
+    } else {
+      const semi = SCALE[Math.max(1, Math.min(10, g.total))];
+      stateDot.textContent = `🜁 ${noteName(semi)} ・ RUNE ${Math.max(3, Math.min(9, 3+g.total))}角`;
+      stateDot.className = 'playing';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+        throw new Error('手検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+      }
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!hands) initHands();
+      await startStream();
+      await startCameraLoop();
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      scanBtn.classList.add('active');
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = '起動する';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
