@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#050308">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="マイクに向かって歌うと、声の高さがそのまま幻影の声になる楽器。片手にその魂が宿り、手を開けば残響が輝き、握りしめると声が消える - SIREN">
+<title>SIREN ─ 歌う幻影</title>
+<style>
+  :root{
+    --void:#050308;
+    --haze:#150a24;
+    --ghost:#eef2ff;
+    --warn:#ff4d6d;
+    --accent:#bcd6ff;
+    --violet:#8a6bff;
+    --gold:#ffd88a;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(42px); opacity:.38; pointer-events:none;
+    animation:drift 14s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--violet),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--accent),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--gold),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(6vmin,-4vmin) scale(1.15); }
+  }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.14em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--accent),var(--violet),var(--gold),var(--accent));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite;
+    margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:2rem; position:relative; }
+  #startBtn{
+    position:relative;
+    padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--accent),var(--violet)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(138,180,255,0.5);
+    transition:transform .18s ease, box-shadow .18s ease;
+    animation:breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(138,180,255,0.45); }
+    50%{ box-shadow:0 0 44px rgba(255,216,138,0.5); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #startBtn:disabled{ opacity:.6; cursor:default; animation:none; }
+  #hint{
+    position:relative;
+    margin-top:2.2rem; max-width:22rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--accent); font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(10,6,20,0.42); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(180,180,255,0.14); border-radius:16px; padding:0.65rem 0.9rem;
+    color:var(--ghost); min-width:118px;
+  }
+  .panel .lab{ font-size:0.58rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.3rem; }
+  .panel .cnt{ font-size:1.5rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .panel .cnt small{ font-size:0.7rem; font-weight:600; color:rgba(238,242,255,0.55); margin-left:.15rem; }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,242,255,0.1); margin-top:0.5rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,var(--accent),var(--violet)); border-radius:2px;
+    transition:width .12s linear; }
+  .tim{ font-size:0.62rem; letter-spacing:0.08em; margin-top:0.4rem; color:var(--gold); min-height:0.85em; }
+  .panel[data-side="r"] .tim{ text-align:right; }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.68rem; letter-spacing:0.2em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(180,180,255,0.16);
+    background:rgba(10,6,20,0.4); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease;
+    white-space:nowrap;
+  }
+  #stateDot.playing{ color:var(--accent); border-color:rgba(188,214,255,0.5); box-shadow:0 0 18px rgba(188,214,255,0.25); }
+  #stateDot.silent{ color:var(--warn); border-color:rgba(255,77,109,0.45); box-shadow:none; }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(10,6,20,0.5); border:1px solid rgba(180,180,255,0.18);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(188,214,255,0.16); border-color:rgba(188,214,255,0.5); color:var(--accent); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.24em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+
+  <div id="brand"><div class="b1">SIREN</div><div class="b2">歌う幻影 / 声とてのひらで</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="haloBtn">波形 ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">VOICE / 声</div>
+      <div class="cnt"><span id="noteEl">–</span></div>
+      <div class="meter"><b id="volMeter"></b></div>
+      <div class="tim" id="voiceTim">声を聞かせて</div>
+    </div>
+    <div class="panel" data-side="r" style="text-align:right">
+      <div class="lab">HAND / 手</div>
+      <div class="cnt"><span id="openPct">0</span><small>%</small></div>
+      <div class="meter"><b id="closeMeter"></b></div>
+      <div class="tim" id="handTim"></div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA &amp; MIC INSTRUMENT</div>
+    <div id="title">SIREN</div>
+    <div id="sub">歌う幻影 — 声とてのひらで紡ぐ楽器</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・<b>マイクに向かって歌う・ハミングする</b>と、声の高さがそのまま幻影の声になります<br>
+      ・<b>片手</b>をカメラにかざすと、幻影がその手に宿ります<br>
+      ・手を<b>カメラに近づける</b>と幻影は明るく澄み、<b>遠ざける</b>とくぐもります<br>
+      ・<b>手を開く</b>ほど残響とゆらぎが増し、<b>握りしめる</b>と声が消えます
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const haloBtn  = document.getElementById('haloBtn');
+  const noteEl   = document.getElementById('noteEl');
+  const voiceTim = document.getElementById('voiceTim');
+  const volMeter = document.getElementById('volMeter');
+  const openPct  = document.getElementById('openPct');
+  const closeMeter = document.getElementById('closeMeter');
+  const handTim  = document.getElementById('handTim');
+
+  // glow layer (trails) — drawn additively over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  //  the microphone's detected VOCAL PITCH drives the phantom's fundamental
+  //  frequency (a real theremin-like duet with your own voice). the hand,
+  //  tracked by camera, never sets the pitch — it only shapes the tone:
+  //  distance-from-camera (apparent hand size) -> brightness, openness ->
+  //  shimmer/vibrato depth, x position -> pan, a closed fist -> mute.
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, panNode = null;
+  let osc1 = null, osc2 = null, osc3 = null, sub = null;
+  let filter = null, voiceGain = null;
+  let lfo = null, lfoGain = null;
+  let delay = null, fbGain = null, wet = null;
+  let convolver = null, revGain = null, crystalBus = null;
+  let audioReady = false;
+
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  function noteName(midi){
+    return NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+  }
+  function freqToMidi(freq){ return 69 + 12 * Math.log2(freq / 440); }
+  function midiToFreq(midi){ return 440 * Math.pow(2, (midi - 69) / 12); }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++){
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+      }
+    }
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.0;
+    panNode = actx.createStereoPanner ? actx.createStereoPanner() : actx.createGain();
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 22; comp.ratio.value = 3.2;
+    comp.attack.value = 0.005;  comp.release.value = 0.3;
+
+    filter = actx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 700; filter.Q.value = 5;
+
+    voiceGain = actx.createGain(); voiceGain.gain.value = 0.9;
+
+    osc1 = actx.createOscillator(); osc1.type = 'sine';     osc1.frequency.value = 220;
+    osc2 = actx.createOscillator(); osc2.type = 'triangle'; osc2.frequency.value = 220; osc2.detune.value = 6;
+    osc3 = actx.createOscillator(); osc3.type = 'sine';     osc3.frequency.value = 440; // octave shimmer
+    sub  = actx.createOscillator(); sub.type  = 'sine';     sub.frequency.value  = 110; // warmth
+
+    const g1 = actx.createGain(); g1.gain.value = 0.46;
+    const g2 = actx.createGain(); g2.gain.value = 0.34;
+    const g3 = actx.createGain(); g3.gain.value = 0.1;
+    const gs = actx.createGain(); gs.gain.value = 0.24;
+    osc1.connect(g1); osc2.connect(g2); osc3.connect(g3); sub.connect(gs);
+    g1.connect(filter); g2.connect(filter); g3.connect(filter); gs.connect(filter);
+    filter.connect(voiceGain);
+
+    // vibrato / shimmer LFO — depth driven by hand openness
+    lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
+    lfoGain = actx.createGain(); lfoGain.gain.value = 0;
+    lfo.connect(lfoGain); lfoGain.connect(osc1.detune); lfoGain.connect(osc2.detune);
+
+    // haunted slap-back delay
+    delay  = actx.createDelay(1.0); delay.delayTime.value = 0.3;
+    fbGain = actx.createGain();     fbGain.gain.value = 0.32;
+    wet    = actx.createGain();     wet.gain.value = 0.24;
+    voiceGain.connect(delay); delay.connect(fbGain); fbGain.connect(delay); delay.connect(wet);
+
+    // spectral hall reverb
+    convolver = actx.createConvolver();
+    convolver.buffer = makeImpulse(3.0, 2.6);
+    revGain = actx.createGain(); revGain.gain.value = 0.4;
+    voiceGain.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+
+    // crystal chime bus (fired when the sung note settles on a new pitch)
+    crystalBus = actx.createGain(); crystalBus.gain.value = 0.9;
+    crystalBus.connect(master); crystalBus.connect(convolver);
+
+    voiceGain.connect(master);
+    wet.connect(master);
+    master.connect(panNode); panNode.connect(comp); comp.connect(actx.destination);
+
+    osc1.start(); osc2.start(); osc3.start(); sub.start(); lfo.start();
+    audioReady = true;
+  }
+
+  // crystal "chime" when the voice settles on a new stable note
+  function crystalChime(freq){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    for (const [ratio, amp, dur] of [[1, 0.20, 0.7], [2.01, 0.11, 0.5], [3.99, 0.05, 0.32]]){
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(amp, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(crystalBus);
+      o.start(t); o.stop(t + dur + 0.1);
+    }
+  }
+
+  function applySound(g){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+
+    if (g.silent){
+      master.gain.setTargetAtTime(0.0, t, 0.15);
+      return;
+    }
+
+    const freq = g.voiceFreq;
+    osc1.frequency.setTargetAtTime(freq,       t, 0.06);
+    osc2.frequency.setTargetAtTime(freq,       t, 0.06);
+    osc3.frequency.setTargetAtTime(freq * 2,   t, 0.06);
+    sub.frequency.setTargetAtTime(freq / 2,    t, 0.06);
+
+    // brightness from how close the hand is held to the camera
+    const cutoff = 280 + g.closeness * 3800;
+    filter.frequency.setTargetAtTime(cutoff, t, 0.08);
+
+    // shimmer/vibrato depth from openness + natural hand motion
+    lfoGain.gain.setTargetAtTime(2 + g.openness * 22 + g.motion * 20, t, 0.12);
+
+    // stereo position follows the hand across the frame
+    if (panNode.pan){
+      const p = Math.max(-1, Math.min(1, (g.cx * 2 - 1) * 0.6));
+      panNode.pan.setTargetAtTime(p, t, 0.15);
+    }
+
+    // volume breathes with actual mic loudness, lifted by openness
+    const vol = Math.max(0, Math.min(1, g.rms * 2.4)) * (0.5 + 0.5 * g.openness);
+    master.gain.setTargetAtTime(vol * 0.85, t, 0.09);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  VOCAL PITCH DETECTION (autocorrelation on the mic's time-domain signal)
+  // ---------------------------------------------------------------------------
+  const MIN_FREQ = 70, MAX_FREQ = 1000;
+  const RMS_GATE = 0.012;   // below this, treat the mic as silent
+  const CONF_GATE = 0.45;   // empirically reasonable: rejects noisy/unvoiced frames
+
+  function detectPitch(buf, sampleRate){
+    const N = buf.length;
+    let sumSq = 0;
+    for (let i = 0; i < N; i++) sumSq += buf[i] * buf[i];
+    const rms = Math.sqrt(sumSq / N);
+    if (rms < RMS_GATE) return { rms, freq: null };
+
+    const minLag = Math.max(2, Math.floor(sampleRate / MAX_FREQ));
+    const maxLag = Math.min(N - 2, Math.floor(sampleRate / MIN_FREQ));
+    if (maxLag <= minLag) return { rms, freq: null };
+
+    const corrAt = (lag) => {
+      const count = N - lag;
+      let sum = 0;
+      for (let i = 0; i < count; i++) sum += buf[i] * buf[i + lag];
+      return sum / count;
+    };
+
+    let bestLag = -1, bestCorr = -Infinity;
+    for (let lag = minLag; lag <= maxLag; lag++){
+      const c = corrAt(lag);
+      if (c > bestCorr){ bestCorr = c; bestLag = lag; }
+    }
+    if (bestLag < 0) return { rms, freq: null };
+
+    const energy = rms * rms;
+    const confidence = energy > 0 ? bestCorr / energy : 0;
+    if (confidence < CONF_GATE) return { rms, freq: null };
+
+    let refinedLag = bestLag;
+    if (bestLag > minLag && bestLag < maxLag){
+      const x1 = corrAt(bestLag - 1), x2 = bestCorr, x3 = corrAt(bestLag + 1);
+      const a = (x1 + x3 - 2 * x2) / 2, b = (x3 - x1) / 2;
+      if (a !== 0) refinedLag = bestLag - b / (2 * a);
+    }
+    if (refinedLag <= 0) return { rms, freq: null };
+
+    return { rms, freq: sampleRate / refinedLag };
+  }
+
+  // smoothed pitch state — holds briefly through short unvoiced gaps (breaths,
+  // consonants) so the phantom's pitch doesn't stutter mid-phrase.
+  const HOLD_FRAMES = 18;
+  const pitch = { emaSemi: null, freq: null, unvoicedFrames: 0 };
+  function updatePitch(res){
+    if (res.freq){
+      const semi = freqToMidi(res.freq);
+      pitch.emaSemi = (pitch.emaSemi == null) ? semi : pitch.emaSemi + (semi - pitch.emaSemi) * 0.35;
+      pitch.freq = midiToFreq(pitch.emaSemi);
+      pitch.unvoicedFrames = 0;
+    } else {
+      pitch.unvoicedFrames++;
+      if (pitch.unvoicedFrames > HOLD_FRAMES){
+        pitch.freq = null; pitch.emaSemi = null;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND ANALYSIS
+  // ---------------------------------------------------------------------------
+  const FINGERS = [[8,6,5],[12,10,9],[16,14,13],[20,18,17]]; // tip, pip, mcp
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+
+  function analyzeHand(lm){
+    const wrist = lm[0];
+    const palm  = dist(lm[0], lm[9]) || 1e-4;
+    const extended = [];
+
+    const thumbRadial = dist(lm[4], wrist) > dist(lm[2], wrist) * 1.02;
+    const thumbSpread = dist(lm[4], lm[5]) / palm > 0.72;
+    extended.push(thumbRadial && thumbSpread);
+
+    for (const [tip, pip] of FINGERS){
+      extended.push(dist(lm[tip], wrist) > dist(lm[pip], wrist) * 1.03);
+    }
+    const count = extended.reduce((a,b)=>a+(b?1:0), 0);
+
+    let sum = 0; for (const t of [4,8,12,16,20]) sum += dist(lm[t], wrist) / palm;
+    const openRaw = sum / 5;
+    const openness = Math.max(0, Math.min(1, (openRaw - 0.75) / 1.35));
+
+    // apparent palm size in normalized frame coords -> proxy for camera distance
+    const closeness = Math.max(0, Math.min(1, (palm - 0.09) / (0.34 - 0.09)));
+
+    return { extended, count, openness, closeness, fist: count === 0, center:{ x:lm[9].x, y:lm[9].y } };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MEDIAPIPE HANDS
+  // ---------------------------------------------------------------------------
+  const RESULT = { hand: null, t: 0, motion: 0 };
+  let prevCenter = null, motionEMA = 0;
+
+  let hands = null;
+  function initHands(){
+    hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands:1, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+    hands.onResults(onHandResults);
+  }
+
+  function onHandResults(results){
+    const lm = (results.multiHandLandmarks && results.multiHandLandmarks[0]) ? results.multiHandLandmarks[0] : null;
+    if (lm){
+      const info = analyzeHand(lm);
+      if (prevCenter){
+        const d = dist(info.center, prevCenter);
+        motionEMA = motionEMA * 0.8 + Math.min(1, d * 14) * 0.2;
+      }
+      prevCenter = info.center;
+      RESULT.hand = { lm, ...info };
+    } else {
+      RESULT.hand = null;
+      prevCenter = null;
+    }
+    RESULT.t = performance.now();
+    RESULT.motion = motionEMA;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA + MIC
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+  let micStream = null, micSource = null, micAnalyser = null, micBuf = null;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function startCameraLoop(){
+    if (mpCamera) { mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+
+  async function startMic(){
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false },
+      video: false
+    });
+    micSource = actx.createMediaStreamSource(micStream);
+    micAnalyser = actx.createAnalyser();
+    micAnalyser.fftSize = 1024;
+    micSource.connect(micAnalyser); // analysis only — never routed to destination
+    micBuf = new Float32Array(micAnalyser.fftSize);
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    prevCenter = null;
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let haloOn = true;
+  haloBtn.addEventListener('click', () => {
+    haloOn = !haloOn;
+    haloBtn.textContent = haloOn ? '波形 ON' : '波形 OFF';
+    haloBtn.classList.toggle('active', haloOn);
+  });
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(5,3,10,0.48)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(24,18,46,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.16, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,1,6,0.84)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // ---- breath wisps rising from the phantom ----
+  const wisps = [];
+  function spawnWisp(x, y, hue){
+    if (wisps.length >= 140) return;
+    wisps.push({
+      x, y, vx:(Math.random()-0.5)*0.3, vy:-0.3-Math.random()*0.5,
+      life:1, decay:0.008+Math.random()*0.014, r:1+Math.random()*2.4, hue
+    });
+  }
+  function updateDrawWisps(){
+    for (let i = wisps.length - 1; i >= 0; i--){
+      const p = wisps[i];
+      p.x += p.vx; p.y += p.vy; p.vy -= 0.002; p.life -= p.decay;
+      if (p.life <= 0){ wisps.splice(i,1); continue; }
+      fctx.fillStyle = `hsla(${p.hue},90%,${70+p.life*20}%,${p.life*0.7})`;
+      fctx.beginPath(); fctx.arc(p.x, p.y, p.r*p.life, 0, Math.PI*2); fctx.fill();
+    }
+  }
+
+  // ---- crystal shards + ripple on a stable new note ----
+  const shards = [];
+  function spawnShards(x, y, n, hue){
+    for (let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2, s = 1.3 + Math.random()*4;
+      shards.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:1, decay:0.014+Math.random()*0.018, hue, len:4+Math.random()*8, rot:a });
+    }
+  }
+  function updateDrawShards(){
+    for (let i=shards.length-1;i>=0;i--){
+      const p = shards[i];
+      p.x += p.vx; p.y += p.vy; p.vx *= 0.95; p.vy *= 0.95; p.life -= p.decay;
+      if (p.life<=0){ shards.splice(i,1); continue; }
+      fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(p.rot);
+      fctx.strokeStyle = `hsla(${p.hue},95%,72%,${p.life})`;
+      fctx.lineWidth = 1.6; fctx.beginPath(); fctx.moveTo(-p.len/2,0); fctx.lineTo(p.len/2,0); fctx.stroke();
+      fctx.restore();
+    }
+  }
+
+  const ripples = [];
+  function spawnRipple(x, y, hue){ ripples.push({ x, y, r: 8, hue, a: 0.9 }); }
+  function updateDrawRipples(){
+    for (let i = ripples.length - 1; i >= 0; i--){
+      const rp = ripples[i];
+      rp.r += 5; rp.a *= 0.91;
+      if (rp.a < 0.02){ ripples.splice(i,1); continue; }
+      fctx.strokeStyle = `hsla(${rp.hue},95%,72%,${rp.a})`;
+      fctx.lineWidth = 2; fctx.beginPath(); fctx.arc(rp.x, rp.y, rp.r, 0, Math.PI*2); fctx.stroke();
+    }
+  }
+
+  function hueFromFreq(freq){
+    if (!freq) return 210;
+    const h = 200 + 12 * Math.log2(freq / 261.63) * 14;
+    return ((h % 360) + 360) % 360;
+  }
+
+  function drawPhantom(cx, cy, rms, freq, openness, muted, t){
+    const c = fctx;
+    const hue = hueFromFreq(freq);
+    const loud = Math.max(0, Math.min(1, rms * 6));
+    const baseR = 24 + loud * 62;
+    const pulse = 1 + Math.sin(t*0.006) * 0.06 * (0.4 + loud);
+    const alphaMul = muted ? 0.32 : 1;
+
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+
+    const rad = baseR * pulse * 2.0;
+    const g = c.createRadialGradient(cx, cy, 0, cx, cy, rad);
+    g.addColorStop(0,   `hsla(${hue},90%,${muted?55:78}%,${0.55*alphaMul})`);
+    g.addColorStop(0.5, `hsla(${hue},95%,60%,${0.22*alphaMul})`);
+    g.addColorStop(1,   `hsla(${hue},95%,50%,0)`);
+    c.fillStyle = g; c.beginPath(); c.arc(cx, cy, rad, 0, Math.PI*2); c.fill();
+
+    c.shadowBlur = muted ? 8 : 22; c.shadowColor = `hsla(${hue},100%,70%,0.9)`;
+    c.fillStyle = `hsla(${hue},100%,${muted?70:88}%,${0.9*alphaMul})`;
+    c.beginPath(); c.arc(cx, cy, baseR*pulse*0.32, 0, Math.PI*2); c.fill();
+    c.shadowBlur = 0;
+
+    const tendrils = 3 + Math.round(openness * 5);
+    for (let i=0;i<tendrils;i++){
+      const a = (i/tendrils)*Math.PI*2 + t*0.0006;
+      const len = baseR * pulse * (0.9 + 0.5*Math.sin(t*0.003 + i));
+      const x2 = cx + Math.cos(a)*len, y2 = cy + Math.sin(a)*len;
+      const gg = c.createLinearGradient(cx, cy, x2, y2);
+      gg.addColorStop(0, `hsla(${hue},95%,72%,${0.5*alphaMul})`);
+      gg.addColorStop(1, `hsla(${hue},95%,60%,0)`);
+      c.strokeStyle = gg; c.lineWidth = 1.6; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(cx, cy); c.lineTo(x2, y2); c.stroke();
+    }
+    c.restore();
+
+    if (!muted && loud > 0.12 && Math.random() < 0.4){
+      spawnWisp(cx, cy - baseR*0.6, hue);
+    }
+  }
+
+  function drawHalo(cx, cy, radius, buf, hue, alphaMul){
+    if (!buf) return;
+    const c = fctx;
+    const segs = 96;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.beginPath();
+    for (let i=0;i<=segs;i++){
+      const idx = Math.floor((i/segs) * (buf.length-1));
+      const amp = buf[idx];
+      const r = radius + amp * radius * 0.5;
+      const a = (i/segs) * Math.PI*2;
+      const x = cx + Math.cos(a)*r, y = cy + Math.sin(a)*r;
+      if (i===0) c.moveTo(x,y); else c.lineTo(x,y);
+    }
+    c.closePath();
+    c.shadowBlur = 10; c.shadowColor = `hsla(${hue},100%,70%,0.7)`;
+    c.strokeStyle = `hsla(${hue},90%,72%,${0.55*alphaMul})`;
+    c.lineWidth = 1.4;
+    c.stroke();
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let noteCandidate = null, noteCandFrames = 0, noteStable = null, lastChimeT = 0;
+
+  function frame(){
+    requestAnimationFrame(frame);
+    ctx.clearRect(0,0,W,H);
+    drawVideoBase();
+
+    // fade the glow layer -> trailing afterglow
+    fctx.save();
+    fctx.setTransform(1,0,0,1,0,0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.2)';
+    fctx.fillRect(0,0,fx.width,fx.height);
+    fctx.restore();
+
+    const t = performance.now();
+    const fresh = (t - RESULT.t) < 400;
+    const hand = fresh ? RESULT.hand : null;
+
+    // pitch/volume from the microphone, every frame
+    let res = { rms: 0, freq: null };
+    if (micAnalyser && micBuf && typeof micAnalyser.getFloatTimeDomainData === 'function'){
+      micAnalyser.getFloatTimeDomainData(micBuf);
+      res = detectPitch(micBuf, actx.sampleRate);
+    }
+    updatePitch(res);
+
+    const handPresent = !!hand;
+    const fist = handPresent && hand.fist;
+    const voiceActive = pitch.freq != null;
+    const silent = !handPresent || fist || !voiceActive;
+
+    const g = {
+      silent,
+      voiceFreq: voiceActive ? pitch.freq : 220,
+      rms: res.rms,
+      openness: handPresent ? hand.openness : 0,
+      closeness: handPresent ? hand.closeness : 0,
+      motion: RESULT.motion || 0,
+      cx: handPresent ? (mirror ? 1 - hand.center.x : hand.center.x) : 0.5
+    };
+
+    // stable-note detection -> crystal chime + shard burst
+    if (voiceActive && handPresent && !fist){
+      const midiRound = Math.round(freqToMidi(pitch.freq));
+      if (midiRound === noteCandidate) noteCandFrames++;
+      else { noteCandidate = midiRound; noteCandFrames = 0; }
+      if (noteCandFrames >= 5 && noteCandidate !== noteStable){
+        noteStable = noteCandidate;
+        if (t - lastChimeT > 220){
+          lastChimeT = t;
+          const chimeFreq = midiToFreq(noteStable);
+          crystalChime(chimeFreq);
+          const hx = px(hand.center), hy = py(hand.center);
+          const hue = hueFromFreq(chimeFreq);
+          spawnShards(hx, hy, 16, hue);
+          spawnRipple(hx, hy, hue);
+        }
+      }
+    } else {
+      noteCandidate = null; noteCandFrames = 0;
+    }
+
+    // draw the phantom at the hand (or resting center-low when no hand)
+    const phx = handPresent ? px(hand.center) : W/2;
+    const phy = handPresent ? py(hand.center) : H*0.62;
+    drawPhantom(phx, phy, res.rms, voiceActive ? pitch.freq : null, g.openness, silent, t);
+    if (haloOn){
+      const haloR = 34 + Math.max(0, Math.min(1, res.rms*6)) * 50;
+      drawHalo(phx, phy, haloR, micBuf, hueFromFreq(voiceActive ? pitch.freq : null), silent ? 0.35 : 0.85);
+    }
+    updateDrawWisps();
+    updateDrawShards();
+    updateDrawRipples();
+
+    // composite glow layer over the scene
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    applySound(g);
+
+    // HUD
+    if (voiceActive){
+      noteEl.textContent = noteName(Math.round(freqToMidi(pitch.freq)));
+      voiceTim.textContent = Math.round(pitch.freq) + ' Hz';
+    } else {
+      noteEl.textContent = '–';
+      voiceTim.textContent = '声を聞かせて';
+    }
+    volMeter.style.width = Math.round(Math.max(0, Math.min(1, res.rms*3.5)) * 100) + '%';
+    openPct.textContent = handPresent ? Math.round(hand.openness*100) : 0;
+    closeMeter.style.width = handPresent ? Math.round(hand.closeness*100) + '%' : '0%';
+    handTim.textContent = !handPresent ? '' : (fist ? '✊ 握られている' : '開いた手');
+
+    if (!handPresent){
+      stateDot.textContent = '手をかざしてください';
+      stateDot.className = 'silent';
+    } else if (fist){
+      stateDot.textContent = '✊ MUTED / 声を握る';
+      stateDot.className = 'silent';
+    } else if (!voiceActive){
+      stateDot.textContent = '🎤 声を聞かせて';
+      stateDot.className = 'silent';
+    } else {
+      stateDot.textContent = `♪ ${noteName(Math.round(freqToMidi(pitch.freq)))} ・ ${Math.round(pitch.freq)}Hz`;
+      stateDot.className = 'playing';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+        throw { kind:'lib', err:new Error('手検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。') };
+      }
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!hands) initHands();
+
+      try { await startStream(); }
+      catch(e){ throw { kind:'camera', err:e }; }
+      await startCameraLoop();
+
+      try { await startMic(); }
+      catch(e){ throw { kind:'mic', err:e }; }
+
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      haloBtn.classList.add('active');
+      requestAnimationFrame(frame);
+    } catch(errObj){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      const kind = errObj && errObj.kind;
+      const e = (errObj && errObj.err) || errObj;
+      const msg = (e && e.message) ? e.message : String(e);
+      if (kind === 'mic'){
+        errorMsg.textContent = 'マイクを起動できませんでした：' + msg +
+          '\nHTTPS または localhost で開き、マイクの使用を許可してください。';
+      } else {
+        errorMsg.textContent = 'カメラを起動できませんでした：' + msg +
+          '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+      }
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
