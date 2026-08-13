@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#02030a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="全身の動きで星々をつなぎ、オーロラを奏でる楽器。手を高く掲げると音が輝き、素早く動かすと流れ星が鳴る - AURORA">
+<title>AURORA ─ 星々の指揮者</title>
+<style>
+  :root{
+    --void:#02030a; --haze:#081428; --ghost:#eef2ff;
+    --green:#5cffb0; --cyan:#5cd0ff; --violet:#a06cff; --pink:#ff7ad1; --gold:#ffe19a; --warn:#ff5470;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(44px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--green),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--violet),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--cyan),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.15); } }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.14em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--green),var(--cyan),var(--violet),var(--pink),var(--gold),var(--green));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 9s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:2rem; position:relative; }
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--green),var(--violet)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(92,255,176,0.4);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(92,255,176,0.4); }
+    50%{ box-shadow:0 0 44px rgba(160,108,255,0.55); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{ position:relative; margin-top:2.2rem; max-width:23rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--green); font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  #hud{ position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(4,8,18,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(160,220,255,0.16); border-radius:16px; padding:0.65rem 0.9rem; color:var(--ghost); min-width:112px; }
+  .panel .lab{ font-size:0.58rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.3rem; }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,242,255,0.1); margin-top:0.45rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--green),var(--cyan)); border-radius:2px;
+    transition:width .12s linear; }
+  .panel[data-side="r"] .meter b{ background:linear-gradient(90deg,var(--pink),var(--violet)); }
+  .tim{ font-size:0.62rem; letter-spacing:0.08em; margin-top:0.4rem; color:var(--gold); min-height:0.85em; }
+  .panel[data-side="r"] .tim{ text-align:right; }
+
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #centerHud.show{ opacity:1; }
+  #stateDot{ font-size:0.68rem; letter-spacing:0.2em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(160,220,255,0.16);
+    background:rgba(4,8,18,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease; white-space:nowrap; }
+  #stateDot.playing{ color:var(--green); border-color:rgba(92,255,176,0.5); box-shadow:0 0 18px rgba(92,255,176,0.25); }
+  #stateDot.silent{ color:var(--warn); border-color:rgba(255,84,112,0.4); box-shadow:none; }
+
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(4,8,18,0.55); border:1px solid rgba(160,220,255,0.18);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:transform .15s ease, background .15s ease; }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(92,255,176,0.16); border-color:rgba(92,255,176,0.5); color:var(--green); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.2em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+
+  <div id="brand"><div class="b1">AURORA</div><div class="b2">星々の指揮者 / 全身で奏でる</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="skyBtn">星空 ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">LEFT HAND / 左手</div>
+      <div class="meter"><b id="lMeter"></b></div>
+      <div class="tim" id="lTim">─</div>
+    </div>
+    <div class="panel" data-side="r" style="text-align:right">
+      <div class="lab">RIGHT HAND / 右手</div>
+      <div class="meter"><b id="rMeter"></b></div>
+      <div class="tim" id="rTim">─</div>
+    </div>
+  </div>
+
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">AURORA</div>
+    <div id="sub">星々の指揮者 — 全身で奏でるオーロラ</div>
+    <button id="startBtn">起動する</button>
+    <div id="hint">
+      ・少し下がって<b>全身（上半身）</b>をカメラに映してください<br>
+      ・関節が<b>星座</b>になり、光の線でつながります<br>
+      ・<b>手を高く掲げる</b>ほど音が高く輝き、腰の高さで低い音に<br>
+      ・手を<b>素早く動かす</b>と流れ星が飛んで音が弾ける<br>
+      ・<b>腕を大きく広げる</b>ほどオーロラが広がる
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const skyBtn   = document.getElementById('skyBtn');
+  const lMeterEl = document.getElementById('lMeter');
+  const rMeterEl = document.getElementById('rMeter');
+  const lTimEl   = document.getElementById('lTim');
+  const rTimEl   = document.getElementById('rTim');
+
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE — two theremin voices (one per hand) + shooting-star bells
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null;
+  let voiceL = null, voiceR = null;
+  let convolver = null, revGain = null, plinkBus = null;
+  let audioReady = false;
+
+  const SCALE = [0,2,4,7,9,12,14,16,19,21,24]; // major pentatonic, 2 octaves
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  function midiRatio(semi){ return Math.pow(2, semi/12); }
+  function noteName(semi, rootMidi){
+    const midi = rootMidi + semi;
+    return NOTE_NAMES[((midi%12)+12)%12] + (Math.floor(midi/12)-1);
+  }
+  function scaleFreq(h, root){ // h: 0..1 height -> quantized pentatonic frequency
+    const idx = Math.max(0, Math.min(SCALE.length-1, Math.round(h*(SCALE.length-1))));
+    return { freq: root*midiRatio(SCALE[idx]), semi: SCALE[idx], idx };
+  }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate*seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch=0; ch<2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/len, decayPow);
+    }
+    return buf;
+  }
+
+  function makeVoice(pan, waveA, waveB){
+    const g = actx.createGain(); g.gain.value = 0;
+    const filter = actx.createBiquadFilter(); filter.type='lowpass'; filter.frequency.value=1200; filter.Q.value=2.4;
+    const o1 = actx.createOscillator(); o1.type = waveA; o1.frequency.value = 220;
+    const o2 = actx.createOscillator(); o2.type = waveB; o2.frequency.value = 220.5; o2.detune.value = 6;
+    const g1 = actx.createGain(); g1.gain.value = 0.55;
+    const g2 = actx.createGain(); g2.gain.value = 0.32;
+    o1.connect(g1); o2.connect(g2); g1.connect(filter); g2.connect(filter);
+    const p = actx.createStereoPanner ? actx.createStereoPanner() : actx.createGain();
+    if (p.pan) p.pan.value = pan;
+    filter.connect(g); g.connect(p); p.connect(master); g.connect(convolverSend);
+    o1.start(); o2.start();
+    return { gain:g, filter, o1, o2, pan:p };
+  }
+  let convolverSend = null;
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.85;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value=-18; comp.knee.value=22; comp.ratio.value=3; comp.attack.value=0.006; comp.release.value=0.3;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(3.2, 1.8);
+    revGain = actx.createGain(); revGain.gain.value = 0.32;
+    convolverSend = actx.createGain(); convolverSend.gain.value = 0.5;
+    convolverSend.connect(convolver); convolver.connect(revGain); revGain.connect(comp);
+
+    plinkBus = actx.createGain(); plinkBus.gain.value = 0.9;
+    plinkBus.connect(comp); plinkBus.connect(convolver);
+
+    master.connect(comp); comp.connect(actx.destination);
+
+    voiceL = makeVoice(-0.5, 'sine', 'triangle');
+    voiceR = makeVoice(0.5, 'triangle', 'sine');
+    audioReady = true;
+  }
+
+  function shootingStar(freq){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    for (const [ratio, amp, dur] of [[1, 0.24, 0.7], [2, 0.12, 0.5], [3, 0.05, 0.32]]){
+      const o = actx.createOscillator(); o.type='sine'; o.frequency.value = freq*ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(amp, t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+      o.connect(g); g.connect(plinkBus);
+      o.start(t); o.stop(t+dur+0.1);
+    }
+  }
+
+  function applyVoice(v, present, h, energy, reach){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    if (!present){ v.gain.gain.setTargetAtTime(0, t, 0.25); return; }
+    const root = v === voiceL ? 220 : 261.63;
+    const { freq } = scaleFreq(h, root);
+    v.o1.frequency.setTargetAtTime(freq, t, 0.07);
+    v.o2.frequency.setTargetAtTime(freq, t, 0.07);
+    v.filter.frequency.setTargetAtTime(500 + h*3200 + energy*1800, t, 0.1);
+    const vol = 0.1 + h*0.16 + reach*0.12;
+    v.gain.gain.setTargetAtTime(vol, t, 0.12);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  POSE ANALYSIS
+  // ---------------------------------------------------------------------------
+  const IDX = { NOSE:0, LSH:11, RSH:12, LEL:13, REL:14, LWR:15, RWR:16, LHIP:23, RHIP:24 };
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+  function vis(lm,i){ return lm[i] && (lm[i].visibility===undefined || lm[i].visibility > 0.5); }
+
+  const RESULT = { lm: null, t: 0 };
+  let prevWL = null, prevWR = null, motionEMA = 0;
+
+  let pose = null;
+  function initPose(){
+    pose = new Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+    pose.setOptions({ modelComplexity:1, smoothLandmarks:true, enableSegmentation:false, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+    pose.onResults(onPoseResults);
+  }
+
+  function onPoseResults(results){
+    const lm = results.poseLandmarks;
+    if (!lm){ RESULT.lm = null; return; }
+    RESULT.lm = lm;
+    RESULT.t = performance.now();
+
+    const wl = lm[IDX.LWR], wr = lm[IDX.RWR];
+    let m = 0, n = 0;
+    if (prevWL && vis(lm, IDX.LWR)){ m += dist(wl, prevWL); n++; }
+    if (prevWR && vis(lm, IDX.RWR)){ m += dist(wr, prevWR); n++; }
+    prevWL = wl; prevWR = wr;
+    const motion = n ? m/n : 0;
+    motionEMA = motionEMA*0.82 + Math.min(1, motion*16)*0.18;
+    RESULT.motion = motionEMA;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function startCameraLoop(){
+    if (mpCamera) { mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await pose.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    prevWL = prevWR = null;
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let skyOn = true;
+  skyBtn.addEventListener('click', () => {
+    skyOn = !skyOn;
+    skyBtn.textContent = skyOn ? '星空 ON' : '星空 OFF';
+    skyBtn.classList.toggle('active', skyOn);
+  });
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(2,3,10,0.58)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(10,18,45,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.18, W/2, H*0.5, Math.max(W,H)*0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(1,1,5,0.85)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // starfield
+  const stars = Array.from({length:90}, () => ({
+    x: Math.random(), y: Math.random(), r: 0.5+Math.random()*1.4,
+    ph: Math.random()*Math.PI*2, sp: 0.001+Math.random()*0.003
+  }));
+  function drawStars(t){
+    if (!skyOn) return;
+    ctx.save(); ctx.globalCompositeOperation='screen';
+    for (const s of stars){
+      const tw = 0.5+0.5*Math.sin(t*s.sp + s.ph);
+      ctx.fillStyle = `rgba(220,235,255,${0.15+tw*0.35})`;
+      ctx.beginPath(); ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // aurora ribbons — layered flowing sine bands, driven by "energy"
+  function drawAurora(t, energy){
+    ctx.save(); ctx.globalCompositeOperation = 'screen';
+    const bands = [
+      { hue:150, amp:0.06, freq:1.6, speed:0.00028, yBase:0.18, alpha:0.16 },
+      { hue:190, amp:0.08, freq:1.1, speed:-0.00021, yBase:0.28, alpha:0.14 },
+      { hue:280, amp:0.05, freq:2.1, speed:0.00035, yBase:0.12, alpha:0.13 },
+    ];
+    for (const b of bands){
+      const amp = b.amp * (0.4 + energy*1.4);
+      ctx.beginPath();
+      for (let i=0;i<=40;i++){
+        const p = i/40, x = p*W;
+        const y = (b.yBase + Math.sin(p*Math.PI*b.freq + t*b.speed)*amp) * H;
+        i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+      }
+      for (let i=40;i>=0;i--){
+        const p = i/40, x = p*W;
+        const y = (b.yBase + 0.16 + Math.sin(p*Math.PI*b.freq + t*b.speed + 0.6)*amp) * H;
+        ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      const g = ctx.createLinearGradient(0,0,0,H*0.5);
+      g.addColorStop(0, `hsla(${b.hue},90%,65%,0)`);
+      g.addColorStop(0.5, `hsla(${b.hue},90%,65%,${b.alpha*(0.5+energy)})`);
+      g.addColorStop(1, `hsla(${b.hue},90%,65%,0)`);
+      ctx.fillStyle = g; ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // shooting star streak particles
+  const streaks = [];
+  function spawnStreak(x,y,hue){
+    const a = Math.random()*Math.PI*2;
+    streaks.push({ x, y, vx:Math.cos(a)*7, vy:Math.sin(a)*7-1, life:1, hue });
+  }
+  function updateDrawStreaks(){
+    for (let i=streaks.length-1;i>=0;i--){
+      const s = streaks[i];
+      s.x += s.vx; s.y += s.vy; s.vy += 0.05; s.life -= 0.02;
+      if (s.life<=0){ streaks.splice(i,1); continue; }
+      fctx.strokeStyle = `hsla(${s.hue},100%,75%,${s.life})`;
+      fctx.lineWidth = 2;
+      fctx.beginPath(); fctx.moveTo(s.x,s.y); fctx.lineTo(s.x-s.vx*1.6, s.y-s.vy*1.6); fctx.stroke();
+    }
+  }
+
+  const CONNECTIONS = [
+    [IDX.LWR,IDX.LEL],[IDX.LEL,IDX.LSH],[IDX.LSH,IDX.RSH],[IDX.RSH,IDX.REL],[IDX.REL,IDX.RWR],
+    [IDX.LSH,IDX.LHIP],[IDX.RSH,IDX.RHIP],[IDX.LHIP,IDX.RHIP],[IDX.NOSE,IDX.LSH],[IDX.NOSE,IDX.RSH]
+  ];
+
+  function drawConstellation(lm, t, energy){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const hueShift = (t*0.02)%360;
+
+    for (const [a,b] of CONNECTIONS){
+      if (!vis(lm,a) || !vis(lm,b)) continue;
+      const x1=px(lm[a]), y1=py(lm[a]), x2=px(lm[b]), y2=py(lm[b]);
+      const a = 0.55+energy*0.4;
+      const g = c.createLinearGradient(x1,y1,x2,y2);
+      g.addColorStop(0, `hsla(${(hueShift+150)%360},85%,68%,${a})`);
+      g.addColorStop(1, `hsla(${(hueShift+260)%360},85%,68%,${a})`);
+      c.strokeStyle = g; c.lineWidth = 1.6; c.shadowBlur = 12; c.shadowColor='rgba(140,220,255,0.7)';
+      c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.stroke();
+    }
+
+    for (const key of [IDX.NOSE,IDX.LSH,IDX.RSH,IDX.LEL,IDX.REL,IDX.LWR,IDX.RWR,IDX.LHIP,IDX.RHIP]){
+      if (!vis(lm,key)) continue;
+      const isWrist = (key===IDX.LWR || key===IDX.RWR);
+      const x=px(lm[key]), y=py(lm[key]);
+      const r = isWrist ? 7 : 3.4;
+      const hue = isWrist ? (key===IDX.LWR?150:300) : 200;
+      const gg = c.createRadialGradient(x,y,0,x,y,r*3);
+      gg.addColorStop(0, `hsla(${hue},100%,85%,0.95)`);
+      gg.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+      c.fillStyle = gg; c.beginPath(); c.arc(x,y,r*3,0,Math.PI*2); c.fill();
+      c.fillStyle = `hsla(${hue},80%,92%,0.95)`;
+      c.beginPath(); c.arc(x,y,r*0.5,0,Math.PI*2); c.fill();
+    }
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  function heightFrac(lm, wristKey, shKey, hipKey){
+    if (!vis(lm,wristKey) || !vis(lm,hipKey) || !vis(lm,shKey)) return null;
+    const hipY = lm[hipKey].y, noseY = lm[IDX.NOSE] ? lm[IDX.NOSE].y : lm[shKey].y - (hipY-lm[shKey].y);
+    const span = (hipY - noseY) || 1e-4;
+    const raw = (hipY - lm[wristKey].y) / span;
+    return Math.max(0, Math.min(1, raw));
+  }
+
+  let lastPlinkL = 0, lastPlinkR = 0, lastT = performance.now();
+  let smoothEnergy = 0;
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+    const dt = Math.min(64, t-lastT); lastT = t;
+
+    ctx.clearRect(0,0,W,H);
+    drawVideoBase();
+    drawStars(t);
+
+    fctx.save();
+    fctx.setTransform(1,0,0,1,0,0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.16)';
+    fctx.fillRect(0,0,fx.width,fx.height);
+    fctx.restore();
+
+    const fresh = RESULT.lm && (t - RESULT.t) < 500;
+    const lm = fresh ? RESULT.lm : null;
+
+    const hL = lm ? heightFrac(lm, IDX.LWR, IDX.LSH, IDX.LHIP) : null;
+    const hR = lm ? heightFrac(lm, IDX.RWR, IDX.RSH, IDX.RHIP) : null;
+    const presentL = hL !== null, presentR = hR !== null;
+    const anyPresent = presentL || presentR;
+
+    let reach = 0;
+    if (lm && vis(lm,IDX.LWR) && vis(lm,IDX.RWR) && vis(lm,IDX.LSH) && vis(lm,IDX.RSH)){
+      const shoulderW = dist(lm[IDX.LSH], lm[IDX.RSH]) || 1e-4;
+      reach = Math.max(0, Math.min(1, (dist(lm[IDX.LWR], lm[IDX.RWR]) / shoulderW - 1) / 2.2));
+    }
+
+    const motion = anyPresent ? (RESULT.motion || 0) : 0;
+    const energyTarget = anyPresent ? Math.min(1, (hL||0)*0.3 + (hR||0)*0.3 + motion*0.5 + reach*0.3) : 0;
+    smoothEnergy += (energyTarget - smoothEnergy) * 0.05;
+
+    drawAurora(t, smoothEnergy);
+
+    if (lm) drawConstellation(lm, t, smoothEnergy);
+
+    // shooting stars on fast motion, debounced per hand
+    if (motion > 0.45 && anyPresent){
+      if (presentL && t - lastPlinkL > 260){
+        lastPlinkL = t;
+        const { freq } = scaleFreq(hL, 220);
+        shootingStar(freq);
+        spawnStreak(px(lm[IDX.LWR]), py(lm[IDX.LWR]), 150);
+      }
+      if (presentR && t - lastPlinkR > 260){
+        lastPlinkR = t;
+        const { freq } = scaleFreq(hR, 261.63);
+        shootingStar(freq);
+        spawnStreak(px(lm[IDX.RWR]), py(lm[IDX.RWR]), 300);
+      }
+    }
+    updateDrawStreaks();
+
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    applyVoice(voiceL, presentL, hL||0, smoothEnergy, reach);
+    applyVoice(voiceR, presentR, hR||0, smoothEnergy, reach);
+
+    lMeterEl.style.width = presentL ? Math.round(hL*100)+'%' : '0%';
+    rMeterEl.style.width = presentR ? Math.round(hR*100)+'%' : '0%';
+    lTimEl.textContent = presentL ? noteName(scaleFreq(hL,220).semi, 57) : '';
+    rTimEl.textContent = presentR ? noteName(scaleFreq(hR,261.63).semi, 60) : '';
+
+    if (!anyPresent){
+      stateDot.textContent = '上半身をカメラに映してください';
+      stateDot.className = 'silent';
+    } else {
+      stateDot.textContent = `✦ ENERGY ${Math.round(smoothEnergy*100)}% ・ REACH ${Math.round(reach*100)}%`;
+      stateDot.className = 'playing';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (typeof Pose === 'undefined' || typeof Camera === 'undefined'){
+        throw new Error('姿勢検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+      }
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!pose) initPose();
+      await startStream();
+      await startCameraLoop();
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      skyBtn.classList.add('active');
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = '起動する';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
