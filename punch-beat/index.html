@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#08040a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="カメラの前で光る的をリズムよくパンチするゲーム。タイミングが良いほど高得点、外すとHPが減る - PUNCH BEAT">
+<title>PUNCH BEAT ─ 光る的を撃ち抜け</title>
+<style>
+  :root{
+    --void:#08040a; --haze:#220a18; --ghost:#eef2ff;
+    --red:#ff3b5c; --cyan:#37e6ff; --gold:#ffd166; --miss:#6a6a80;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .6s ease, visibility .6s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(44px); opacity:.36; pointer-events:none;
+    animation:drift 13s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--red),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--cyan),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--gold),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.15); } }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.2rem; font-weight:800; letter-spacing:0.1em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--red),var(--gold),var(--cyan),var(--red));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 6s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:1.6rem; position:relative; white-space:pre-line; }
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--red),var(--gold)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(255,59,92,0.45);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 2.6s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(255,59,92,0.45); }
+    50%{ box-shadow:0 0 44px rgba(255,209,102,0.55); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{ position:relative; margin-top:2rem; max-width:23rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--red); font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--red); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+  #resultBox{ display:none; position:relative; margin-bottom:1.6rem; }
+  #resultBox .rlab{ font-size:0.62rem; letter-spacing:0.3em; color:rgba(238,242,255,0.45); }
+  #resultBox .rscore{ font-size:2.6rem; font-weight:800; color:var(--gold); line-height:1.3; font-variant-numeric:tabular-nums; }
+  #resultBox .rsub{ font-size:0.78rem; color:rgba(238,242,255,0.6); letter-spacing:0.05em; }
+
+  #hud{ position:fixed; z-index:12; left:0; right:0; top:0;
+    display:flex; align-items:flex-start; justify-content:space-between; padding:1.1rem 1rem 0;
+    pointer-events:none; opacity:0; transition:opacity .6s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(10,4,10,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(255,120,140,0.18); border-radius:16px; padding:0.6rem 0.9rem; color:var(--ghost); min-width:104px; }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.25rem; }
+  .panel .val{ font-size:1.5rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--gold); }
+  .panel[data-side="r"]{ text-align:right; }
+  #hearts{ display:flex; gap:4px; margin-top:0.3rem; justify-content:flex-end; }
+  #hearts i{ width:11px; height:11px; border-radius:3px 3px 8px 3px; background:var(--red);
+    box-shadow:0 0 6px rgba(255,59,92,0.7); transform:rotate(45deg); transition:opacity .2s ease, transform .2s ease; }
+  #hearts i.off{ background:rgba(255,255,255,0.08); box-shadow:none; }
+  .subLab{ font-size:0.64rem; letter-spacing:0.1em; color:rgba(238,242,255,0.5); margin-top:0.3rem; }
+
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:1.4rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #centerHud.show{ opacity:1; }
+  #stateDot{ font-size:0.66rem; letter-spacing:0.16em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(255,120,140,0.2);
+    background:rgba(10,4,10,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .2s ease, border-color .2s ease, box-shadow .2s ease; white-space:nowrap; }
+  #stateDot.hot{ color:var(--gold); border-color:rgba(255,209,102,0.55); box-shadow:0 0 18px rgba(255,209,102,0.3); }
+  #stateDot.silent{ color:var(--miss); border-color:rgba(120,120,140,0.35); box-shadow:none; }
+
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(10,4,10,0.55); border:1px solid rgba(255,120,140,0.2);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:transform .15s ease, background .15s ease; }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(255,59,92,0.18); border-color:rgba(255,59,92,0.55); color:var(--red); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; display:none; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.3em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.2em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+
+  <div id="brand"><div class="b1">PUNCH BEAT</div><div class="b2">光る的を撃ち抜け</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">SCORE</div>
+      <div class="val" id="scoreEl">0</div>
+      <div class="subLab">COMBO <span id="comboEl">0</span></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">HP</div>
+      <div id="hearts"></div>
+      <div class="subLab">BPM <span id="bpmEl">112</span></div>
+    </div>
+  </div>
+
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA GAME</div>
+    <div id="resultBox">
+      <div class="rlab">GAME OVER</div>
+      <div class="rscore" id="finalScore">0</div>
+      <div class="rsub" id="finalSub"></div>
+    </div>
+    <div id="title">PUNCH BEAT</div>
+    <div id="sub">インカメラの前で、光る的をリズムよくパンチ</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・的の周りの<b>輪が縮む</b>タイミングで、その位置へ<b>素早く手を突き出す</b>とヒット<br>
+      ・ドンピシャなら<b>PERFECT</b>、多少ズレても<b>GOOD</b><br>
+      ・間に合わないと<b>MISS</b>でHPが1減る（HP0でゲームオーバー）<br>
+      ・コンボが伸びるほど曲のテンポが上がって難しくなる
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const scoreEl  = document.getElementById('scoreEl');
+  const comboEl  = document.getElementById('comboEl');
+  const bpmEl    = document.getElementById('bpmEl');
+  const heartsEl = document.getElementById('hearts');
+  const resultBox= document.getElementById('resultBox');
+  const finalScore=document.getElementById('finalScore');
+  const finalSub = document.getElementById('finalSub');
+  const eyebrow  = document.getElementById('eyebrow');
+  const titleEl  = document.getElementById('title');
+  const subEl    = document.getElementById('sub');
+  const hintEl   = document.getElementById('hint');
+
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  GAME CONSTANTS
+  // ---------------------------------------------------------------------------
+  const START_HP = 5;
+  const SLOTS = [
+    {x:0.20,y:0.36},{x:0.50,y:0.26},{x:0.80,y:0.36},
+    {x:0.26,y:0.64},{x:0.74,y:0.64},{x:0.50,y:0.52}
+  ];
+  const RING_START = 2.5;   // ring scale at spawn
+  const RING_MISS  = 0.32;  // ring scale at which an unhit target is a miss
+  const PERFECT_WINDOW = 0.16;
+  const GOOD_WINDOW    = 0.5;
+  const PUNCH_MIN_SPEED = 55; // px per frame-ish (scaled by dt below), min hand speed to count as a punch
+  let approachMs = 980;
+  let bpm = 112;
+  let beatMs = 60000 / bpm;
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE — synth metronome + punch/impact SFX
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, sfxBus = null, musicBus = null;
+  let convolver = null, revGain = null;
+  let audioReady = false;
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate*seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch=0; ch<2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate*seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    return buf;
+  }
+  const noiseBuf = { buf: null };
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value=-16; comp.knee.value=20; comp.ratio.value=3.4; comp.attack.value=0.004; comp.release.value=0.22;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(1.3, 2.6);
+    revGain = actx.createGain(); revGain.gain.value = 0.22;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    musicBus = actx.createGain(); musicBus.gain.value = 0.55;
+
+    sfxBus.connect(master); sfxBus.connect(convolver);
+    musicBus.connect(master); musicBus.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(0.6);
+    audioReady = true;
+  }
+
+  function kick(t, vol){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(44, t+0.11);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.18);
+    o.connect(g); g.connect(musicBus);
+    o.start(t); o.stop(t+0.2);
+  }
+  function hat(t, vol){
+    if (!audioReady) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const hp = actx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value = 6000;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.045);
+    src.connect(hp); hp.connect(g); g.connect(musicBus);
+    src.start(t); src.stop(t+0.06);
+  }
+  function bass(t, freq, vol){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type='sawtooth'; o.frequency.value = freq;
+    const f = actx.createBiquadFilter(); f.type='lowpass'; f.frequency.value = 700; f.Q.value = 4;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+beatMs/1000*0.9);
+    o.connect(f); f.connect(g); g.connect(musicBus);
+    o.start(t); o.stop(t+beatMs/1000);
+  }
+
+  function punchHit(t, grade){
+    if (!audioReady) return;
+    const bright = grade === 'PERFECT' ? 1 : 0.6;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(2600*bright + 700, t);
+    bp.frequency.exponentialRampToValueAtTime(300, t+0.14);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.5*bright+0.15, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.16);
+    src.connect(bp); bp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t+0.2);
+
+    const thump = actx.createOscillator(); thump.type='sine';
+    thump.frequency.setValueAtTime(180*bright+80, t);
+    thump.frequency.exponentialRampToValueAtTime(40, t+0.12);
+    const tg = actx.createGain();
+    tg.gain.setValueAtTime(0.45, t);
+    tg.gain.exponentialRampToValueAtTime(0.0001, t+0.14);
+    thump.connect(tg); tg.connect(sfxBus);
+    thump.start(t); thump.stop(t+0.16);
+
+    if (grade === 'PERFECT'){
+      for (const [ratio, amp] of [[1,0.14],[2,0.08],[3,0.04]]){
+        const o = actx.createOscillator(); o.type='sine'; o.frequency.value = 700*ratio;
+        const gg = actx.createGain();
+        gg.gain.setValueAtTime(amp, t);
+        gg.gain.exponentialRampToValueAtTime(0.0001, t+0.4);
+        o.connect(gg); gg.connect(sfxBus);
+        o.start(t); o.stop(t+0.42);
+      }
+    }
+  }
+
+  function missSound(t){
+    if (!audioReady) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const lp = actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value = 400;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.2);
+    src.connect(lp); lp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t+0.22);
+  }
+
+  function comboStinger(t){
+    if (!audioReady) return;
+    [0,4,7,12].forEach((semi,i) => {
+      const o = actx.createOscillator(); o.type='triangle';
+      o.frequency.value = 440*Math.pow(2,semi/12);
+      const g = actx.createGain();
+      const st = t + i*0.05;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.16, st+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st+0.3);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st+0.32);
+    });
+  }
+
+  function gameOverSound(t){
+    if (!audioReady) return;
+    [0,-3,-7].forEach((semi,i) => {
+      const o = actx.createOscillator(); o.type='sawtooth';
+      o.frequency.value = 220*Math.pow(2,semi/12);
+      const g = actx.createGain();
+      const st = t + i*0.18;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.22, st+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st+0.5);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st+0.52);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND TRACKING
+  // ---------------------------------------------------------------------------
+  const RESULT = { hands: [], t: 0 };
+
+  let hands = null;
+  function initHands(){
+    hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands:2, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+    hands.onResults(onHandResults);
+  }
+  function onHandResults(results){
+    const out = [];
+    const lms = results.multiHandLandmarks || [];
+    for (let i=0;i<lms.length;i++){
+      const c = lms[i][9]; // palm center landmark
+      out.push({ x:c.x, y:c.y });
+    }
+    RESULT.hands = out;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t=>t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+  async function startCameraLoop(){
+    if (mpCamera) { mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — video base
+  // ---------------------------------------------------------------------------
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(6,2,6,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(45,10,25,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.2, W/2, H*0.5, Math.max(W,H)*0.76);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,1,3,0.86)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GAME STATE
+  // ---------------------------------------------------------------------------
+  let state = 'idle'; // idle | playing | over
+  let score = 0, combo = 0, maxCombo = 0, hp = START_HP;
+  let hitCount = 0, perfectCount = 0, goodCount = 0, missCount = 0;
+  let targets = [];
+  let nextBeatAt = 0, beatIndex = 0;
+  const popups = []; // floating judgement text
+  const bursts = []; // hit particle bursts
+  let shake = 0;
+
+  function occupiedSlots(){
+    return new Set(targets.map(t => t.slot));
+  }
+  function spawnTarget(){
+    const free = SLOTS.map((s,i)=>i).filter(i => !occupiedSlots().has(i));
+    if (!free.length) return;
+    const slot = free[(Math.random()*free.length)|0];
+    const s = SLOTS[slot];
+    targets.push({
+      slot, x: s.x*W, y: s.y*H,
+      born: performance.now(), life: approachMs,
+      hue: 340 + Math.random()*40 - 20,
+      hit: false
+    });
+  }
+
+  function ringScale(tg, now){
+    const p = Math.min(1, (now - tg.born) / tg.life);
+    return RING_START - (RING_START - RING_MISS) * p;
+  }
+
+  function spawnPopup(x, y, text, color){
+    popups.push({ x, y, text, color, life: 1, vy: -0.6 });
+  }
+  function spawnBurst(x, y, hue, n){
+    for (let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2, s = 2+Math.random()*5;
+      bursts.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:1, hue });
+    }
+  }
+
+  function setHearts(){
+    heartsEl.innerHTML = '';
+    for (let i=0;i<START_HP;i++){
+      const el = document.createElement('i');
+      if (i >= hp) el.classList.add('off');
+      heartsEl.appendChild(el);
+    }
+  }
+
+  function registerHit(tg, grade, now){
+    tg.hit = true;
+    hitCount++;
+    if (grade === 'PERFECT'){ perfectCount++; score += 300 + combo*6; }
+    else { goodCount++; score += 120 + combo*3; }
+    combo++; maxCombo = Math.max(maxCombo, combo);
+    spawnPopup(tg.x, tg.y, grade, grade==='PERFECT' ? '#ffd166' : '#37e6ff');
+    spawnBurst(tg.x, tg.y, tg.hue, grade==='PERFECT' ? 26 : 16);
+    shake = grade === 'PERFECT' ? 6 : 3;
+    punchHit(actx.currentTime, grade);
+    if (combo>0 && combo % 10 === 0){
+      comboStinger(actx.currentTime);
+      bpm = Math.min(168, bpm + 4);
+      beatMs = 60000/bpm;
+      approachMs = Math.max(620, approachMs - 30);
+      bpmEl.textContent = Math.round(bpm);
+    }
+    scoreEl.textContent = score;
+    comboEl.textContent = combo;
+  }
+
+  function registerMiss(tg){
+    if (state !== 'playing') return;
+    missCount++;
+    combo = 0;
+    hp = Math.max(0, hp-1);
+    setHearts();
+    comboEl.textContent = combo;
+    spawnPopup(tg.x, tg.y, 'MISS', '#6a6a80');
+    if (audioReady) missSound(actx.currentTime);
+    if (hp <= 0) endGame();
+  }
+
+  function resetGame(){
+    score = 0; combo = 0; maxCombo = 0; hp = START_HP;
+    hitCount = 0; perfectCount = 0; goodCount = 0; missCount = 0;
+    targets = []; popups.length = 0; bursts.length = 0;
+    bpm = 112; beatMs = 60000/bpm; approachMs = 980;
+    scoreEl.textContent = '0'; comboEl.textContent = '0'; bpmEl.textContent = '112';
+    setHearts();
+    nextBeatAt = performance.now() + 400;
+    beatIndex = 0;
+  }
+
+  function startGame(){
+    resetGame();
+    state = 'playing';
+  }
+
+  function endGame(){
+    state = 'over';
+    gameOverSound(actx.currentTime);
+    const acc = hitCount+missCount>0 ? Math.round((hitCount/(hitCount+missCount))*100) : 0;
+    finalScore.textContent = score;
+    finalSub.textContent = `最大コンボ ${maxCombo} ・ PERFECT ${perfectCount} ・ GOOD ${goodCount} ・ MISS ${missCount} ・ 命中率 ${acc}%`;
+    resultBox.style.display = 'block';
+    eyebrow.style.display = 'none';
+    titleEl.textContent = 'GAME OVER';
+    subEl.textContent = '';
+    hintEl.style.display = 'none';
+    startBtn.textContent = 'もう一度';
+    overlay.classList.remove('hidden');
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let prevHands = [];
+  function frame(){
+    requestAnimationFrame(frame);
+    const now = performance.now();
+
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+      shake *= 0.85;
+    }
+    drawVideoBase();
+
+    fctx.save();
+    fctx.setTransform(1,0,0,1,0,0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.22)';
+    fctx.fillRect(0,0,fx.width,fx.height);
+    fctx.restore();
+
+    const fresh = (now - RESULT.t) < 400;
+    const handsNow = fresh ? RESULT.hands : [];
+    const handPts = handsNow.map(h => ({ x: px(h), y: py(h) }));
+
+    // hand speed (px between frames)
+    const speeds = handPts.map((h,i) => {
+      const prev = prevHands[i];
+      return prev ? Math.hypot(h.x-prev.x, h.y-prev.y) : 0;
+    });
+
+    if (state === 'playing'){
+      if (now >= nextBeatAt){
+        kick(actx.currentTime, 0.5);
+        if (beatIndex % 2 === 0) hat(actx.currentTime, 0.12);
+        if (beatIndex % 4 === 0) bass(actx.currentTime, 55, 0.22);
+        spawnTarget();
+        beatIndex++;
+        nextBeatAt += beatMs;
+      }
+
+      for (const tg of targets){
+        if (tg.hit) continue;
+        const scale = ringScale(tg, now);
+        for (let i=0;i<handPts.length;i++){
+          const hp2 = handPts[i];
+          const d = Math.hypot(hp2.x-tg.x, hp2.y-tg.y);
+          const targetR = Math.max(30, Math.min(W,H)*0.052);
+          if (d < targetR*1.25 && speeds[i] > PUNCH_MIN_SPEED){
+            const err = Math.abs(scale - 1);
+            registerHit(tg, err <= PERFECT_WINDOW ? 'PERFECT' : 'GOOD', now);
+            break;
+          }
+        }
+      }
+      // expire unhit targets
+      for (let i=targets.length-1;i>=0;i--){
+        const tg = targets[i];
+        if (tg.hit){ targets.splice(i,1); continue; }
+        if (ringScale(tg, now) <= RING_MISS){
+          registerMiss(tg);
+          targets.splice(i,1);
+        }
+      }
+    }
+
+    prevHands = handPts;
+
+    // draw targets
+    fctx.save(); fctx.globalCompositeOperation = 'lighter';
+    for (const tg of targets){
+      const scale = ringScale(tg, now);
+      const targetR = Math.max(30, Math.min(W,H)*0.052);
+      // fixed target ring
+      fctx.strokeStyle = `hsla(${tg.hue},90%,65%,0.85)`;
+      fctx.lineWidth = 2.4; fctx.shadowBlur = 14; fctx.shadowColor = `hsla(${tg.hue},100%,60%,0.8)`;
+      fctx.beginPath(); fctx.arc(tg.x, tg.y, targetR, 0, Math.PI*2); fctx.stroke();
+      // approaching ring
+      fctx.strokeStyle = `hsla(${tg.hue+40},95%,70%,0.9)`;
+      fctx.lineWidth = 3; fctx.shadowBlur = 10;
+      fctx.beginPath(); fctx.arc(tg.x, tg.y, targetR*Math.max(0.15,scale), 0, Math.PI*2); fctx.stroke();
+      // core
+      const g = fctx.createRadialGradient(tg.x,tg.y,0,tg.x,tg.y,targetR*0.7);
+      g.addColorStop(0, `hsla(${tg.hue},100%,80%,0.7)`);
+      g.addColorStop(1, `hsla(${tg.hue},100%,60%,0)`);
+      fctx.fillStyle = g; fctx.beginPath(); fctx.arc(tg.x,tg.y,targetR*0.7,0,Math.PI*2); fctx.fill();
+    }
+    fctx.shadowBlur = 0;
+
+    // hand markers
+    for (let i=0;i<handPts.length;i++){
+      const h = handPts[i];
+      const r = 8 + Math.min(14, speeds[i]*0.3);
+      const g = fctx.createRadialGradient(h.x,h.y,0,h.x,h.y,r*2.2);
+      g.addColorStop(0, 'hsla(190,100%,85%,0.9)');
+      g.addColorStop(1, 'hsla(190,100%,60%,0)');
+      fctx.fillStyle = g; fctx.beginPath(); fctx.arc(h.x,h.y,r*2.2,0,Math.PI*2); fctx.fill();
+    }
+    fctx.restore();
+
+    // bursts
+    fctx.save(); fctx.globalCompositeOperation = 'lighter';
+    for (let i=bursts.length-1;i>=0;i--){
+      const b = bursts[i];
+      b.x += b.vx; b.y += b.vy; b.vx*=0.94; b.vy*=0.94; b.life -= 0.03;
+      if (b.life<=0){ bursts.splice(i,1); continue; }
+      fctx.fillStyle = `hsla(${b.hue},100%,70%,${b.life})`;
+      fctx.beginPath(); fctx.arc(b.x,b.y,3*b.life+1,0,Math.PI*2); fctx.fill();
+    }
+    fctx.restore();
+
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    // judgement popups (crisp text, drawn direct so it stays sharp)
+    for (let i=popups.length-1;i>=0;i--){
+      const p = popups[i];
+      p.y += p.vy; p.life -= 0.02;
+      if (p.life<=0){ popups.splice(i,1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.font = '800 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 10; ctx.shadowColor = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+
+    ctx.restore(); // shake transform
+
+    if (state === 'playing'){
+      stateDot.textContent = combo >= 10 ? `🔥 COMBO ${combo}` : `PUNCH! ・ HP ${hp}`;
+      stateDot.className = combo >= 10 ? 'hot' : '';
+    } else {
+      stateDot.textContent = handPts.length ? '準備OK' : '手をカメラに映してください';
+      stateDot.className = handPts.length ? '' : 'silent';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+          throw new Error('手検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+        }
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        if (!hands) initHands();
+        await startStream();
+        await startCameraLoop();
+        running = true;
+        booted = true;
+        requestAnimationFrame(frame);
+      } else {
+        if (actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      centerHud.classList.add('show');
+      resultBox.style.display = 'none';
+      eyebrow.style.display = 'block';
+      titleEl.textContent = 'PUNCH BEAT';
+      subEl.textContent = 'インカメラの前で、光る的をリズムよくパンチ';
+      hintEl.style.display = 'block';
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+      startGame();
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
