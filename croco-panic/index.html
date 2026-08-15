@@ -212,16 +212,13 @@
   //  GAME CONSTANTS
   // ---------------------------------------------------------------------------
   const ROUND_MS = 45000;
-  const HATCHES = [
-    {x:0.18,y:0.38},{x:0.50,y:0.30},{x:0.82,y:0.38},
-    {x:0.24,y:0.68},{x:0.76,y:0.68},{x:0.50,y:0.58}
-  ];
+  const HATCHES = Array.from({length:6}, (_,i) => ({ x: 0.1 + i*0.16, y: 0.6 })); // real wani-wani panic: one straight row
   const PUNCH_MIN_SPEED = 55;
   const GOLD_CHANCE = 0.1;
 
-  function spawnIntervalAt(p){ return 720 - p*340; }   // p: 0..1 round progress
-  function popupLifeAt(p){ return 900 - p*420; }
-  function trapChanceAt(p){ return 0.12 + p*0.14; }
+  function spawnIntervalAt(p){ return 680 - p*180; }   // p: 0..1 round progress — milder ramp
+  function popupLifeAt(p){ return 1150 - p*300; }      // generous hang time, like the real cabinet
+  function trapChanceAt(p){ return 0.08 + p*0.06; }
 
   // ---------------------------------------------------------------------------
   //  AUDIO ENGINE
@@ -464,11 +461,11 @@
   // ---------------------------------------------------------------------------
   //  GAME STATE
   // ---------------------------------------------------------------------------
-  let state = 'idle'; // idle | playing | over
+  let state = 'idle'; // idle | countdown | playing | over
   let score = 0, combo = 0, maxCombo = 0, hitCount = 0, missCount = 0, trapHitCount = 0;
   let occupants = []; // one per hatch slot, or null
   let roundStart = 0, timeLeft = ROUND_MS;
-  let nextSpawnAt = 0;
+  let nextSpawnAt = 0, countdownStart = 0;
   const popups = [];
   const bursts = [];
   let shake = 0, alertGlow = 0;
@@ -492,9 +489,18 @@
     if (audioReady) pop(actx.currentTime, isTrap ? 220 : (isGold ? 660 : 400));
   }
 
+  // real whack-a-mole cadence: snap up fast, hold at full height, snap back down —
+  // not a slow sine ease that's barely ever at a stable, hittable height.
+  const POP_RISE = 0.16, POP_FALL_START = 0.72;
   function popScale(occ, now){
     const p = Math.min(1, (now - occ.born) / occ.life);
-    return Math.sin(Math.min(1,p) * Math.PI); // 0 -> 1 -> 0
+    if (p < POP_RISE){
+      const q = p / POP_RISE;
+      return 1 - Math.pow(1-q, 3); // fast ease-out rise
+    }
+    if (p < POP_FALL_START) return 1; // held fully up — the real hit window
+    const q = (p - POP_FALL_START) / (1 - POP_FALL_START);
+    return 1 - q*q; // quick ease-in drop
   }
 
   function spawnPopup(x, y, text, color){
@@ -559,14 +565,15 @@
     scoreEl.textContent = '0'; comboEl.textContent = '0'; hitEl.textContent = '0'; missEl.textContent = '0';
     timeEl.textContent = Math.ceil(ROUND_MS/1000);
     timeEl.classList.remove('low');
-    roundStart = performance.now();
-    nextSpawnAt = roundStart + 400;
     lastTickSecond = Math.ceil(ROUND_MS/1000);
   }
 
+  const COUNTDOWN_LABELS = ['3','2','1','START!'];
+  const COUNTDOWN_STEP = 650;
   function startGame(){
     resetGame();
-    state = 'playing';
+    state = 'countdown';
+    countdownStart = performance.now();
   }
 
   function endGame(){
@@ -669,6 +676,23 @@
     c.restore();
   }
 
+  function drawCountdown(label, q){
+    // q: 0..1 progress through this step — punch in, hold, fade out
+    const scale = 1 + (1-Math.min(1, q/0.3))*0.6;
+    const alpha = q > 0.75 ? 1 - (q-0.75)/0.25 : 1;
+    const cx = W/2, cy = H*0.42;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.font = '800 88px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 30; ctx.shadowColor = 'rgba(57,255,136,0.9)';
+    ctx.fillStyle = '#39ff88';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
   function updateDrawPopups(){
     for (let i=popups.length-1;i>=0;i--){
       const p = popups[i];
@@ -727,6 +751,19 @@
       const prev = prevHands[i];
       return prev ? Math.hypot(h.x-prev.x, h.y-prev.y) : 0;
     });
+
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx < COUNTDOWN_LABELS.length){
+        const q = (el % COUNTDOWN_STEP) / COUNTDOWN_STEP;
+        drawCountdown(COUNTDOWN_LABELS[idx], q);
+      } else {
+        state = 'playing';
+        roundStart = t;
+        nextSpawnAt = t + 300;
+      }
+    }
 
     if (state === 'playing'){
       const elapsed = t - roundStart;
