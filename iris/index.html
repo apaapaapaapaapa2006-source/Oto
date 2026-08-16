@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05030a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="見つめる先が音になる、視線の楽器。8つのルーンを目で狙うと音が鳴り続け、まばたきで澄んだ音を弾く - IRIS">
+<title>IRIS ─ 視線のテルミン</title>
+<style>
+  :root{
+    --void:#05030a;
+    --haze:#140c22;
+    --ghost:#eef2ff;
+    --warn:#ff5470;
+    --gold:#ffd166;
+    --iris:#8a5cff;
+    --cyan:#8affe0;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(42px); opacity:.4; pointer-events:none;
+    animation:drift 14s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--gold),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--iris),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--cyan),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(6vmin,-4vmin) scale(1.15); }
+  }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.12em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--gold),var(--iris),var(--cyan),var(--warn),var(--gold));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite;
+    margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:2rem; position:relative; }
+  #startBtn{
+    position:relative;
+    padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--gold),var(--iris)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(138,92,255,0.5);
+    transition:transform .18s ease, box-shadow .18s ease;
+    animation:breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(138,92,255,0.45); }
+    50%{ box-shadow:0 0 44px rgba(255,209,102,0.6); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{
+    position:relative;
+    margin-top:2.2rem; max-width:22rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--gold); font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(10,6,20,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(180,180,255,0.16); border-radius:16px; padding:0.65rem 0.9rem;
+    color:var(--ghost); min-width:108px;
+  }
+  .panel .lab{ font-size:0.58rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.3rem; }
+  .panel .cnt{ font-size:1.5rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--gold); }
+  .panel .cnt small{ font-size:0.68rem; font-weight:600; color:rgba(238,242,255,0.55); margin-left:.15rem; }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,242,255,0.1); margin-top:0.5rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,var(--iris),var(--cyan)); border-radius:2px;
+    transition:width .12s linear; }
+  .tim{ font-size:0.62rem; letter-spacing:0.1em; margin-top:0.4rem; color:var(--cyan); min-height:0.85em; }
+  .panel[data-side="r"] .tim{ text-align:right; }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.68rem; letter-spacing:0.2em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(180,180,255,0.16);
+    background:rgba(10,6,20,0.4); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease;
+    white-space:nowrap;
+  }
+  #stateDot.playing{ color:var(--gold); border-color:rgba(255,209,102,0.5); box-shadow:0 0 18px rgba(255,209,102,0.25); }
+  #stateDot.silent{ color:var(--warn); border-color:rgba(255,84,112,0.45); box-shadow:none; }
+  #stateDot.closed{ color:var(--iris); border-color:rgba(138,92,255,0.5); box-shadow:0 0 16px rgba(138,92,255,0.3); }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(10,6,20,0.5); border:1px solid rgba(180,180,255,0.18);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(255,209,102,0.16); border-color:rgba(255,209,102,0.5); color:var(--gold); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.2em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+
+  <div id="brand"><div class="b1">IRIS</div><div class="b2">視線のテルミン / 瞳で奏でる</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="starBtn">星 ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">LEFT EYE / 左目</div>
+      <div class="cnt"><span id="lCount">0</span><small>%</small></div>
+      <div class="meter"><b id="lMeter"></b></div>
+      <div class="tim" id="lTim"></div>
+    </div>
+    <div class="panel" data-side="r" style="text-align:right">
+      <div class="lab">RIGHT EYE / 右目</div>
+      <div class="cnt"><span id="rCount">0</span><small>%</small></div>
+      <div class="meter"><b id="rMeter"></b></div>
+      <div class="tim" id="rTim"></div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">IRIS</div>
+    <div id="sub">視線のテルミン — 瞳で奏でる光と音</div>
+    <button id="startBtn">見つめる</button>
+    <div id="hint">
+      ・カメラに顔を向けると、周りに<b>8つのルーン</b>の輪が浮かびます<br>
+      ・<b>視線</b>でルーンを狙うと、その音が鳴り続けます<br>
+      ・<b>まばたき</b>をすると、狙った音が澄んだ音色で弾けます<br>
+      ・<b>眉を上げる</b>ほど音が明るく輝きます<br>
+      ・<b>両目を閉じ続ける</b>と、音が静まります
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const starBtn  = document.getElementById('starBtn');
+  const lCountEl = document.getElementById('lCount');
+  const rCountEl = document.getElementById('rCount');
+  const lTimEl   = document.getElementById('lTim');
+  const rTimEl   = document.getElementById('rTim');
+  const lMeterEl = document.getElementById('lMeter');
+  const rMeterEl = document.getElementById('rMeter');
+
+  // glow layer (trails) — drawn additively over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+  function clamp01(v){ return clamp(v, 0, 1); }
+  function mid(a, b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  //  gaze aims at one of 8 orbiting runes -> pitch + pan.
+  //  dwell strength -> volume, eyebrow raise -> brightness/shimmer,
+  //  jaw open -> vibrato depth, blink -> bell chime, closed eyes -> silence.
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, panNode = null;
+  let osc1 = null, osc2 = null, sub = null, shimmer = null, shimmerGain = null;
+  let filter = null, voiceGain = null;
+  let lfo = null, lfoGain = null;
+  let delay = null, fbGain = null, wet = null;
+  let convolver = null, revGain = null, chimeBus = null;
+  let audioReady = false;
+
+  const ROOT = 220; // A3
+  const STEPS = [0, 2, 4, 6, 8, 10, 12, 14]; // whole-tone — dreamy, oracular
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  function midiRatio(semi){ return Math.pow(2, semi / 12); }
+  function noteName(semi){
+    const midi = 57 + semi; // A3 = MIDI 57
+    return NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+  }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++){
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+      }
+    }
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.0;
+    panNode = actx.createStereoPanner ? actx.createStereoPanner() : actx.createGain();
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 22; comp.ratio.value = 3.2;
+    comp.attack.value = 0.004;  comp.release.value = 0.25;
+
+    filter = actx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 500; filter.Q.value = 5;
+
+    voiceGain = actx.createGain(); voiceGain.gain.value = 0.9;
+
+    osc1 = actx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = ROOT;
+    osc2 = actx.createOscillator(); osc2.type = 'triangle'; osc2.frequency.value = ROOT; osc2.detune.value = 6;
+    sub  = actx.createOscillator(); sub.type  = 'sine';     sub.frequency.value  = ROOT / 2;
+    shimmer = actx.createOscillator(); shimmer.type = 'sine'; shimmer.frequency.value = ROOT * 4;
+
+    const g1 = actx.createGain(); g1.gain.value = 0.44;
+    const g2 = actx.createGain(); g2.gain.value = 0.3;
+    const gs = actx.createGain(); gs.gain.value = 0.24;
+    shimmerGain = actx.createGain(); shimmerGain.gain.value = 0;
+    osc1.connect(g1); osc2.connect(g2); sub.connect(gs); shimmer.connect(shimmerGain);
+    g1.connect(filter); g2.connect(filter); gs.connect(filter); shimmerGain.connect(filter);
+    filter.connect(voiceGain);
+
+    // vibrato LFO — deepens as the jaw opens
+    lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
+    lfoGain = actx.createGain(); lfoGain.gain.value = 0;
+    lfo.connect(lfoGain); lfoGain.connect(osc1.detune); lfoGain.connect(osc2.detune);
+
+    // hazy feedback delay
+    delay  = actx.createDelay(1.0); delay.delayTime.value = 0.3;
+    fbGain = actx.createGain();     fbGain.gain.value = 0.32;
+    wet    = actx.createGain();     wet.gain.value = 0.26;
+    voiceGain.connect(delay); delay.connect(fbGain); fbGain.connect(delay); delay.connect(wet);
+
+    // deep, slow hall reverb — the "oracle's chamber"
+    convolver = actx.createConvolver();
+    convolver.buffer = makeImpulse(3.2, 2.6);
+    revGain = actx.createGain(); revGain.gain.value = 0.4;
+    voiceGain.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+
+    // bell "chime" bus, fired on blink
+    chimeBus = actx.createGain(); chimeBus.gain.value = 0.9;
+    chimeBus.connect(master); chimeBus.connect(convolver);
+
+    voiceGain.connect(master);
+    wet.connect(master);
+    master.connect(panNode); panNode.connect(comp); comp.connect(actx.destination);
+
+    osc1.start(); osc2.start(); sub.start(); shimmer.start(); lfo.start();
+    audioReady = true;
+  }
+
+  // blink chime — bright inharmonic bell, like a glass note struck by light
+  function chime(freq){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    for (const [ratio, amp, dur] of [[1, 0.24, 0.6], [2.76, 0.12, 0.42], [4.5, 0.05, 0.28]]){
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(amp, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(chimeBus);
+      o.start(t); o.stop(t + dur + 0.1);
+    }
+  }
+
+  function applySound(gz){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+
+    if (!gz || !gz.active){
+      master.gain.setTargetAtTime(0.0, t, gz && gz.closing ? 0.3 : 0.09);
+      return;
+    }
+
+    osc1.frequency.setTargetAtTime(gz.freq, t, 0.06);
+    osc2.frequency.setTargetAtTime(gz.freq, t, 0.06);
+    sub.frequency.setTargetAtTime(gz.freq / 2, t, 0.06);
+    shimmer.frequency.setTargetAtTime(gz.freq * 4, t, 0.08);
+
+    const cutoff = 340 + gz.brow * 3600 + gz.strength * 500;
+    filter.frequency.setTargetAtTime(cutoff, t, 0.08);
+    shimmerGain.gain.setTargetAtTime(gz.brow * 0.1, t, 0.12);
+    lfoGain.gain.setTargetAtTime(2 + gz.jaw * 24, t, 0.12);
+
+    if (panNode.pan){
+      panNode.pan.setTargetAtTime(clamp(gz.pan, -1, 1), t, 0.18);
+    }
+
+    const vol = 0.05 + gz.strength * (0.17 + gz.brow * 0.16);
+    master.gain.setTargetAtTime(vol, t, 0.08);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  FACE ANALYSIS
+  //  reads MediaPipe FaceLandmarker blendshape scores + eye-corner landmarks.
+  // ---------------------------------------------------------------------------
+  function readFace(lm, bs){
+    const reC = mid(lm[33], lm[133]);   // right eye (person's right) center
+    const leC = mid(lm[362], lm[263]);  // left eye center
+    const faceC = mid(reC, leC);
+
+    const blinkL = bs.eyeBlinkLeft  || 0;
+    const blinkR = bs.eyeBlinkRight || 0;
+    const openL = clamp01(1 - blinkL);
+    const openR = clamp01(1 - blinkR);
+
+    const brow = clamp01(bs.browInnerUp || 0);
+    const jaw  = clamp01(bs.jawOpen || 0);
+
+    const liL = bs.eyeLookInLeft   || 0, loL = bs.eyeLookOutLeft  || 0;
+    const luL = bs.eyeLookUpLeft   || 0, ldL = bs.eyeLookDownLeft || 0;
+    const liR = bs.eyeLookInRight  || 0, loR = bs.eyeLookOutRight || 0;
+    const luR = bs.eyeLookUpRight  || 0, ldR = bs.eyeLookDownRight || 0;
+
+    // raw gaze in the camera's (unmirrored) frame — flipped for display below
+    const xRaw = ((liL + loR) - (loL + liR)) * 0.5;
+    const yRaw = ((luL + luR) - (ldL + ldR)) * 0.5;
+
+    return { reC, leC, faceC, openL, openR, blinkL, blinkR, brow, jaw, xRaw, yRaw };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MEDIAPIPE FACE LANDMARKER (tasks-vision)
+  // ---------------------------------------------------------------------------
+  let faceLandmarker = null;
+  const RESULT = { face: null, t: 0 };
+  let lastDetectTs = -1;
+
+  async function initFaceModel(){
+    const { FaceLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+    const fileset = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+    faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
+      baseOptions:{
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        delegate: 'GPU'
+      },
+      outputFaceBlendshapes: true,
+      runningMode: 'VIDEO',
+      numFaces: 1
+    });
+  }
+
+  function detectFace(){
+    if (!faceLandmarker || !video.videoWidth) return;
+    let now = performance.now();
+    if (now <= lastDetectTs) now = lastDetectTs + 1;
+    lastDetectTs = now;
+    let result = null;
+    try { result = faceLandmarker.detectForVideo(video, now); } catch (e) { result = null; }
+    if (!result) return;
+
+    const lms = result.faceLandmarks;
+    const bss = result.faceBlendshapes;
+    if (!lms || !lms.length || lms[0].length < 380){ return; }
+
+    const lm = lms[0];
+    const cats = (bss && bss[0] && bss[0].categories) ? bss[0].categories : [];
+    const bs = {};
+    for (const c of cats){ bs[c.categoryName] = c.score; }
+
+    RESULT.face = readFace(lm, bs);
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let starsOn = true;
+  starBtn.addEventListener('click', () => {
+    starsOn = !starsOn;
+    starBtn.textContent = starsOn ? '星 ON' : '星 OFF';
+    starBtn.classList.toggle('active', starsOn);
+  });
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(5,3,10,0.48)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(28,18,52,0.58)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.16, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,1,6,0.84)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // drifting starfield
+  const stars = Array.from({ length: 90 }, () => ({
+    x: Math.random(), y: Math.random(), r: 0.4 + Math.random()*1.4,
+    ph: Math.random()*Math.PI*2, sp: 0.0006 + Math.random()*0.0012
+  }));
+  function drawStars(t){
+    if (!starsOn) return;
+    ctx.save(); ctx.globalCompositeOperation = 'screen';
+    for (const s of stars){
+      const tw = 0.5 + 0.5*Math.sin(t*0.0015 + s.ph);
+      s.y += s.sp * 0.03;
+      if (s.y > 1.02) s.y = -0.02;
+      ctx.fillStyle = `rgba(220,220,255,${0.15 + tw*0.35})`;
+      ctx.beginPath(); ctx.arc(s.x*W, s.y*H, s.r, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---- sparkle particles (reticle trail) ----
+  const parts = [];
+  const MAX_PARTS = 140;
+  function spawnSpark(x, y, hue, boost){
+    if (parts.length >= MAX_PARTS) return;
+    const a = Math.random() * Math.PI * 2;
+    const s = 0.2 + Math.random() * (0.6 + boost * 1.4);
+    parts.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 0.3, life: 1,
+      decay: 0.014 + Math.random()*0.02, r: 1 + Math.random()*2, hue });
+  }
+  function updateDrawParts(){
+    for (let i = parts.length - 1; i >= 0; i--){
+      const p = parts[i];
+      p.x += p.vx; p.y += p.vy; p.vy -= 0.003; p.life -= p.decay;
+      if (p.life <= 0){ parts.splice(i,1); continue; }
+      fctx.fillStyle = `hsla(${p.hue},100%,${60+p.life*25}%,${p.life*0.85})`;
+      fctx.beginPath(); fctx.arc(p.x, p.y, p.r*p.life, 0, Math.PI*2); fctx.fill();
+    }
+  }
+
+  // ---- chime shards (blink burst) ----
+  const shards = [];
+  function spawnShards(x, y, hue){
+    for (let i=0;i<18;i++){
+      const a = Math.random()*Math.PI*2, s = 1.5 + Math.random()*4;
+      shards.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s, life:1,
+        decay:0.014+Math.random()*0.02, hue, len:4+Math.random()*8, rot:a });
+    }
+  }
+  function updateDrawShards(){
+    for (let i=shards.length-1;i>=0;i--){
+      const p = shards[i];
+      p.x += p.vx; p.y += p.vy; p.vx *= 0.95; p.vy *= 0.95; p.life -= p.decay;
+      if (p.life<=0){ shards.splice(i,1); continue; }
+      fctx.save(); fctx.translate(p.x,p.y); fctx.rotate(p.rot);
+      fctx.strokeStyle = `hsla(${p.hue},100%,72%,${p.life})`;
+      fctx.lineWidth = 1.6; fctx.beginPath(); fctx.moveTo(-p.len/2,0); fctx.lineTo(p.len/2,0); fctx.stroke();
+      fctx.restore();
+    }
+  }
+
+  // ---- rune ring geometry ----
+  const RUNE_COUNT = 8;
+  function ringGeometry(){
+    const cx = W * 0.5, cy = H * 0.46;
+    const maxR = Math.min(W, H) * 0.34;
+    return { cx, cy, maxR, runeR: maxR * 0.86, reach: maxR * 1.05, captureR: maxR * 0.17 };
+  }
+
+  function drawRing(geo, t, runeGlow, activeIdx, alphaMul){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const rot = t * 0.00006;
+
+    // faint static boundary octagon
+    c.shadowBlur = 10; c.strokeStyle = `hsla(255,70%,72%,${0.18*alphaMul})`;
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let i=0;i<=RUNE_COUNT;i++){
+      const a = -Math.PI/2 + (i%RUNE_COUNT)*(Math.PI*2/RUNE_COUNT) + rot;
+      const x = geo.cx + Math.cos(a)*geo.runeR, y = geo.cy + Math.sin(a)*geo.runeR;
+      i===0 ? c.moveTo(x,y) : c.lineTo(x,y);
+    }
+    c.stroke();
+
+    // rotating dashed outer ring
+    c.shadowBlur = 14; c.strokeStyle = `hsla(45,90%,68%,${0.35*alphaMul})`;
+    c.lineWidth = 1.4;
+    c.setLineDash([geo.maxR*0.08, geo.maxR*0.05]);
+    c.lineDashOffset = -t*0.05;
+    c.beginPath(); c.arc(geo.cx, geo.cy, geo.maxR*1.02, 0, Math.PI*2); c.stroke();
+    c.setLineDash([]);
+
+    // runes
+    for (let i=0;i<RUNE_COUNT;i++){
+      const a = -Math.PI/2 + i*(Math.PI*2/RUNE_COUNT) + rot;
+      const x = geo.cx + Math.cos(a)*geo.runeR, y = geo.cy + Math.sin(a)*geo.runeR;
+      const hue = (i * 45) % 360;
+      const g = clamp01(runeGlow[i] || 0);
+      const on = i === activeIdx;
+      const rad = 7 + g*7 + (on ? 4 : 0);
+      c.shadowBlur = 10 + g*18; c.shadowColor = `hsla(${hue},100%,65%,0.9)`;
+      const rg = c.createRadialGradient(x,y,0,x,y,rad*2.2);
+      rg.addColorStop(0, `hsla(${hue},100%,${on?80:65}%,${(0.55+g*0.4)*alphaMul})`);
+      rg.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+      c.fillStyle = rg; c.beginPath(); c.arc(x,y,rad*2.2,0,Math.PI*2); c.fill();
+      c.fillStyle = `hsla(${hue},100%,88%,${(on?1:0.7)*alphaMul})`;
+      c.beginPath(); c.arc(x,y,3+g*2,0,Math.PI*2); c.fill();
+    }
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  function drawBeam(x1, y1, x2, y2, t, strength, hue){
+    if (strength <= 0.02) return;
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const segs = 10;
+    c.beginPath();
+    for (let i=0;i<=segs;i++){
+      const p = i/segs;
+      const x = x1 + (x2-x1)*p;
+      const y = y1 + (y2-y1)*p + Math.sin(p*Math.PI)*-10*strength + Math.sin(t*0.005+p*8)*4*strength;
+      i===0 ? c.moveTo(x,y) : c.lineTo(x,y);
+    }
+    c.strokeStyle = `hsla(${hue},100%,70%,${0.55*strength})`;
+    c.shadowBlur = 14; c.shadowColor = `hsla(${hue},100%,65%,0.8)`;
+    c.lineWidth = 1.4 + strength*2;
+    c.stroke();
+    c.restore();
+  }
+
+  function drawReticle(x, y, hue, strength){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const rad = 6 + strength*6;
+    c.shadowBlur = 16; c.shadowColor = `hsla(${hue},100%,70%,0.9)`;
+    const g = c.createRadialGradient(x,y,0,x,y,rad*3);
+    g.addColorStop(0, `hsla(${hue},100%,85%,0.9)`);
+    g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+    c.fillStyle = g; c.beginPath(); c.arc(x,y,rad*3,0,Math.PI*2); c.fill();
+    c.strokeStyle = `hsla(${hue},100%,80%,0.9)`;
+    c.lineWidth = 1.4;
+    c.beginPath(); c.arc(x,y,rad,0,Math.PI*2); c.stroke();
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  // glowing eye markers at the user's actual eye positions
+  function drawEyeGlow(x, y, open, hue){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    const rad = 5 + open*9;
+    c.shadowBlur = 12; c.shadowColor = `hsla(${hue},100%,70%,0.85)`;
+    const g = c.createRadialGradient(x,y,0,x,y,rad*2.4);
+    g.addColorStop(0, `hsla(${hue},100%,${70+open*15}%,${0.35+open*0.5})`);
+    g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+    c.fillStyle = g; c.beginPath(); c.arc(x,y,rad*2.4,0,Math.PI*2); c.fill();
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  const GAZE_GAIN = 3.4;
+  let gazeXS = 0, gazeYS = 0;
+  let eyesClosed = false, closedSince = 0, hardSilence = false;
+  let lastChimeT = 0;
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+
+    if (running) detectFace();
+
+    ctx.clearRect(0,0,W,H);
+    drawVideoBase();
+    drawStars(t);
+
+    fctx.save();
+    fctx.setTransform(1,0,0,1,0,0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.2)';
+    fctx.fillRect(0,0,fx.width,fx.height);
+    fctx.restore();
+
+    const fresh = (t - RESULT.t) < 400;
+    const face = fresh ? RESULT.face : null;
+    const geo = ringGeometry();
+
+    // gaze target smoothing
+    let targetX = 0, targetY = 0;
+    if (face){
+      let gx = clamp(face.xRaw * GAZE_GAIN, -1, 1);
+      let gy = clamp(-face.yRaw * GAZE_GAIN, -1, 1);
+      if (mirror) gx = -gx;
+      targetX = gx; targetY = gy;
+    }
+    gazeXS += (targetX - gazeXS) * 0.18;
+    gazeYS += (targetY - gazeYS) * 0.18;
+    const reticleX = geo.cx + gazeXS * geo.reach;
+    const reticleY = geo.cy + gazeYS * geo.reach;
+
+    // blink / eyes-closed state
+    let closingNow = false;
+    if (face){
+      const bothClosed = face.blinkL > 0.55 && face.blinkR > 0.55;
+      const bothOpen   = face.blinkL < 0.25 && face.blinkR < 0.25;
+      if (!eyesClosed && bothClosed){ eyesClosed = true; closedSince = t; closingNow = true; }
+      else if (eyesClosed && bothOpen){ eyesClosed = false; hardSilence = false; }
+      hardSilence = eyesClosed && (t - closedSince > 350);
+    } else {
+      eyesClosed = false; hardSilence = false;
+    }
+
+    // per-rune glow + nearest-rune selection
+    const runeGlow = new Array(RUNE_COUNT).fill(0);
+    let nearestIdx = -1, nearestD = Infinity;
+    for (let i=0;i<RUNE_COUNT;i++){
+      const a = -Math.PI/2 + i*(Math.PI*2/RUNE_COUNT) + t*0.00006;
+      const rx = geo.cx + Math.cos(a)*geo.runeR, ry = geo.cy + Math.sin(a)*geo.runeR;
+      const d = Math.hypot(reticleX-rx, reticleY-ry);
+      runeGlow[i] = clamp01(1 - d/(geo.captureR*2.4));
+      if (d < nearestD){ nearestD = d; nearestIdx = i; }
+    }
+    const canPlay = !!face && !hardSilence;
+    const activeIdx = (canPlay && nearestD < geo.captureR*1.5) ? nearestIdx : -1;
+    const strength = activeIdx >= 0 ? clamp01(1 - nearestD/(geo.captureR*1.5)) : 0;
+
+    // chime on blink edge, if aiming at a rune
+    if (closingNow && activeIdx >= 0 && t - lastChimeT > 120){
+      lastChimeT = t;
+      const semi = STEPS[activeIdx];
+      chime(ROOT * midiRatio(semi));
+      const a = -Math.PI/2 + activeIdx*(Math.PI*2/RUNE_COUNT) + t*0.00006;
+      const rx = geo.cx + Math.cos(a)*geo.runeR, ry = geo.cy + Math.sin(a)*geo.runeR;
+      spawnShards(rx, ry, (activeIdx*45)%360);
+    }
+
+    const alphaMul = face ? (hardSilence ? 0.45 : 1) : 0.35;
+    drawRing(geo, t, runeGlow, activeIdx, alphaMul);
+
+    if (face){
+      const fcx = px(face.faceC), fcy = py(face.faceC);
+      const rex = px(face.reC), rey = py(face.reC);
+      const lex = px(face.leC), ley = py(face.leC);
+      drawEyeGlow(rex, rey, face.openR, 42);
+      drawEyeGlow(lex, ley, face.openL, 200);
+
+      if (activeIdx >= 0){
+        const a = -Math.PI/2 + activeIdx*(Math.PI*2/RUNE_COUNT) + t*0.00006;
+        const rx = geo.cx + Math.cos(a)*geo.runeR, ry = geo.cy + Math.sin(a)*geo.runeR;
+        drawBeam(fcx, fcy, rx, ry, t, strength, (activeIdx*45)%360);
+        if (Math.random() < 0.4) spawnSpark(reticleX, reticleY, (activeIdx*45)%360, strength);
+      }
+    }
+
+    drawReticle(reticleX, reticleY, activeIdx>=0 ? (activeIdx*45)%360 : 210, strength);
+    updateDrawParts();
+    updateDrawShards();
+
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    // audio
+    if (activeIdx >= 0){
+      const semi = STEPS[activeIdx];
+      applySound({
+        active:true, freq: ROOT * midiRatio(semi),
+        pan: clamp((reticleX - W/2) / (W/2), -1, 1),
+        brow: face.brow, jaw: face.jaw, strength
+      });
+    } else {
+      applySound({ active:false, closing: hardSilence });
+    }
+
+    // HUD
+    if (face){
+      lCountEl.textContent = Math.round(face.openL*100);
+      rCountEl.textContent = Math.round(face.openR*100);
+      lMeterEl.style.width = Math.round(face.openL*100)+'%';
+      rMeterEl.style.width = Math.round(face.openR*100)+'%';
+      lTimEl.textContent = face.openL > 0.6 ? '開' : (face.openL < 0.25 ? '閉' : '半');
+      rTimEl.textContent = face.openR > 0.6 ? '開' : (face.openR < 0.25 ? '閉' : '半');
+    } else {
+      lCountEl.textContent = 0; rCountEl.textContent = 0;
+      lMeterEl.style.width = '0%'; rMeterEl.style.width = '0%';
+      lTimEl.textContent = ''; rTimEl.textContent = '';
+    }
+
+    if (!face){
+      stateDot.textContent = '顔をカメラに向けてください';
+      stateDot.className = 'silent';
+    } else if (hardSilence){
+      stateDot.textContent = '● CLOSED / 静寂';
+      stateDot.className = 'closed';
+    } else if (activeIdx >= 0){
+      const semi = STEPS[activeIdx];
+      stateDot.textContent = `♪ ${noteName(semi)} ・ ルーン${activeIdx+1}`;
+      stateDot.className = 'playing';
+    } else {
+      stateDot.textContent = 'ルーンを見つめてください';
+      stateDot.className = 'silent';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!faceLandmarker) await initFaceModel();
+      await startStream();
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      starBtn.classList.add('active');
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = '見つめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = '起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
