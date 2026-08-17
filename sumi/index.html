@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0908">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="体の輪郭から墨が滲み、動いた軌跡が一枚の水墨画として残る楽器。止まると墨が乾き、大きく動くと墨が咲いて和の音が響く - SUMI">
+<title>SUMI ─ 墨のにじみ</title>
+<style>
+  :root{
+    --void:#0a0908;
+    --haze:#1c1a17;
+    --ghost:#efece5;
+    --ink:#d8d4c8;
+    --shu:#e2483a;      /* 朱 vermilion */
+    --kin:#c9a86a;      /* 金 subdued gold */
+    --warn:#e2483a;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Mincho ProN','Yu Mincho','YuMincho',serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  /* washi paper grain */
+  #grain{ position:fixed; inset:0; z-index:6; pointer-events:none; opacity:.5; mix-blend-mode:overlay;
+    background-image:
+      repeating-linear-gradient(90deg, rgba(255,252,244,0.035) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(0deg, rgba(255,252,244,0.025) 0 1px, transparent 1px 4px);
+  }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .wash{ position:absolute; border-radius:50%; filter:blur(48px); opacity:.3; pointer-events:none;
+    animation:drift 18s ease-in-out infinite alternate; }
+  .wash.w1{ width:44vmin; height:44vmin; left:6%;  top:10%; background:radial-gradient(circle,rgba(216,212,200,0.55),transparent 70%); }
+  .wash.w2{ width:52vmin; height:52vmin; right:2%; top:32%; background:radial-gradient(circle,rgba(160,156,146,0.5),transparent 70%); animation-delay:-6s; }
+  .wash.w3{ width:30vmin; height:30vmin; left:32%; bottom:6%; background:radial-gradient(circle,rgba(226,72,58,0.35),transparent 70%); animation-delay:-11s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(5vmin,-4vmin) scale(1.14); } }
+
+  #eyebrow{ color:rgba(239,236,229,0.4); font-size:0.64rem; letter-spacing:0.5em; margin-bottom:1.1rem; position:relative; }
+  #title{
+    font-size:2.5rem; font-weight:600; letter-spacing:0.3em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,#8d8a82,#efece5,#d8d4c8,#8d8a82);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 11s linear infinite; margin-bottom:0.5rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(239,236,229,0.5); font-size:0.84rem; letter-spacing:0.18em; margin-bottom:2rem; position:relative; }
+  #startBtn{
+    position:relative;
+    padding:0.9rem 3.2rem; font-size:0.98rem; letter-spacing:0.4em; font-family:inherit; font-weight:600;
+    color:var(--ghost); background:transparent;
+    border:1px solid rgba(226,72,58,0.55); border-radius:0;
+    cursor:pointer; box-shadow:0 0 24px rgba(226,72,58,0.14) inset;
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  #startBtn:hover{ border-color:rgba(226,72,58,0.9); box-shadow:0 0 30px rgba(226,72,58,0.22) inset; }
+  #startBtn:active{ transform:scale(0.97); }
+  #hint{
+    position:relative;
+    margin-top:2.3rem; max-width:23rem; color:rgba(239,236,229,0.46); font-size:0.76rem; line-height:2;
+    letter-spacing:0.05em; text-align:left;
+  }
+  #hint b{ color:var(--ink); font-weight:600; }
+  #hint em{ color:var(--shu); font-style:normal; font-weight:600; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.7; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1.1rem 1.2rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(10,9,8,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(216,212,200,0.16); padding:0.6rem 0.95rem;
+    color:var(--ghost); min-width:112px;
+  }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.28em; color:rgba(239,236,229,0.45); margin-bottom:0.35rem; }
+  .panel .val{ font-size:1.35rem; font-weight:600; line-height:1; font-variant-numeric:tabular-nums; color:var(--ink); }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .val{ color:var(--kin); }
+  .meter{ height:2px; background:rgba(239,236,229,0.12); margin-top:0.5rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%; background:linear-gradient(90deg,rgba(216,212,200,0.9),var(--shu));
+    transition:width .14s linear; }
+  .tim{ font-size:0.6rem; letter-spacing:0.14em; margin-top:0.4rem; color:rgba(239,236,229,0.45); min-height:0.85em; }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.64rem; letter-spacing:0.28em; color:rgba(239,236,229,0.55); font-weight:600;
+    padding:0.42rem 1.2rem; border:1px solid rgba(216,212,200,0.16);
+    background:rgba(10,9,8,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .3s ease, border-color .3s ease, box-shadow .3s ease;
+    white-space:nowrap;
+  }
+  #stateDot.wet{ color:var(--ink); border-color:rgba(216,212,200,0.5); box-shadow:0 0 18px rgba(216,212,200,0.12); }
+  #stateDot.bloom{ color:var(--shu); border-color:rgba(226,72,58,0.6); box-shadow:0 0 20px rgba(226,72,58,0.22); }
+  #stateDot.silent{ color:rgba(239,236,229,0.35); border-color:rgba(216,212,200,0.12); box-shadow:none; }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1.1rem 1.1rem 0; display:flex; gap:.5rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.66rem; letter-spacing:0.2em; font-weight:600;
+    color:var(--ghost); background:rgba(10,9,8,0.55); border:1px solid rgba(216,212,200,0.18);
+    padding:0.48rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:transform .15s ease, background .15s ease, border-color .15s ease;
+  }
+  .btn:active{ transform:scale(0.95); }
+  .btn.active{ background:rgba(226,72,58,0.14); border-color:rgba(226,72,58,0.5); color:var(--shu); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.2rem 0 0 1.25rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:600; letter-spacing:0.42em; color:rgba(239,236,229,0.8); }
+  #brand .b2{ font-size:0.55rem; letter-spacing:0.26em; color:rgba(239,236,229,0.36); margin-top:.3rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="grain"></div>
+
+  <div id="brand"><div class="b1">SUMI</div><div class="b2">墨のにじみ / 体で描く</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="washBtn">筆を洗う</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">SUMI / 墨</div>
+      <div class="val"><span id="inkVal">0</span><span style="font-size:.66rem;color:rgba(239,236,229,.45);margin-left:.2rem">滴</span></div>
+      <div class="meter"><b id="wetMeter"></b></div>
+      <div class="tim" id="wetTim">乾いています</div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">UGOKI / 動き</div>
+      <div class="val"><span id="moveVal">0</span><span style="font-size:.66rem;color:rgba(239,236,229,.45);margin-left:.2rem">%</span></div>
+      <div class="meter"><b id="moveMeter"></b></div>
+      <div class="tim" id="noteTim"></div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div class="wash w1"></div><div class="wash w2"></div><div class="wash w3"></div>
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">墨</div>
+    <div id="sub">SUMI ─ 体の輪郭から墨がにじむ</div>
+    <button id="startBtn">筆を取る</button>
+    <div id="hint">
+      ・カメラの前に立つと、体の<b>輪郭</b>から墨がにじみ出します<br>
+      ・<b>動いた跡</b>がそのまま一枚の絵として画面に残ります<br>
+      ・止まると墨は<b>乾き</b>、静けさとともに音も引いていきます<br>
+      ・両腕を大きく広げると墨が<em>咲き</em>、鋭く動くと琴が鳴ります<br>
+      ・「<b>筆を洗う</b>」でいつでも白紙に戻せます
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas    = document.getElementById('stage');
+  const ctx       = canvas.getContext('2d');
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const startBtn  = document.getElementById('startBtn');
+  const errorMsg  = document.getElementById('errorMsg');
+  const hud       = document.getElementById('hud');
+  const topbar    = document.getElementById('topbar');
+  const brand     = document.getElementById('brand');
+  const centerHud = document.getElementById('centerHud');
+  const stateDot  = document.getElementById('stateDot');
+  const flipBtn   = document.getElementById('flipBtn');
+  const washBtn   = document.getElementById('washBtn');
+  const inkVal    = document.getElementById('inkVal');
+  const moveVal   = document.getElementById('moveVal');
+  const wetMeter  = document.getElementById('wetMeter');
+  const moveMeter = document.getElementById('moveMeter');
+  const wetTim    = document.getElementById('wetTim');
+  const noteTim   = document.getElementById('noteTim');
+
+  // dry layer: the accumulated painting. persists across frames (never auto-cleared).
+  const dry  = document.createElement('canvas');
+  const dctx = dry.getContext('2d');
+  // wet layer: freshly laid ink, redrawn every frame with soft blur.
+  const wet  = document.createElement('canvas');
+  const wctx = wet.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    const prevW = dry.width, prevH = dry.height;
+    let carry = null;
+    if (prevW > 0 && prevH > 0){
+      // preserve the painting across a resize
+      carry = document.createElement('canvas');
+      carry.width = prevW; carry.height = prevH;
+      try { carry.getContext('2d').drawImage(dry, 0, 0); } catch(e){ carry = null; }
+    }
+
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    dry.width = W * DPR; dry.height = H * DPR;
+    wet.width = W * DPR; wet.height = H * DPR;
+    dctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    wctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    if (carry){
+      dctx.save();
+      dctx.setTransform(1, 0, 0, 1, 0, 0);
+      try { dctx.drawImage(carry, 0, 0, carry.width, carry.height, 0, 0, dry.width, dry.height); } catch(e){}
+      dctx.restore();
+    }
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  SEGMENTATION ANALYSIS
+  //  Unlike a per-column height readout, SUMI needs the *whole contour* plus a
+  //  per-cell motion field: ink is laid where the silhouette edge has just moved.
+  // ---------------------------------------------------------------------------
+  const GW = 96, GH = 54;                 // analysis grid
+  const MASK_THRESH = 128;
+  const maskCv = document.createElement('canvas');
+  maskCv.width = GW; maskCv.height = GH;
+  const mctx = maskCv.getContext('2d', { willReadFrequently: true });
+
+  let cur  = new Uint8Array(GW * GH);
+  let prev = new Uint8Array(GW * GH);
+  let havePrev = false;
+
+  const RESULT = {
+    t: 0,
+    coverage: 0,
+    motion: 0,        // 0..1 smoothed body motion
+    spread: 0,        // 0..1 horizontal extent of the silhouette (arms wide -> 1)
+    edges: [],        // {x,y,m} normalised contour points that moved
+    centroidX: 0.5,
+    centroidY: 0.5,
+    ang: 0,           // direction the body is travelling — brush stroke angle
+    speed: 0          // 0..1 how fast it is travelling
+  };
+  let motionEMA = 0, spreadEMA = 0;
+  let pcx = -1, pcy = -1, angEMA = 0, speedEMA = 0;
+
+  function onSegResults(results){
+    if (!results || !results.segmentationMask) return;
+    try { mctx.drawImage(results.segmentationMask, 0, 0, GW, GH); }
+    catch(e){ return; }
+    let data;
+    try { data = mctx.getImageData(0, 0, GW, GH).data; }
+    catch(e){ return; }
+
+    const tmp = prev; prev = cur; cur = tmp; // reuse buffers
+    let covered = 0, sumX = 0, sumY = 0, minX = GW, maxX = -1, changed = 0;
+
+    for (let i = 0, n = GW * GH; i < n; i++){
+      const on = data[i * 4] > MASK_THRESH ? 1 : 0;
+      cur[i] = on;
+      if (on){
+        covered++;
+        const x = i % GW;
+        sumX += x;
+        sumY += (i - x) / GW;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+      }
+      if (havePrev && cur[i] !== prev[i]) changed++;
+    }
+
+    // contour cells that sit on a moving edge
+    const edges = [];
+    if (covered > 0){
+      for (let y = 1; y < GH - 1; y++){
+        for (let x = 1; x < GW - 1; x++){
+          const i = y * GW + x;
+          if (!cur[i]) continue;
+          const border = !cur[i - 1] || !cur[i + 1] || !cur[i - GW] || !cur[i + GW];
+          if (!border) continue;
+          // how much this neighbourhood shifted since the previous frame
+          let m = 0;
+          if (havePrev){
+            for (let dy = -1; dy <= 1; dy++){
+              for (let dx = -1; dx <= 1; dx++){
+                const j = i + dy * GW + dx;
+                if (cur[j] !== prev[j]) m++;
+              }
+            }
+          }
+          if (m > 0 || !havePrev){
+            edges.push({ x: x / GW, y: y / GH, m: m / 9 });
+          }
+        }
+      }
+    }
+
+    const coverage = covered / (GW * GH);
+    const rawMotion = Math.min(1, changed / (GW * GH) * 9);
+    const rawSpread = maxX >= 0 ? Math.min(1, (maxX - minX) / (GW * 0.82)) : 0;
+    motionEMA = motionEMA * 0.78 + rawMotion * 0.22;
+    spreadEMA = spreadEMA * 0.85 + rawSpread * 0.15;
+
+    const cxN = covered ? (sumX / covered) / GW : 0.5;
+    const cyN = covered ? (sumY / covered) / GH : 0.5;
+    // travel direction of the body — used as the brush stroke angle, so marks
+    // stretch along the movement instead of being round dots
+    if (covered && pcx >= 0){
+      const dx = cxN - pcx, dy = cyN - pcy;
+      const sp = Math.hypot(dx, dy);
+      if (sp > 0.0015){
+        const a = Math.atan2(dy, dx);
+        // shortest-path angle blend, so it doesn't spin when crossing ±π
+        let d = a - angEMA;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        angEMA += d * 0.35;
+      }
+      speedEMA = speedEMA * 0.7 + Math.min(1, sp * 22) * 0.3;
+    }
+    pcx = covered ? cxN : -1;
+    pcy = cyN;
+
+    RESULT.coverage = coverage;
+    RESULT.motion = motionEMA;
+    RESULT.spread = spreadEMA;
+    RESULT.edges = edges;
+    RESULT.centroidX = cxN;
+    RESULT.centroidY = cyN;
+    RESULT.ang = angEMA;
+    RESULT.speed = speedEMA;
+    RESULT.t = performance.now();
+    havePrev = true;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  //  A breathy shakuhachi-like air tone whose brightness follows how wet the
+  //  paper is, koto plucks (hirajoshi tuning) when ink lands hard, and a taiko
+  //  boom when the whole silhouette blooms open.
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, panNode = null;
+  let breathSrc = null, breathFilter = null, breathGain = null;
+  let bodyOsc = null, bodyGain = null, bodyFilter = null;
+  let convolver = null, revGain = null, pluckBus = null;
+  let delay = null, fbGain = null, wetSend = null;
+  let audioReady = false;
+
+  const ROOT = 146.83;                 // D3
+  const HIRAJOSHI = [0, 2, 3, 7, 8];   // classic koto tuning
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const NOTE_JA = ['一','二','三','四','五','六','七','八','九','十'];
+
+  function midiRatio(semi){ return Math.pow(2, semi / 12); }
+  function scaleSemi(step){
+    const oct = Math.floor(step / HIRAJOSHI.length);
+    return HIRAJOSHI[((step % HIRAJOSHI.length) + HIRAJOSHI.length) % HIRAJOSHI.length] + 12 * oct;
+  }
+  function noteName(semi){
+    const midi = 50 + semi; // D3 = MIDI 50
+    return NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+  }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++){
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+      }
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  const noiseBuf = { buf: null };
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    panNode = actx.createStereoPanner ? actx.createStereoPanner() : actx.createGain();
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 22; comp.ratio.value = 3;
+    comp.attack.value = 0.006;  comp.release.value = 0.3;
+
+    // long, soft hall — ink drifting in a quiet room
+    convolver = actx.createConvolver();
+    convolver.buffer = makeImpulse(3.4, 2.2);
+    revGain = actx.createGain(); revGain.gain.value = 0.4;
+    convolver.connect(revGain); revGain.connect(comp);
+
+    delay = actx.createDelay(1.2); delay.delayTime.value = 0.42;
+    fbGain = actx.createGain();    fbGain.gain.value = 0.3;
+    wetSend = actx.createGain();   wetSend.gain.value = 0.22;
+    delay.connect(fbGain); fbGain.connect(delay); delay.connect(wetSend); wetSend.connect(comp);
+
+    noiseBuf.buf = makeNoiseBuffer(2.4);
+
+    // breath: band-passed noise, the "air" of a shakuhachi
+    breathSrc = actx.createBufferSource();
+    breathSrc.buffer = noiseBuf.buf; breathSrc.loop = true;
+    breathFilter = actx.createBiquadFilter();
+    breathFilter.type = 'bandpass'; breathFilter.frequency.value = 620; breathFilter.Q.value = 1.6;
+    breathGain = actx.createGain(); breathGain.gain.value = 0;
+    breathSrc.connect(breathFilter); breathFilter.connect(breathGain);
+    breathGain.connect(master); breathGain.connect(convolver);
+
+    // body tone: the pitched core under the breath
+    bodyOsc = actx.createOscillator(); bodyOsc.type = 'sine'; bodyOsc.frequency.value = ROOT;
+    bodyFilter = actx.createBiquadFilter();
+    bodyFilter.type = 'lowpass'; bodyFilter.frequency.value = 700; bodyFilter.Q.value = 3;
+    bodyGain = actx.createGain(); bodyGain.gain.value = 0;
+    bodyOsc.connect(bodyFilter); bodyFilter.connect(bodyGain);
+    bodyGain.connect(master); bodyGain.connect(convolver); bodyGain.connect(delay);
+
+    pluckBus = actx.createGain(); pluckBus.gain.value = 0.9;
+    pluckBus.connect(master); pluckBus.connect(convolver); pluckBus.connect(delay);
+
+    master.connect(panNode); panNode.connect(comp); comp.connect(actx.destination);
+
+    breathSrc.start(); bodyOsc.start();
+    audioReady = true;
+  }
+
+  // koto pluck — bright, short, slightly inharmonic
+  function koto(step, vel){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const semi = scaleSemi(step);
+    const freq = ROOT * midiRatio(semi);
+    const amp = 0.1 + vel * 0.2;
+    for (const [ratio, gain, dur] of [[1, 1, 1.5], [2.01, 0.4, 0.8], [3.02, 0.16, 0.45]]){
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = freq * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, amp * gain), t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(pluckBus);
+      o.start(t); o.stop(t + dur + 0.1);
+    }
+    // pick noise
+    if (noiseBuf.buf){
+      const s = actx.createBufferSource(); s.buffer = noiseBuf.buf;
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass';
+      bp.frequency.value = freq * 3; bp.Q.value = 0.8;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(amp * 0.5, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+      s.connect(bp); bp.connect(g); g.connect(pluckBus);
+      s.start(t); s.stop(t + 0.12);
+    }
+    return noteName(semi);
+  }
+
+  // taiko boom — fires when the silhouette blooms wide
+  function taiko(vel){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(112, t);
+    o.frequency.exponentialRampToValueAtTime(41, t + 0.34);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.34 + vel * 0.24, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+    o.connect(g); g.connect(pluckBus);
+    o.start(t); o.stop(t + 0.46);
+
+    if (noiseBuf.buf){
+      const s = actx.createBufferSource(); s.buffer = noiseBuf.buf;
+      const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+      const ng = actx.createGain();
+      ng.gain.setValueAtTime(0.22, t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      s.connect(lp); lp.connect(ng); ng.connect(pluckBus);
+      s.start(t); s.stop(t + 0.24);
+    }
+  }
+
+  function applySound(present, motion, wetness, spread, centroidX){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    if (!present){
+      breathGain.gain.setTargetAtTime(0, t, 0.5);
+      bodyGain.gain.setTargetAtTime(0, t, 0.5);
+      return;
+    }
+    // breath swells with movement; the paper's wetness keeps it alive afterwards
+    const air = Math.min(1, motion * 1.5 + wetness * 0.5);
+    breathGain.gain.setTargetAtTime(0.02 + air * 0.1, t, 0.18);
+    breathFilter.frequency.setTargetAtTime(420 + air * 1500 + spread * 500, t, 0.2);
+
+    bodyGain.gain.setTargetAtTime(0.03 + wetness * 0.1, t, 0.3);
+    bodyFilter.frequency.setTargetAtTime(420 + wetness * 1400, t, 0.25);
+    const semi = scaleSemi(Math.round(spread * 4));
+    bodyOsc.frequency.setTargetAtTime(ROOT * midiRatio(semi) / 2, t, 0.4);
+
+    if (panNode.pan){
+      const p = Math.max(-1, Math.min(1, ((mirror ? 1 - centroidX : centroidX) * 2 - 1) * 0.5));
+      panNode.pan.setTargetAtTime(p, t, 0.3);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false, seg = null;
+
+  function initSeg(){
+    seg = new SelfieSegmentation({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${f}` });
+    seg.setOptions({ modelSelection: 1 });
+    seg.onResults(onSegResults);
+  }
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function startCameraLoop(){
+    if (mpCamera) { mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await seg.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    havePrev = false;
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  washBtn.addEventListener('click', washBrush);
+
+  // ---------------------------------------------------------------------------
+  //  INK
+  // ---------------------------------------------------------------------------
+  function sx(xNorm){ return mirror ? (1 - xNorm) * W : xNorm * W; }
+  function sy(yNorm){ return yNorm * H; }
+
+  const blobs = [];              // wet ink, still spreading
+  const MAX_BLOBS = 220;
+  let inkDrops = 0;              // lifetime count, shown in the HUD
+  let wetness = 0;               // 0..1 how wet the paper currently is
+
+  function spawnBlob(x, y, r, strength, ang, elong){
+    if (blobs.length >= MAX_BLOBS) return;
+    blobs.push({
+      x, y,
+      r: r * (0.45 + Math.random() * 0.35),
+      rTarget: r * (1.15 + Math.random() * 0.9),
+      a: 0.16 + strength * 0.44,
+      life: 1,
+      decay: 0.007 + Math.random() * 0.009,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.2 + 0.1,   // ink drifts down a touch
+      ang: (ang || 0) + (Math.random() - 0.5) * 0.5,
+      elong: 1 + (elong || 0) * (1.4 + Math.random() * 1.6),
+      shu: Math.random() < 0.04,               // rare vermilion droplet
+      baked: false
+    });
+    inkDrops++;
+  }
+
+  // one ink mark: a tight bright core inside a wide faint bleed, stretched
+  // along the stroke direction — the shape a loaded brush actually leaves
+  function paintMark(c, b, alpha, coreBoost, radiusMul){
+    const r = b.r * radiusMul;
+    c.save();
+    c.translate(b.x, b.y);
+    c.rotate(b.ang);
+    c.scale(b.elong, 1);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, r);
+    if (b.shu){
+      g.addColorStop(0,    `rgba(240,96,80,${alpha * coreBoost})`);
+      g.addColorStop(0.16, `rgba(226,72,58,${alpha * 0.62})`);
+      g.addColorStop(0.46, `rgba(176,54,44,${alpha * 0.2})`);
+      g.addColorStop(1,    'rgba(150,48,40,0)');
+    } else {
+      g.addColorStop(0,    `rgba(247,245,240,${alpha * coreBoost})`);
+      g.addColorStop(0.16, `rgba(214,210,200,${alpha * 0.6})`);
+      g.addColorStop(0.46, `rgba(150,147,140,${alpha * 0.18})`);
+      g.addColorStop(1,    'rgba(120,118,112,0)');
+    }
+    c.fillStyle = g;
+    c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2); c.fill();
+    c.restore();
+  }
+
+  function washBrush(){
+    dctx.save();
+    dctx.setTransform(1, 0, 0, 1, 0, 0);
+    dctx.clearRect(0, 0, dry.width, dry.height);
+    dctx.restore();
+    blobs.length = 0;
+    inkDrops = 0;
+    wetness = 0;
+    if (audioReady){
+      // a soft water sound for rinsing the brush
+      const t = actx.currentTime;
+      if (noiseBuf.buf){
+        const s = actx.createBufferSource(); s.buffer = noiseBuf.buf;
+        const bp = actx.createBiquadFilter(); bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(2400, t);
+        bp.frequency.exponentialRampToValueAtTime(600, t + 0.5);
+        bp.Q.value = 0.7;
+        const g = actx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.16, t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+        s.connect(bp); bp.connect(g); g.connect(pluckBus);
+        s.start(t); s.stop(t + 0.6);
+      }
+    }
+  }
+
+  // wet ink: expands, fades, then bakes a permanent stain into the dry layer
+  function updateBlobs(){
+    wctx.save();
+    wctx.setTransform(1, 0, 0, 1, 0, 0);
+    wctx.clearRect(0, 0, wet.width, wet.height);
+    wctx.restore();
+
+    let wetSum = 0;
+    for (let i = blobs.length - 1; i >= 0; i--){
+      const b = blobs[i];
+      b.r += (b.rTarget - b.r) * 0.06;
+      b.x += b.vx; b.y += b.vy;
+      b.vx *= 0.97; b.vy *= 0.97;
+      b.life -= b.decay;
+
+      if (b.life <= 0){
+        if (!b.baked) bakeBlob(b);
+        blobs.splice(i, 1);
+        continue;
+      }
+      // once it has spread most of the way, start settling into the paper
+      if (!b.baked && b.life < 0.55){
+        bakeBlob(b);
+        b.baked = true;
+      }
+      wetSum += b.life;
+      paintMark(wctx, b, b.a * b.life, 1, 1);
+    }
+    wetness = Math.min(1, wetSum / 26);
+  }
+
+  function bakeBlob(b){
+    // the dried stain: fainter and flatter than wet ink, but permanent
+    paintMark(dctx, b, b.a * 0.26, 0.8, 1.08);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  function drawPaperGround(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    // drain the colour out of the room — this is an ink drawing, not a photo
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = 'hsl(0,0%,50%)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    ctx.fillStyle = 'rgba(10,9,8,0.72)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(38,34,28,0.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.2, W/2, H*0.5, Math.max(W,H)*0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(6,5,4,0.86)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // 朱印 — the vermilion seal every sumi-e carries, bottom right
+  function drawSeal(){
+    const s = Math.max(34, Math.min(W, H) * 0.062);
+    const x = W - s - 28, y = H - s - 168;   // clear of the bottom HUD panel
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.strokeStyle = 'rgba(226,72,58,0.85)';
+    ctx.lineWidth = Math.max(1.6, s * 0.055);
+    ctx.strokeRect(x, y, s, s);
+    ctx.lineWidth = Math.max(1.2, s * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(x + s * 0.24, y + s * 0.3);  ctx.lineTo(x + s * 0.76, y + s * 0.3);
+    ctx.moveTo(x + s * 0.5,  y + s * 0.3);  ctx.lineTo(x + s * 0.5,  y + s * 0.74);
+    ctx.moveTo(x + s * 0.3,  y + s * 0.54); ctx.lineTo(x + s * 0.7,  y + s * 0.54);
+    ctx.moveTo(x + s * 0.28, y + s * 0.74); ctx.lineTo(x + s * 0.72, y + s * 0.74);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const MAX_GLOW = 140;
+  function drawEdgeGlow(edges){
+    if (!edges.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // a busy contour can run to several hundred cells; sample it so the glow
+    // pass stays cheap no matter how much of the frame the body fills
+    const step = Math.max(1, Math.ceil(edges.length / MAX_GLOW));
+    for (let i = 0; i < edges.length; i += step){
+      const e = edges[i];
+      const x = sx(e.x), y = sy(e.y);
+      const r = 5 + e.m * 12;
+      const a = 0.05 + e.m * 0.2;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(239,236,229,${a})`);
+      g.addColorStop(1, 'rgba(239,236,229,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let lastKotoT = 0, lastTaikoT = 0, bloomHold = 0;
+  let lastNote = '';
+  // spread history, so "arms thrown wide" is judged over a real time window
+  // rather than per-frame (which would depend on frame rate)
+  const spreadHist = [];
+  const BLOOM_WINDOW = 380;
+  function spreadRise(t, spreadNow){
+    spreadHist.push({ t, v: spreadNow });
+    while (spreadHist.length > 1 && t - spreadHist[0].t > BLOOM_WINDOW) spreadHist.shift();
+    return spreadNow - spreadHist[0].v;
+  }
+
+  function frame(){
+    requestAnimationFrame(frame);
+    // a hidden/minimised window can report a 0x0 viewport; drawing a zero-sized
+    // canvas throws, so sit the frame out until there is something to paint on
+    if (W < 2 || H < 2 || dry.width < 2 || wet.width < 2) return;
+    const t = performance.now();
+
+    const fresh = (t - RESULT.t) < 500;
+    const present = fresh && RESULT.coverage > 0.012;
+    const motion = present ? RESULT.motion : 0;
+    const spread = present ? RESULT.spread : 0;
+    const edges = present ? RESULT.edges : [];
+
+    // --- lay new ink along the moving contour ---
+    if (present && edges.length){
+      // fewer but more defined marks read as brushwork; a spray of many faint
+      // dots just reads as fog
+      const budget = Math.min(14, Math.ceil(edges.length * (0.03 + motion * 0.28)));
+      const cell = Math.min(W, H) * 0.03;   // jitter across a whole analysis cell
+      // strokes lean along the body's travel; mirroring flips the visual angle
+      const strokeAng = mirror ? Math.PI - RESULT.ang : RESULT.ang;
+      for (let k = 0; k < budget; k++){
+        const e = edges[(Math.random() * edges.length) | 0];
+        if (!e) continue;
+        const strength = Math.min(1, e.m * 1.6 + motion * 0.5);
+        if (strength < 0.08) continue;
+        spawnBlob(
+          sx(e.x) + (Math.random() - 0.5) * cell,
+          sy(e.y) + (Math.random() - 0.5) * cell,
+          5 + strength * Math.min(W, H) * 0.026,
+          strength,
+          strokeAng,
+          RESULT.speed
+        );
+      }
+    }
+
+    updateBlobs();
+
+    // --- sound events ---
+    if (present && motion > 0.1 && t - lastKotoT > 190){
+      lastKotoT = t;
+      const step = Math.max(0, Math.min(9, Math.round(spread * 5 + motion * 4)));
+      const name = koto(step, Math.min(1, motion * 1.6));
+      if (name){
+        lastNote = name;
+        noteTim.textContent = '琴 ' + name + ' ・ ' + NOTE_JA[step];
+      }
+    }
+    // a bloom: arms thrown wide, fast
+    const rise = spreadRise(t, spread);
+    if (present && spread > 0.55 && rise > 0.12 && motion > 0.08 && t - lastTaikoT > 900){
+      lastTaikoT = t;
+      bloomHold = 1;
+      taiko(Math.min(1, motion * 1.4));
+      // a ring of ink blossoms outward from the body's centre
+      const cx = sx(RESULT.centroidX), cy = H * 0.52;
+      const petals = 18;
+      for (let i = 0; i < petals; i++){
+        const ang = (i / petals) * Math.PI * 2 + Math.random() * 0.2;
+        const dist = Math.min(W, H) * (0.1 + Math.random() * 0.17);
+        // petals radiate: each mark stretches along its own outward ray
+        spawnBlob(cx + Math.cos(ang) * dist, cy + Math.sin(ang) * dist * 0.7,
+                  9 + Math.random() * Math.min(W, H) * 0.032,
+                  0.6 + Math.random() * 0.4, ang, 0.55);
+      }
+    }
+    bloomHold *= 0.955;
+
+    applySound(present, motion, wetness, spread, RESULT.centroidX);
+
+    // --- draw ---
+    ctx.clearRect(0, 0, W, H);
+    drawPaperGround();
+
+    // the accumulated painting, then the wet ink on top of it
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(dry, 0, 0);
+    ctx.globalAlpha = 0.9;
+    ctx.filter = 'blur(2px)';
+    ctx.drawImage(wet, 0, 0);
+    ctx.filter = 'none';
+    ctx.globalAlpha = 1;
+    ctx.drawImage(wet, 0, 0);
+    ctx.restore();
+
+    drawEdgeGlow(edges);
+
+    if (bloomHold > 0.02){
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(226,72,58,${bloomHold * 0.07})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+
+    drawSeal();
+
+    // --- HUD ---
+    inkVal.textContent = inkDrops > 9999 ? '9999+' : String(inkDrops);
+    moveVal.textContent = String(Math.round(motion * 100));
+    wetMeter.style.width = Math.round(wetness * 100) + '%';
+    moveMeter.style.width = Math.round(Math.min(1, motion * 1.4) * 100) + '%';
+    wetTim.textContent = wetness > 0.55 ? '墨がたっぷり' : (wetness > 0.18 ? 'にじんでいます' : '乾いています');
+
+    if (!present){
+      stateDot.textContent = 'カメラの前に立ってください';
+      stateDot.className = 'silent';
+    } else if (bloomHold > 0.25){
+      stateDot.textContent = '花 ・ 墨が咲いた';
+      stateDot.className = 'bloom';
+    } else if (motion > 0.12){
+      stateDot.textContent = '筆 ・ 墨がにじむ' + (lastNote ? ' ・ ' + lastNote : '');
+      stateDot.className = 'wet';
+    } else {
+      stateDot.textContent = '静 ・ 墨が乾いていく';
+      stateDot.className = '';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '墨をすっています…';
+    try {
+      if (typeof SelfieSegmentation === 'undefined' || typeof Camera === 'undefined'){
+        throw new Error('人物検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+      }
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!seg) initSeg();
+      await startStream();
+      await startCameraLoop();
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = '筆を取る';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
