@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04030a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="声を出さず、口の形だけで歌う楽器。あ・い・う・え・お の口の形がフォルマント合成の母音になり、顔の高さが音程、眉を上げると合唱が重なる - KOTODAMA">
+<title>KOTODAMA ─ 声なき歌</title>
+<style>
+  :root{
+    --void:#04030a;
+    --haze:#171029;
+    --ghost:#eef2ff;
+    --warn:#ff5470;
+    --gold:#ffd479;
+    --jade:#7fffd0;
+    --plum:#c86bff;
+    --accent:#ffd479;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(44px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--gold),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--plum),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--jade),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(6vmin,-4vmin) scale(1.14); }
+  }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.14em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,#ffd479,#7fffd0,#c86bff,#8ab4ff,#ffd479);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite;
+    margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:2rem; position:relative; }
+  #startBtn{
+    position:relative;
+    padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,#ffd479,#c86bff); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(200,140,255,0.5);
+    transition:transform .18s ease, box-shadow .18s ease;
+    animation:breathe 3.4s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(200,140,255,0.45); }
+    50%{ box-shadow:0 0 44px rgba(255,212,121,0.6); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{
+    position:relative;
+    margin-top:2.2rem; max-width:23rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--gold); font-weight:700; }
+  #hint em{ color:var(--jade); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(9,6,18,0.44); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(190,175,255,0.15); border-radius:16px; padding:0.65rem 0.9rem;
+    color:var(--ghost); min-width:112px;
+  }
+  .panel .lab{ font-size:0.58rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.3rem; }
+  .panel .cnt{ font-size:1.7rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .panel .cnt small{ font-size:0.62rem; font-weight:600; color:rgba(238,242,255,0.5); margin-left:.3rem; letter-spacing:0.14em; }
+  .panel[data-side="r"]{ text-align:right; }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,242,255,0.1); margin-top:0.5rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,#ffd479,#c86bff); border-radius:2px;
+    transition:width .1s linear; }
+  .meter.jade b{ background:linear-gradient(90deg,#7fffd0,#8ab4ff); }
+  .tim{ font-size:0.6rem; letter-spacing:0.1em; margin-top:0.4rem; color:rgba(238,242,255,0.55); min-height:0.85em; }
+  .panel[data-side="r"] .tim{ color:var(--jade); }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.68rem; letter-spacing:0.18em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(190,175,255,0.16);
+    background:rgba(9,6,18,0.42); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease;
+    white-space:nowrap;
+  }
+  #stateDot.singing{ color:var(--gold); border-color:rgba(255,212,121,0.5); box-shadow:0 0 18px rgba(255,212,121,0.25); }
+  #stateDot.choir{ color:var(--jade); border-color:rgba(127,255,208,0.5); box-shadow:0 0 20px rgba(127,255,208,0.3); }
+  #stateDot.silent{ color:rgba(160,155,185,0.85); border-color:rgba(150,145,180,0.3); box-shadow:none; }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(9,6,18,0.5); border:1px solid rgba(190,175,255,0.18);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(255,212,121,0.14); border-color:rgba(255,212,121,0.5); color:var(--gold); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.24em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+
+  <div id="brand"><div class="b1">KOTODAMA</div><div class="b2">言霊 / 声なき歌</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="scaleBtn">旋法 陽旋法</button>
+    <button class="btn" id="mistBtn">霞 ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">VOWEL / 母音</div>
+      <div class="cnt"><span id="vowelEl">—</span><small id="vowelRomaEl"></small></div>
+      <div class="meter"><b id="voiceMeter"></b></div>
+      <div class="tim" id="formantEl"></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">PITCH / 音程</div>
+      <div class="cnt"><span id="noteEl">—</span></div>
+      <div class="meter jade"><b id="choirMeter"></b></div>
+      <div class="tim" id="scaleEl">陽旋法</div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">VOICELESS INSTRUMENT</div>
+    <div id="title">KOTODAMA</div>
+    <div id="sub">言霊 — 声を出さずに、口の形だけで歌う</div>
+    <button id="startBtn">うたう</button>
+    <div id="hint">
+      ・<b>声は出しません</b>。口の形だけで、機械があなたの代わりに歌います<br>
+      ・<b>あ・い・う・え・お</b> の口をつくると、その母音がそのまま鳴ります<br>
+      ・<b>口の開き</b>で声の大きさ、<b>顔の高さ</b>で音程（上を向くほど高く）<br>
+      ・<em>眉を上げる</em>と合唱が重なり、<em>首をかしげる</em>とビブラートがかかる<br>
+      ・口を閉じると静寂。閉じてから開き直すと、言葉が切り替わります
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas    = document.getElementById('stage');
+  const ctx       = canvas.getContext('2d');
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const startBtn  = document.getElementById('startBtn');
+  const errorMsg  = document.getElementById('errorMsg');
+  const hud       = document.getElementById('hud');
+  const topbar    = document.getElementById('topbar');
+  const brand     = document.getElementById('brand');
+  const centerHud = document.getElementById('centerHud');
+  const stateDot  = document.getElementById('stateDot');
+  const flipBtn   = document.getElementById('flipBtn');
+  const scaleBtn  = document.getElementById('scaleBtn');
+  const mistBtn   = document.getElementById('mistBtn');
+  const vowelEl   = document.getElementById('vowelEl');
+  const vowelRomaEl = document.getElementById('vowelRomaEl');
+  const voiceMeter  = document.getElementById('voiceMeter');
+  const formantEl = document.getElementById('formantEl');
+  const noteEl    = document.getElementById('noteEl');
+  const choirMeter= document.getElementById('choirMeter');
+  const scaleEl   = document.getElementById('scaleEl');
+
+  // glow layer (trails) — drawn additively over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const clamp   = (v, a, b) => Math.max(a, Math.min(b, v));
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+  function mid(a,b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
+
+  // ---------------------------------------------------------------------------
+  //  VOWEL SPACE
+  //  Japanese vowels live at well-known spots in the (F1,F2) formant plane.
+  //  The mouth's jaw opening drives F1, its spread/rounding drives F2 — so the
+  //  shape of your lips *is* the vowel, continuously morphing between the five.
+  // ---------------------------------------------------------------------------
+  const VOWELS = [
+    { k:'あ', r:'A', f1:780, f2:1180, hue:26  },
+    { k:'い', r:'I', f1:300, f2:2280, hue:158 },
+    { k:'う', r:'U', f1:340, f2:900,  hue:284 },
+    { k:'え', r:'E', f1:530, f2:1840, hue:48  },
+    { k:'お', r:'O', f1:500, f2:840,  hue:206 }
+  ];
+
+  function formantsFor(f){
+    const f1 = 290 + f.open01 * 560;
+    const f2 = clamp(780 + f.wide01 * 1560 - f.round01 * 170 + f.open01 * 170, 700, 2450);
+    const f3 = 2480 + f.wide01 * 520;
+    return { f1, f2, f3 };
+  }
+  function classifyVowel(f1, f2){
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < VOWELS.length; i++){
+      const p = VOWELS[i];
+      const d = Math.pow(Math.log(f1 / p.f1), 2) + Math.pow(Math.log(f2 / p.f2), 2) * 1.35;
+      if (d < bd){ bd = d; best = i; }
+    }
+    return best;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  SCALES & PITCH LADDER
+  // ---------------------------------------------------------------------------
+  const SCALES = [
+    { name:'陽旋法', steps:[0,2,5,7,9] },
+    { name:'都節',   steps:[0,1,5,7,8] },
+    { name:'琉球',   steps:[0,4,5,7,11] }
+  ];
+  let scaleIdx = 0;
+  const PITCH_STEPS = 12;
+  const BASE = 130.81; // C3
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  function semitoneFor(degree){
+    const st = SCALES[scaleIdx].steps;
+    const d = clamp(Math.round(degree), 0, PITCH_STEPS - 1);
+    const oct = Math.floor(d / st.length);
+    return st[d % st.length] + 12 * oct;
+  }
+  function midiRatio(semi){ return Math.pow(2, semi / 12); }
+  function noteName(semi){
+    const midi = 48 + semi; // C3 = MIDI 48
+    return NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE — a formant (vocal tract) synthesiser
+  //  A buzzing glottal source runs through three parallel band-pass "formants"
+  //  whose frequencies are steered by the shape of your mouth. Breath noise is
+  //  mixed into the same tract so a barely-open mouth whispers.
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, panNode = null;
+  let osc1 = null, osc2 = null, subOsc = null, glottalBus = null, srcTone = null;
+  let formantIn = null, fmt1 = null, fmt2 = null, fmt3 = null;
+  let fmtG1 = null, fmtG2 = null, fmtG3 = null, bypassGain = null, formantSum = null;
+  let artGain = null, voiceGain = null;
+  let noiseSrc = null, breathBP = null, breathGain = null;
+  let choirA = null, choirB = null, choirFilter = null, choirGain = null;
+  let lfo = null, lfoGain = null;
+  let delayNode = null, fbGain = null, wetGain = null;
+  let convolver = null, revGain = null, chimeBus = null, padGain = null;
+  let audioReady = false;
+  const noiseBuf = { buf: null };
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++){
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+      }
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -17; comp.knee.value = 20; comp.ratio.value = 3.2;
+    comp.attack.value = 0.005;  comp.release.value = 0.24;
+    panNode = actx.createStereoPanner ? actx.createStereoPanner() : actx.createGain();
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(3.2, 2.6);
+    revGain = actx.createGain(); revGain.gain.value = 0.42;
+
+    noiseBuf.buf = makeNoiseBuffer(2.0);
+
+    // --- glottal source (the "vocal folds") ---
+    glottalBus = actx.createGain(); glottalBus.gain.value = 1.0;
+    osc1 = actx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = BASE;
+    osc2 = actx.createOscillator(); osc2.type = 'sawtooth'; osc2.frequency.value = BASE; osc2.detune.value = -9;
+    subOsc = actx.createOscillator(); subOsc.type = 'sine'; subOsc.frequency.value = BASE / 2;
+    const g1 = actx.createGain(); g1.gain.value = 0.42;
+    const g2 = actx.createGain(); g2.gain.value = 0.26;
+    const gs = actx.createGain(); gs.gain.value = 0.16;
+    osc1.connect(g1); osc2.connect(g2); subOsc.connect(gs);
+    g1.connect(glottalBus); g2.connect(glottalBus); gs.connect(glottalBus);
+
+    srcTone = actx.createBiquadFilter();
+    srcTone.type = 'lowpass'; srcTone.frequency.value = 2600; srcTone.Q.value = 0.7;
+    glottalBus.connect(srcTone);
+
+    // --- breath noise (aspiration) shares the same tract ---
+    noiseSrc = actx.createBufferSource();
+    noiseSrc.buffer = noiseBuf.buf; noiseSrc.loop = true;
+    breathBP = actx.createBiquadFilter();
+    breathBP.type = 'bandpass'; breathBP.frequency.value = 1600; breathBP.Q.value = 0.8;
+    breathGain = actx.createGain(); breathGain.gain.value = 0.0001;
+    noiseSrc.connect(breathBP); breathBP.connect(breathGain);
+
+    // --- the vocal tract: three parallel formant resonators ---
+    formantIn = actx.createGain(); formantIn.gain.value = 1.0;
+    srcTone.connect(formantIn); breathGain.connect(formantIn);
+
+    fmt1 = actx.createBiquadFilter(); fmt1.type = 'bandpass'; fmt1.frequency.value = 700; fmt1.Q.value = 9;
+    fmt2 = actx.createBiquadFilter(); fmt2.type = 'bandpass'; fmt2.frequency.value = 1200; fmt2.Q.value = 11;
+    fmt3 = actx.createBiquadFilter(); fmt3.type = 'bandpass'; fmt3.frequency.value = 2600; fmt3.Q.value = 12;
+    fmtG1 = actx.createGain(); fmtG1.gain.value = 1.0;
+    fmtG2 = actx.createGain(); fmtG2.gain.value = 0.5;
+    fmtG3 = actx.createGain(); fmtG3.gain.value = 0.18;
+    bypassGain = actx.createGain(); bypassGain.gain.value = 0.12;
+    formantSum = actx.createGain(); formantSum.gain.value = 1.0;
+
+    formantIn.connect(fmt1); formantIn.connect(fmt2); formantIn.connect(fmt3);
+    formantIn.connect(bypassGain);
+    fmt1.connect(fmtG1); fmt2.connect(fmtG2); fmt3.connect(fmtG3);
+    fmtG1.connect(formantSum); fmtG2.connect(formantSum); fmtG3.connect(formantSum);
+    bypassGain.connect(formantSum);
+
+    // articulation gain: dipped on every plosive re-attack
+    artGain = actx.createGain(); artGain.gain.value = 1.0;
+    voiceGain = actx.createGain(); voiceGain.gain.value = 0.0001;
+    formantSum.connect(artGain); artGain.connect(voiceGain);
+
+    // --- ethereal space: feedback delay + long convolution reverb ---
+    delayNode = actx.createDelay(1.2); delayNode.delayTime.value = 0.34;
+    fbGain = actx.createGain(); fbGain.gain.value = 0.3;
+    wetGain = actx.createGain(); wetGain.gain.value = 0.22;
+    voiceGain.connect(delayNode); delayNode.connect(fbGain); fbGain.connect(delayNode);
+    delayNode.connect(wetGain);
+
+    voiceGain.connect(panNode);
+    voiceGain.connect(convolver);
+    wetGain.connect(panNode);
+    convolver.connect(revGain); revGain.connect(panNode);
+
+    // --- choir layer (brow raise) ---
+    choirA = actx.createOscillator(); choirA.type = 'triangle'; choirA.frequency.value = BASE * 2;
+    choirB = actx.createOscillator(); choirB.type = 'sine';     choirB.frequency.value = BASE * 3;
+    choirA.detune.value = 6; choirB.detune.value = -7;
+    choirFilter = actx.createBiquadFilter();
+    choirFilter.type = 'lowpass'; choirFilter.frequency.value = 2400; choirFilter.Q.value = 0.9;
+    choirGain = actx.createGain(); choirGain.gain.value = 0.0001;
+    choirA.connect(choirFilter); choirB.connect(choirFilter);
+    choirFilter.connect(choirGain);
+    choirGain.connect(panNode); choirGain.connect(convolver);
+
+    // --- chime bus (a soft bell each time the pitch step changes) ---
+    chimeBus = actx.createGain(); chimeBus.gain.value = 0.9;
+    chimeBus.connect(panNode); chimeBus.connect(convolver);
+
+    // --- ambient drone bed ---
+    const padA = actx.createOscillator(); padA.type = 'sine';     padA.frequency.value = BASE / 2;
+    const padB = actx.createOscillator(); padB.type = 'triangle'; padB.frequency.value = BASE * 0.75;
+    const padFilter = actx.createBiquadFilter();
+    padFilter.type = 'lowpass'; padFilter.frequency.value = 420; padFilter.Q.value = 1.2;
+    padGain = actx.createGain(); padGain.gain.value = 0.045;
+    padA.connect(padFilter); padB.connect(padFilter);
+    padFilter.connect(padGain); padGain.connect(panNode); padGain.connect(convolver);
+    const padLfo = actx.createOscillator(); padLfo.type = 'sine'; padLfo.frequency.value = 0.07;
+    const padLfoGain = actx.createGain(); padLfoGain.gain.value = 130;
+    padLfo.connect(padLfoGain); padLfoGain.connect(padFilter.frequency);
+
+    // --- vibrato ---
+    lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5.0;
+    lfoGain = actx.createGain(); lfoGain.gain.value = 0;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc1.detune); lfoGain.connect(osc2.detune);
+    lfoGain.connect(subOsc.detune); lfoGain.connect(choirA.detune); lfoGain.connect(choirB.detune);
+
+    panNode.connect(master); master.connect(comp); comp.connect(actx.destination);
+
+    osc1.start(); osc2.start(); subOsc.start();
+    choirA.start(); choirB.start();
+    padA.start(); padB.start(); padLfo.start();
+    lfo.start(); noiseSrc.start();
+
+    audioReady = true;
+  }
+
+  function applyVoice(v){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+
+    if (!v.active){
+      voiceGain.gain.setTargetAtTime(0.0001, t, 0.10);
+      breathGain.gain.setTargetAtTime(0.0001, t, 0.14);
+      choirGain.gain.setTargetAtTime(0.0001, t, 0.18);
+      return;
+    }
+
+    osc1.frequency.setTargetAtTime(v.freq, t, 0.045);
+    osc2.frequency.setTargetAtTime(v.freq, t, 0.045);
+    subOsc.frequency.setTargetAtTime(v.freq / 2, t, 0.05);
+    choirA.frequency.setTargetAtTime(v.freq * 2, t, 0.07);
+    choirB.frequency.setTargetAtTime(v.freq * 3, t, 0.07);
+
+    fmt1.frequency.setTargetAtTime(v.f1, t, 0.05);
+    fmt2.frequency.setTargetAtTime(v.f2, t, 0.05);
+    fmt3.frequency.setTargetAtTime(v.f3, t, 0.09);
+    fmtG2.gain.setTargetAtTime(0.30 + v.bright * 0.42, t, 0.08);
+    fmtG3.gain.setTargetAtTime(0.08 + v.bright * 0.24, t, 0.08);
+    srcTone.frequency.setTargetAtTime(1500 + v.bright * 3200, t, 0.09);
+    breathBP.frequency.setTargetAtTime(1100 + v.bright * 2200, t, 0.1);
+
+    lfoGain.gain.setTargetAtTime(v.vib, t, 0.12);
+    lfo.frequency.setTargetAtTime(4.4 + v.vib * 0.06, t, 0.2);
+
+    breathGain.gain.setTargetAtTime(0.05 + (1 - v.vol01) * 0.14, t, 0.09);
+    voiceGain.gain.setTargetAtTime(0.05 + v.vol01 * 0.30, t, 0.06);
+    choirGain.gain.setTargetAtTime(0.004 + v.choir * 0.075, t, 0.12);
+
+    if (panNode.pan) panNode.pan.setTargetAtTime(v.pan, t, 0.14);
+  }
+
+  // a plosive: the tract closes and bursts open again — a new syllable
+  function articulate(strength){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    artGain.gain.cancelScheduledValues(t);
+    artGain.gain.setValueAtTime(0.05, t);
+    artGain.gain.linearRampToValueAtTime(1, t + 0.05 + (1 - clamp01(strength)) * 0.05);
+
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+    bp.frequency.setValueAtTime(2400, t);
+    bp.frequency.exponentialRampToValueAtTime(520, t + 0.09);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.05 + clamp01(strength) * 0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    src.connect(bp); bp.connect(g); g.connect(panNode);
+    src.start(t); src.stop(t + 0.16);
+  }
+
+  // soft bell whenever the sung step changes
+  function chime(freq){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    for (const spec of [[1, 0.055, 1.2], [2.01, 0.04, 0.85], [3.02, 0.018, 0.55]]){
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * spec[0];
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(spec[1], t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + spec[2]);
+      o.connect(g); g.connect(chimeBus);
+      o.start(t); o.stop(t + spec[2] + 0.1);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  FACE READING
+  //  Blendshapes give normalised, self-calibrating mouth measurements; when they
+  //  are unavailable we fall back to raw landmark geometry.
+  // ---------------------------------------------------------------------------
+  let browBase = 0;
+
+  function readFace(lm, bs){
+    if (!lm || lm.length < 468) return null;
+    const faceH = dist(lm[10], lm[152]) || 1e-4;
+    const nose  = lm[1];
+    const mouth = mid(lm[13], lm[14]);
+    const eyeR  = lm[33], eyeL = lm[263];
+    const roll  = Math.atan2(eyeL.y - eyeR.y, eyeL.x - eyeR.x);
+
+    let open01, wide01, round01, brow01;
+    const hasBS = bs && typeof bs.jawOpen === 'number';
+    if (hasBS){
+      open01 = clamp01(bs.jawOpen * 1.4);
+      const smile   = ((bs.mouthSmileLeft   || 0) + (bs.mouthSmileRight   || 0)) * 0.5;
+      const stretch = ((bs.mouthStretchLeft || 0) + (bs.mouthStretchRight || 0)) * 0.5;
+      wide01  = clamp01(smile * 1.6 + stretch * 0.9);
+      round01 = clamp01((bs.mouthPucker || 0) * 1.1 + (bs.mouthFunnel || 0) * 0.7);
+      const bi = bs.browInnerUp || 0;
+      const bo = ((bs.browOuterUpLeft || 0) + (bs.browOuterUpRight || 0)) * 0.5;
+      brow01 = clamp01((bi * 0.6 + bo * 0.7 - 0.12) / 0.5);
+    } else {
+      const openRaw = dist(lm[13], lm[14]) / faceH;
+      open01 = clamp01((openRaw - 0.012) / 0.15);
+      const wRaw = dist(lm[61], lm[291]) / faceH;
+      wide01  = clamp01((wRaw - 0.40) / 0.13);
+      round01 = clamp01((0.40 - wRaw) / 0.09);
+      const browRaw = (dist(lm[105], lm[159]) + dist(lm[334], lm[386])) * 0.5 / faceH;
+      if (browBase <= 0) browBase = browRaw;
+      browBase += (browRaw - browBase) * 0.004;   // slow self-calibration
+      brow01 = browBase > 0 ? clamp01((browRaw - browBase) / (browBase * 0.13)) : 0;
+    }
+
+    return { open01, wide01, round01, brow01, roll, nose, mouth, faceH };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MEDIAPIPE FACE LANDMARKER (tasks-vision)
+  // ---------------------------------------------------------------------------
+  let faceLandmarker = null;
+  const RESULT = { face: null, t: 0 };
+  let lastDetectTs = -1;
+
+  async function initFaceModel(){
+    const { FaceLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+    const fileset = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+    faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
+      baseOptions:{
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        delegate: 'GPU'
+      },
+      outputFaceBlendshapes: true,
+      runningMode: 'VIDEO',
+      numFaces: 1
+    });
+  }
+
+  function detectFace(){
+    if (!faceLandmarker || !video.videoWidth) return;
+    let now = performance.now();
+    if (now <= lastDetectTs) now = lastDetectTs + 1;
+    lastDetectTs = now;
+    let result = null;
+    try { result = faceLandmarker.detectForVideo(video, now); } catch(e){ result = null; }
+    if (!result) return;
+
+    const lms = result.faceLandmarks;
+    if (!lms || !lms.length || !lms[0] || lms[0].length < 468) return;
+
+    const bss = result.faceBlendshapes;
+    const cats = (bss && bss[0] && bss[0].categories) ? bss[0].categories : [];
+    const bs = {};
+    for (const c of cats){ if (c && c.categoryName) bs[c.categoryName] = c.score; }
+
+    const face = readFace(lms[0], bs);
+    if (!face) return;
+    RESULT.face = face;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  scaleBtn.addEventListener('click', () => {
+    scaleIdx = (scaleIdx + 1) % SCALES.length;
+    scaleBtn.textContent = '旋法 ' + SCALES[scaleIdx].name;
+    scaleEl.textContent = SCALES[scaleIdx].name;
+  });
+
+  let mistOn = true;
+  mistBtn.addEventListener('click', () => {
+    mistOn = !mistOn;
+    mistBtn.textContent = mistOn ? '霞 ON' : '霞 OFF';
+    mistBtn.classList.toggle('active', mistOn);
+  });
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — base
+  // ---------------------------------------------------------------------------
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(4,3,10,0.52)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(34,22,58,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.17, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,1,6,0.85)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // drifting mist (霞)
+  const mistBlobs = Array.from({ length: 6 }, () => ({
+    x: Math.random(), y: Math.random(),
+    r: 0.26 + Math.random() * 0.26,
+    sx: (Math.random() - 0.5) * 0.00006, sy: (Math.random() - 0.5) * 0.00004,
+    hue: 230 + Math.random() * 120, ph: Math.random() * Math.PI * 2
+  }));
+  function drawMist(t){
+    const now = t * 0.001;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (const b of mistBlobs){
+      b.x += b.sx; b.y += b.sy;
+      if (b.x < -0.4) b.x = 1.4; if (b.x > 1.4) b.x = -0.4;
+      if (b.y < -0.4) b.y = 1.4; if (b.y > 1.4) b.y = -0.4;
+      const cx = b.x * W, cy = b.y * H, rr = b.r * Math.max(W, H);
+      const puls = 0.5 + 0.5 * Math.sin(now * 0.35 + b.ph);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
+      g.addColorStop(0, `hsla(${(b.hue + now * 4) % 360},60%,62%,${0.04 + puls * 0.05})`);
+      g.addColorStop(1, 'hsla(0,0%,0%,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — the voice made visible
+  // ---------------------------------------------------------------------------
+  // the formant halo: a ring whose lobes count out F1 and F2
+  function drawHalo(cx, cy, R, t, f1, f2, vol, hue, choir){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    const lobes1 = 3 + Math.round(clamp01((f1 - 290) / 560) * 4);
+    const lobes2 = 6 + Math.round(clamp01((f2 - 700) / 1750) * 9);
+    const rings = choir > 0.3 ? 4 : 3;
+    for (let ring = 0; ring < rings; ring++){
+      const rr = R * (1 + ring * 0.2);
+      const amp = (0.05 + vol * 0.17) * (1 - ring * 0.18);
+      c.beginPath();
+      for (let i = 0; i <= 96; i++){
+        const a = (i / 96) * Math.PI * 2;
+        const w = 1 + Math.sin(a * lobes1 + t * 0.0016) * amp
+                    + Math.sin(a * lobes2 - t * 0.0021) * amp * 0.55;
+        const x = cx + Math.cos(a) * rr * w;
+        const y = cy + Math.sin(a) * rr * w * 1.06;
+        if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+      }
+      c.closePath();
+      const alpha = (0.5 - ring * 0.11) * (0.22 + vol * 0.78);
+      c.strokeStyle = `hsla(${hue + ring * 8},95%,${70 - ring * 7}%,${Math.max(0, alpha)})`;
+      c.lineWidth = Math.max(0.6, 2.3 - ring * 0.5);
+      c.shadowBlur = 18; c.shadowColor = `hsla(${hue},100%,66%,0.85)`;
+      c.stroke();
+    }
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  // floating kana — the words your silent mouth releases
+  const glyphs = [];
+  const MAX_GLYPHS = 80;
+  function spawnGlyph(x, y, ch, hue, size){
+    if (glyphs.length >= MAX_GLYPHS) return;
+    glyphs.push({
+      x, y, ch, hue, size,
+      life: 1, decay: 0.0045 + Math.random() * 0.004,
+      vx: (Math.random() - 0.5) * 0.6, vy: -0.55 - Math.random() * 0.9,
+      rot: (Math.random() - 0.5) * 0.4, spin: (Math.random() - 0.5) * 0.005,
+      ph: Math.random() * Math.PI * 2
+    });
+  }
+  function updateDrawGlyphs(t){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let i = glyphs.length - 1; i >= 0; i--){
+      const g = glyphs[i];
+      g.x += g.vx + Math.sin(t * 0.001 + g.ph) * 0.35;
+      g.y += g.vy; g.vy *= 0.996; g.rot += g.spin; g.life -= g.decay;
+      if (g.life <= 0){ glyphs.splice(i, 1); continue; }
+      c.save();
+      c.translate(g.x, g.y);
+      c.rotate(g.rot);
+      c.font = `700 ${g.size}px 'Hiragino Mincho ProN','Yu Mincho',serif`;
+      c.shadowBlur = 16; c.shadowColor = `hsla(${g.hue},100%,70%,0.9)`;
+      c.fillStyle = `hsla(${g.hue},95%,74%,${g.life * 0.85})`;
+      c.fillText(g.ch, 0, 0);
+      c.restore();
+    }
+    c.restore();
+  }
+
+  // breath motes rising from the mouth
+  const motes = [];
+  const MAX_MOTES = 160;
+  function spawnMote(x, y, hue, boost){
+    if (motes.length >= MAX_MOTES) return;
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.5;
+    const s = 0.4 + Math.random() * (0.6 + boost * 1.5);
+    motes.push({
+      x, y, vx: Math.cos(a) * s * 0.5, vy: Math.sin(a) * s,
+      life: 1, decay: 0.011 + Math.random() * 0.016,
+      r: 0.9 + Math.random() * 2.1, hue
+    });
+  }
+  function updateDrawMotes(t){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = motes.length - 1; i >= 0; i--){
+      const p = motes[i];
+      p.x += p.vx + Math.sin(t * 0.002 + p.y * 0.02) * 0.25;
+      p.y += p.vy; p.vy -= 0.006; p.life -= p.decay;
+      if (p.life <= 0){ motes.splice(i, 1); continue; }
+      c.fillStyle = `hsla(${p.hue},95%,${64 + p.life * 26}%,${p.life * 0.8})`;
+      c.beginPath(); c.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  }
+
+  // ripples on every syllable onset
+  const ripples = [];
+  function spawnRipple(x, y, hue, strength){
+    ripples.push({ x, y, r: 10, hue, a: 0.6 + strength * 0.35, grow: 4 + strength * 5 });
+  }
+  function updateDrawRipples(){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = ripples.length - 1; i >= 0; i--){
+      const rp = ripples[i];
+      rp.r += rp.grow; rp.a *= 0.93;
+      if (rp.a < 0.02){ ripples.splice(i, 1); continue; }
+      c.strokeStyle = `hsla(${rp.hue},100%,72%,${rp.a})`;
+      c.lineWidth = 2.2;
+      c.beginPath(); c.ellipse(rp.x, rp.y, rp.r, rp.r * 0.78, 0, 0, Math.PI * 2); c.stroke();
+    }
+    c.restore();
+  }
+
+  // pitch ladder on the left edge
+  function drawLadder(activeDeg, hue, voicing, t){
+    const x = Math.max(18, W * 0.045);
+    const top = H * 0.22, bot = H * 0.78;
+    ctx.save();
+    for (let i = 0; i < PITCH_STEPS; i++){
+      const y = bot - (i / (PITCH_STEPS - 1)) * (bot - top);
+      const on = (i === activeDeg);
+      const len = on ? 30 : 13;
+      ctx.strokeStyle = on
+        ? `hsla(${hue},95%,74%,${voicing ? 0.95 : 0.5})`
+        : 'rgba(238,242,255,0.16)';
+      ctx.lineWidth = on ? 3 : 1.3;
+      ctx.shadowBlur = on ? 14 : 0;
+      ctx.shadowColor = `hsla(${hue},100%,70%,0.9)`;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len, y); ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    if (voicing && activeDeg >= 0){
+      const y = bot - (activeDeg / (PITCH_STEPS - 1)) * (bot - top);
+      const g = ctx.createLinearGradient(x, y, W, y);
+      g.addColorStop(0, `hsla(${hue},95%,72%,0.24)`);
+      g.addColorStop(1, `hsla(${hue},95%,72%,0)`);
+      ctx.strokeStyle = g; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + 34, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // choir rays when the brows lift
+  function drawChoirRays(cx, cy, R, t, hue, amount){
+    if (amount < 0.05) return;
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    const n = 14;
+    for (let i = 0; i < n; i++){
+      const a = (i / n) * Math.PI * 2 + t * 0.0004;
+      const inner = R * 1.25;
+      const outer = R * (1.5 + amount * (0.8 + 0.25 * Math.sin(t * 0.004 + i)));
+      const g = c.createLinearGradient(
+        cx + Math.cos(a) * inner, cy + Math.sin(a) * inner,
+        cx + Math.cos(a) * outer, cy + Math.sin(a) * outer
+      );
+      g.addColorStop(0, `hsla(${hue},95%,78%,${0.35 * amount})`);
+      g.addColorStop(1, `hsla(${hue},95%,78%,0)`);
+      c.strokeStyle = g; c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+      c.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  // the mouth itself: a glowing seed of light
+  function drawMouthGlow(x, y, r, hue, vol){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    const g = c.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `hsla(${hue},100%,86%,${0.5 + vol * 0.45})`);
+    g.addColorStop(0.4, `hsla(${hue},100%,68%,${0.22 + vol * 0.3})`);
+    g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+    c.fillStyle = g;
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let smF1 = 500, smF2 = 1200, smF3 = 2600;
+  let volEnv = 0, choirEnv = 0, vibEnv = 0;
+  let vowelIdx = 0, vowelCandidate = 0, vowelFrames = 0;
+  let curDegree = 5, lastDegree = -1;
+  let mouthShut = true, lastOnset = 0, lastGlyphT = 0, onsetPending = 0;
+  let hueEnv = VOWELS[0].hue;
+
+  // interpolate hue the short way round the colour wheel
+  function easeHue(from, to, k){
+    let d = ((to - from) % 360 + 540) % 360 - 180;
+    return ((from + d * k) % 360 + 360) % 360;
+  }
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+
+    if (running) detectFace();
+
+    ctx.clearRect(0, 0, W, H);
+    drawVideoBase();
+    if (mistOn) drawMist(t);
+
+    // fade the glow layer -> trailing afterglow
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.2)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    const fresh = (t - RESULT.t) < 420;
+    const face = fresh ? RESULT.face : null;
+
+    // ---- analysis ----
+    let targetVol = 0, targetChoir = 0, targetVib = 0;
+    if (face){
+      const F = formantsFor(face);
+      smF1 += (F.f1 - smF1) * 0.25;
+      smF2 += (F.f2 - smF2) * 0.25;
+      smF3 += (F.f3 - smF3) * 0.15;
+
+      const cand = classifyVowel(smF1, smF2);
+      if (cand === vowelCandidate) vowelFrames++;
+      else { vowelCandidate = cand; vowelFrames = 0; }
+      if (vowelFrames >= 3) vowelIdx = vowelCandidate;
+
+      targetVol   = clamp01((face.open01 - 0.05) / 0.85);
+      targetChoir = face.brow01;
+      targetVib   = clamp01(Math.abs(face.roll) / 0.34);
+
+      // pitch: head height, snapped to the ladder with hysteresis
+      const cont = clamp01((0.68 - face.nose.y) / 0.40) * (PITCH_STEPS - 1);
+      if (Math.abs(cont - curDegree) > 0.62) curDegree = clamp(Math.round(cont), 0, PITCH_STEPS - 1);
+
+      // a syllable onset: the mouth closes, then bursts open again
+      if (face.open01 < 0.10){
+        mouthShut = true;
+      } else if (mouthShut && face.open01 > 0.26){
+        mouthShut = false;
+        if (t - lastOnset > 130){
+          lastOnset = t;
+          onsetPending = face.open01;
+          articulate(face.open01);
+        }
+      }
+    } else {
+      mouthShut = true;
+      lastDegree = -1;
+      onsetPending = 0;
+    }
+
+    volEnv   += (targetVol   - volEnv)   * (targetVol   > volEnv ? 0.34 : 0.16);
+    choirEnv += (targetChoir - choirEnv) * 0.12;
+    vibEnv   += (targetVib   - vibEnv)   * 0.10;
+
+    const vowel = VOWELS[clamp(vowelIdx, 0, VOWELS.length - 1)];
+    hueEnv = easeHue(hueEnv, vowel.hue, 0.08);
+    const hue = hueEnv;
+
+    const voicing = !!face && volEnv > 0.035;
+    const semi = semitoneFor(curDegree);
+    const freq = BASE * midiRatio(semi);
+
+    // bell on each new step, while actually singing
+    if (voicing && curDegree !== lastDegree){
+      if (lastDegree >= 0) chime(freq * 2);
+      lastDegree = curDegree;
+    } else if (!voicing){
+      lastDegree = -1;
+    }
+
+    // ---- audio ----
+    let mouthX = W / 2, mouthY = H * 0.5, faceR = Math.min(W, H) * 0.2;
+    if (face){
+      mouthX = px(face.mouth); mouthY = py(face.mouth);
+      faceR = Math.max(48, face.faceH * H * 0.62);
+    }
+    applyVoice({
+      active: voicing,
+      freq,
+      f1: smF1, f2: smF2, f3: smF3,
+      bright: clamp01((smF2 - 700) / 1750),
+      vol01: volEnv,
+      choir: choirEnv,
+      vib: 2 + vibEnv * 34,
+      pan: clamp((mouthX / Math.max(1, W)) * 2 - 1, -1, 1) * 0.6
+    });
+
+    // ---- visuals ----
+    if (face){
+      const headX = px(face.nose), headY = py(face.nose);
+      drawHalo(headX, headY - faceR * 0.06, faceR, t, smF1, smF2, volEnv, hue, choirEnv);
+      drawChoirRays(headX, headY, faceR, t, 168, choirEnv);
+      drawMouthGlow(mouthX, mouthY, 26 + volEnv * 70, hue, volEnv);
+
+      if (voicing){
+        const rate = 150 - volEnv * 95;
+        if (t - lastGlyphT > rate){
+          lastGlyphT = t;
+          spawnGlyph(mouthX + (Math.random() - 0.5) * 26, mouthY - 10,
+            vowel.k, hue, 18 + volEnv * 34);
+        }
+        const n = 1 + Math.floor(volEnv * 3);
+        for (let i = 0; i < n; i++){
+          spawnMote(mouthX + (Math.random() - 0.5) * 30, mouthY, hue, volEnv);
+        }
+      }
+      // a syllable just burst open: one ripple, one bright kana, a puff of motes
+      if (onsetPending > 0){
+        spawnRipple(mouthX, mouthY, hue, onsetPending);
+        spawnGlyph(mouthX, mouthY - 14, vowel.k, hue, 30 + onsetPending * 34);
+        for (let i = 0; i < 10; i++){
+          spawnMote(mouthX + (Math.random() - 0.5) * 34, mouthY, hue, 1);
+        }
+        onsetPending = 0;
+      }
+    }
+
+    updateDrawMotes(t);
+    updateDrawRipples();
+    updateDrawGlyphs(t);
+
+    // composite glow layer over the scene
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    drawLadder(face ? curDegree : -1, hue, voicing, t);
+
+    // ---- HUD ----
+    if (face){
+      vowelEl.textContent = vowel.k;
+      vowelRomaEl.textContent = vowel.r;
+      formantEl.textContent = `F1 ${Math.round(smF1)} ・ F2 ${Math.round(smF2)} Hz`;
+      noteEl.textContent = noteName(semi);
+      voiceMeter.style.width = Math.round(volEnv * 100) + '%';
+      choirMeter.style.width = Math.round(choirEnv * 100) + '%';
+    } else {
+      vowelEl.textContent = '—';
+      vowelRomaEl.textContent = '';
+      formantEl.textContent = '';
+      noteEl.textContent = '—';
+      voiceMeter.style.width = '0%';
+      choirMeter.style.width = '0%';
+    }
+
+    if (!face){
+      stateDot.textContent = '顔をカメラに映してください';
+      stateDot.className = 'silent';
+    } else if (!voicing){
+      stateDot.textContent = '● 静寂 / 口をひらいて';
+      stateDot.className = 'silent';
+    } else if (choirEnv > 0.4){
+      stateDot.textContent = `合唱 ・ ${vowel.k} ・ ${noteName(semi)}`;
+      stateDot.className = 'choir';
+    } else {
+      stateDot.textContent = `♪ ${vowel.k} ・ ${noteName(semi)}`;
+      stateDot.className = 'singing';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!faceLandmarker) await initFaceModel();
+      await startStream();
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      mistBtn.classList.add('active');
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'うたう';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
