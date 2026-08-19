@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#06040c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="カメラに向かって歩いて近づき、鬼が振り向いたら完全に静止する「だるまさんがころんだ」。体の大きさが距離になり、少しでも動くと見つかる - DARUMA">
+<title>DARUMA ─ だるまさんがころんだ</title>
+<style>
+  :root{
+    --void:#06040c; --haze:#1a0a18; --ghost:#eef2ff;
+    --crimson:#ff3b5c; --gold:#ffd166; --jade:#5ef2c0; --indigo:#7b8cff; --warn:#ff3b5c;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #grain{ position:fixed; inset:0; z-index:6; pointer-events:none; mix-blend-mode:screen; opacity:.35;
+    background:repeating-linear-gradient(to bottom, rgba(255,180,200,0.05) 0px, rgba(255,180,200,0.05) 1px, transparent 2px, transparent 4px); }
+  #flash{ position:fixed; inset:0; z-index:7; pointer-events:none; background:rgba(255,59,92,0.0); }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .7s ease, visibility .7s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(44px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--crimson),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--indigo),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--gold),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.15); } }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.2rem; font-weight:800; letter-spacing:0.14em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--crimson),var(--gold),var(--jade),var(--indigo),var(--crimson));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:1.6rem; position:relative; white-space:pre-line; }
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--gold),var(--crimson)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(255,59,92,0.45);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 3s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(255,59,92,0.4); }
+    50%{ box-shadow:0 0 44px rgba(255,209,102,0.55); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #startBtn:disabled{ opacity:.6; cursor:default; animation:none; }
+  #hint{ position:relative; margin-top:2rem; max-width:23rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--jade); font-weight:700; }
+  #hint em{ color:var(--crimson); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+  #resultBox{ display:none; position:relative; margin-bottom:1.5rem; }
+  #resultBox .rlab{ font-size:0.62rem; letter-spacing:0.3em; color:rgba(238,242,255,0.45); }
+  #resultBox .rscore{ font-size:2.6rem; font-weight:800; color:var(--gold); line-height:1.3; font-variant-numeric:tabular-nums; }
+  #resultBox .rsub{ font-size:0.76rem; color:rgba(238,242,255,0.6); letter-spacing:0.04em; line-height:1.8; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{ position:fixed; z-index:12; left:0; right:0; top:0;
+    display:flex; align-items:flex-start; justify-content:space-between; padding:1.1rem 1rem 0;
+    pointer-events:none; opacity:0; transition:opacity .6s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(10,4,14,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(255,209,102,0.2); border-radius:14px; padding:0.6rem 0.9rem; color:var(--ghost); min-width:112px; }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.25rem; }
+  .panel .val{ font-size:1.5rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--jade); }
+  .panel .val small{ font-size:0.66rem; font-weight:600; color:rgba(238,242,255,0.5); margin-left:.12rem; }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .val{ color:var(--gold); }
+  .panel[data-side="r"] .val.low{ color:var(--crimson); }
+  .subLab{ font-size:0.62rem; letter-spacing:0.08em; color:rgba(238,242,255,0.5); margin-top:0.32rem; }
+  .lives{ display:flex; gap:5px; margin-top:0.4rem; justify-content:flex-end; }
+  .lives i{ width:10px; height:10px; border-radius:50%; background:rgba(238,242,255,0.14);
+    transition:background .2s ease, box-shadow .2s ease, transform .2s ease; }
+  .lives i.on{ background:var(--crimson); box-shadow:0 0 9px var(--crimson); transform:scale(1.1); }
+
+  /* ---- chant strip ---- */
+  #chant{ position:fixed; z-index:12; left:50%; top:5.6rem; transform:translateX(-50%);
+    display:flex; gap:.24rem; pointer-events:none; opacity:0; transition:opacity .5s ease; }
+  #chant.show{ opacity:1; }
+  #chant i{ font-style:normal; font-size:1.02rem; font-weight:800; letter-spacing:0;
+    color:rgba(238,242,255,0.16); text-shadow:none; transition:color .1s linear, text-shadow .1s linear, transform .1s linear; }
+  #chant i.on{ color:var(--gold); text-shadow:0 0 14px rgba(255,209,102,0.9); transform:translateY(-2px) scale(1.12); }
+  #chant.red i.on{ color:var(--crimson); text-shadow:0 0 16px rgba(255,59,92,0.95); }
+
+  /* ---- bottom center ---- */
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:1.3rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.55rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; width:min(24rem, 82vw); }
+  #centerHud.show{ opacity:1; }
+  #track{ position:relative; width:100%; height:6px; border-radius:4px; background:rgba(238,242,255,0.1);
+    border:1px solid rgba(255,209,102,0.16); }
+  #trackFill{ display:block; height:100%; width:0%; border-radius:4px;
+    background:linear-gradient(90deg,var(--indigo),var(--jade),var(--gold)); transition:width .16s linear; }
+  #trackTip{ position:absolute; top:-4px; left:0%; width:2px; height:14px; background:var(--gold);
+    box-shadow:0 0 10px var(--gold); transition:left .16s linear; }
+  #stateDot{ font-size:0.68rem; letter-spacing:0.16em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(180,180,255,0.16);
+    background:rgba(10,4,14,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .2s ease, border-color .2s ease, box-shadow .2s ease; white-space:nowrap; text-align:center; }
+  #stateDot.go{ color:var(--jade); border-color:rgba(94,242,192,0.5); box-shadow:0 0 18px rgba(94,242,192,0.25); }
+  #stateDot.stop{ color:var(--crimson); border-color:rgba(255,59,92,0.6); box-shadow:0 0 20px rgba(255,59,92,0.35); }
+  #stateDot.silent{ color:rgba(160,160,180,0.85); border-color:rgba(120,120,140,0.3); box-shadow:none; }
+
+  /* ---- bottom-left controls ---- */
+  #topbar{ position:fixed; z-index:12; left:0; bottom:0; padding:0 0 1.15rem 1.1rem; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(10,4,14,0.55); border:1px solid rgba(255,209,102,0.2);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease; }
+  .btn:active{ transform:scale(0.94); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; display:none; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.3em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.2em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="grain"></div>
+  <div id="flash"></div>
+
+  <div id="brand"><div class="b1">DARUMA</div><div class="b2">だるまさんがころんだ</div></div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">DISTANCE / 距離</div>
+      <div class="val"><span id="progEl">0</span><small>%</small></div>
+      <div class="subLab">完全静止 <span id="freezeEl">0</span></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">TIME</div>
+      <div class="val" id="timeEl">90</div>
+      <div class="lives" id="livesEl"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+    </div>
+  </div>
+
+  <div id="chant"></div>
+
+  <div id="centerHud">
+    <div id="track"><b id="trackFill"></b><span id="trackTip"></span></div>
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+  </div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA GAME</div>
+    <div id="resultBox">
+      <div class="rlab" id="finalLab">RESULT</div>
+      <div class="rscore" id="finalScore">0</div>
+      <div class="rsub" id="finalSub"></div>
+    </div>
+    <div id="title">DARUMA</div>
+    <div id="sub">だるまさんがころんだ — 鬼に見つからず、近づけ</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・まず<b>カメラから3〜4歩下がって</b>全身を映してください<br>
+      ・鬼が背を向けて「だるまさんが…」と唱える間に<b>カメラへ歩いて近づく</b><br>
+      ・「ころんだ！」で鬼が<em>振り向いたら、完全に静止</em>。少しでも動くと見つかります<br>
+      ・見つかると<em>命がひとつ減る</em>。3回で捕まってゲームオーバー<br>
+      ・<b>距離100%</b>まで近づけばクリア。制限時間は90秒
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const progEl   = document.getElementById('progEl');
+  const freezeEl = document.getElementById('freezeEl');
+  const timeEl   = document.getElementById('timeEl');
+  const livesEl  = document.getElementById('livesEl');
+  const chantEl  = document.getElementById('chant');
+  const trackFill= document.getElementById('trackFill');
+  const trackTip = document.getElementById('trackTip');
+  const resultBox= document.getElementById('resultBox');
+  const finalLab = document.getElementById('finalLab');
+  const finalScore=document.getElementById('finalScore');
+  const finalSub = document.getElementById('finalSub');
+  const eyebrow  = document.getElementById('eyebrow');
+  const titleEl  = document.getElementById('title');
+  const subEl    = document.getElementById('sub');
+  const hintEl   = document.getElementById('hint');
+  const flashEl  = document.getElementById('flash');
+
+  // glow layer (additive trails) — drawn over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  GAME CONSTANTS
+  // ---------------------------------------------------------------------------
+  const ROUND_MS   = 90000;
+  const MAX_LIVES  = 3;
+  const SYLL       = ['だ','る','ま','さ','ん','が','こ','ろ','ん','だ'];
+  const SPIN_MS    = 420;    // how long the oni takes to whip around
+  const GRACE_MS   = 380;    // forgiveness window right after the turn
+  const STUN_MS    = 1500;   // caught — held in place
+  const CALIB_HOLD = 1000;   // must stand still & far for this long to begin
+  const CALIB_MAX  = 0.30;   // body scale must be below this to start (= far enough away)
+  const CALIB_MIN  = 0.05;   // below this the body is basically not in frame
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, sfxBus = null, padBus = null;
+  let convolver = null, revGain = null, delay = null, fbGain = null, wetGain = null;
+  let audioReady = false;
+  let padOsc = null, padOsc2 = null, padFilter = null, padGain = null;
+  let ringOsc = null, ringOsc2 = null, ringGain = null;
+  const noiseBuf = { buf: null };
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random()*2-1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.92;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -17; comp.knee.value = 22; comp.ratio.value = 3.4;
+    comp.attack.value = 0.004;  comp.release.value = 0.24;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(2.6, 2.6);
+    revGain = actx.createGain(); revGain.gain.value = 0.3;
+
+    delay = actx.createDelay(1.0); delay.delayTime.value = 0.32;
+    fbGain = actx.createGain(); fbGain.gain.value = 0.3;
+    wetGain = actx.createGain(); wetGain.gain.value = 0.18;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    padBus = actx.createGain(); padBus.gain.value = 0.6;
+
+    sfxBus.connect(master); sfxBus.connect(convolver); sfxBus.connect(delay);
+    padBus.connect(master); padBus.connect(convolver);
+    delay.connect(fbGain); fbGain.connect(delay); delay.connect(wetGain); wetGain.connect(master);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(1.2);
+
+    // low shrine drone — opens up as you close the distance
+    padFilter = actx.createBiquadFilter(); padFilter.type = 'lowpass';
+    padFilter.frequency.value = 260; padFilter.Q.value = 3;
+    padGain = actx.createGain(); padGain.gain.value = 0.0;
+    padOsc = actx.createOscillator(); padOsc.type = 'sawtooth'; padOsc.frequency.value = 58.27; // A#1-ish
+    padOsc2 = actx.createOscillator(); padOsc2.type = 'triangle'; padOsc2.frequency.value = 87.31;
+    padOsc.connect(padFilter); padOsc2.connect(padFilter);
+    padFilter.connect(padGain); padGain.connect(padBus);
+    padOsc.start(); padOsc2.start();
+
+    // the oni's stare — a thin shimmering ring that swells while it watches
+    ringGain = actx.createGain(); ringGain.gain.value = 0.0;
+    ringOsc = actx.createOscillator(); ringOsc.type = 'sine'; ringOsc.frequency.value = 1245;
+    ringOsc2 = actx.createOscillator(); ringOsc2.type = 'sine'; ringOsc2.frequency.value = 1868;
+    const rg2 = actx.createGain(); rg2.gain.value = 0.4;
+    ringOsc.connect(ringGain); ringOsc2.connect(rg2); rg2.connect(ringGain);
+    ringGain.connect(padBus);
+    ringOsc.start(); ringOsc2.start();
+
+    audioReady = true;
+  }
+
+  // wood-block / 拍子木 — one per chanted syllable
+  function woodblock(t, i, last){
+    if (!audioReady) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    src.playbackRate.value = 1.6;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6.5;
+    bp.frequency.setValueAtTime(1500 + i*90 + (last ? 500 : 0), t);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(last ? 0.42 : 0.26, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (last ? 0.18 : 0.1));
+    src.connect(bp); bp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t + 0.22);
+
+    const o = actx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(720 + i*46, t);
+    o.frequency.exponentialRampToValueAtTime(420 + i*30, t + 0.06);
+    const og = actx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.13, t + 0.005);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    o.connect(og); og.connect(sfxBus);
+    o.start(t); o.stop(t + 0.16);
+  }
+
+  // temple gong — the moment the oni turns
+  function gong(t){
+    if (!audioReady) return;
+    const partials = [[1, 0.24, 3.2], [1.51, 0.13, 2.4], [2.34, 0.09, 1.8], [3.16, 0.05, 1.2], [4.21, 0.03, 0.9]];
+    for (const [ratio, amp, dur] of partials){
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.value = 196 * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(amp, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + dur + 0.1);
+    }
+    taiko(t, 0.5);
+  }
+
+  function taiko(t, amp){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(44, t + 0.22);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(amp, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.4);
+
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+    const ng = actx.createGain();
+    ng.gain.setValueAtTime(amp * 0.5, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    src.connect(lp); lp.connect(ng); ng.connect(sfxBus);
+    src.start(t); src.stop(t + 0.16);
+  }
+
+  // heartbeat while the oni stares
+  function heartbeat(t, intensity){
+    if (!audioReady) return;
+    for (let k = 0; k < 2; k++){
+      const st = t + k * 0.17;
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(72, st);
+      o.frequency.exponentialRampToValueAtTime(38, st + 0.16);
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.10 + intensity * 0.2, st + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.2);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.24);
+    }
+  }
+
+  // soft chime each time you gain ground
+  function stepChime(t, k){
+    if (!audioReady) return;
+    const YO = [0, 2, 5, 7, 9];              // 陽旋法 — bright pentatonic
+    const semi = YO[k % 5] + 12 * Math.floor(k / 5);
+    const freq = 523.25 * Math.pow(2, semi / 12);
+    for (const [ratio, amp, dur] of [[1, 0.16, 1.1], [2.02, 0.06, 0.7], [3.01, 0.03, 0.45]]){
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(amp, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + dur + 0.1);
+    }
+  }
+
+  // caught — a dissonant snap of the oni's gaze
+  function catchZap(t){
+    if (!audioReady) return;
+    for (const [f, det] of [[330, 0], [330, 17], [220, -11]]){
+      const o = actx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f * 2.2, t);
+      o.frequency.exponentialRampToValueAtTime(f * 0.42, t + 0.5);
+      o.detune.value = det;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.19, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.62);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + 0.66);
+    }
+    taiko(t, 0.55); taiko(t + 0.19, 0.4);
+  }
+
+  function winFanfare(t){
+    if (!audioReady) return;
+    const YO = [0, 2, 5, 7, 9, 12, 14, 17, 19, 24];
+    YO.forEach((semi, i) => {
+      const st = t + i * 0.085;
+      const freq = 261.63 * Math.pow(2, semi / 12);
+      for (const [ratio, amp, dur] of [[1, 0.17, 1.3], [2.01, 0.06, 0.8]]){
+        const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * ratio;
+        const g = actx.createGain();
+        g.gain.setValueAtTime(0.0001, st);
+        g.gain.exponentialRampToValueAtTime(amp, st + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, st + dur);
+        o.connect(g); g.connect(sfxBus);
+        o.start(st); o.stop(st + dur + 0.1);
+      }
+    });
+    gong(t + 0.9);
+  }
+
+  function loseSound(t){
+    if (!audioReady) return;
+    [0, -4, -9].forEach((semi, i) => {
+      const st = t + i * 0.2;
+      const o = actx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.value = 196 * Math.pow(2, semi / 12);
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.2, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.7);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.74);
+    });
+    taiko(t + 0.6, 0.5);
+  }
+
+  function tickWarn(t){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = 1046;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.11);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  POSE
+  // ---------------------------------------------------------------------------
+  const RESULT = { lm: null, t: 0 };
+  // weighted points the oni watches — torso heavy, limbs lighter (arms wobble naturally)
+  const CORE = [[0, 1.0], [11, 1.25], [12, 1.25], [13, 0.7], [14, 0.7], [15, 0.55], [16, 0.55], [23, 1.0], [24, 1.0]];
+  const POSE_LINKS = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
+
+  function vis(lm, i){ return !!lm && !!lm[i] && (lm[i].visibility === undefined || lm[i].visibility > 0.5); }
+
+  let arNow = 16 / 9;
+  function d2(a, b){ return Math.hypot((a.x - b.x) * arNow, a.y - b.y); }
+
+  // apparent body size == distance from the camera. Shoulders first, head span as
+  // a fallback so stepping in close (shoulders cropped) doesn't blank the reading.
+  // While both are visible we learn the head->shoulder ratio, so the fallback hands
+  // over continuously instead of jumping the distance reading.
+  let headRatio = 2.4; // seeded with a typical head-span : shoulder-span ratio
+  function measure(lm){
+    if (!lm) return null;
+    const shoulders = vis(lm, 11) && vis(lm, 12);
+    const ears = vis(lm, 7) && vis(lm, 8);
+    if (shoulders){
+      const s = d2(lm[11], lm[12]);
+      if (ears){
+        const h = d2(lm[7], lm[8]);
+        if (h > 1e-4 && s > 1e-4) headRatio = headRatio * 0.9 + (s / h) * 0.1;
+      }
+      return { s, src: 's' };
+    }
+    if (ears) return { s: d2(lm[7], lm[8]) * headRatio, src: 'e' };
+    return null;
+  }
+
+  let pose = null;
+  function initPose(){
+    pose = new Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+    pose.setOptions({
+      modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false,
+      minDetectionConfidence: 0.6, minTrackingConfidence: 0.5
+    });
+    pose.onResults(onPoseResults);
+  }
+  function onPoseResults(results){
+    const lm = results && results.poseLandmarks ? results.poseLandmarks : null;
+    if (!lm) return;
+    RESULT.lm = lm;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+  async function startCameraLoop(){
+    if (mpCamera){ mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await pose.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    anchor = null; scaleEMA = null; scaleSrc = null;
+    try { await startStream(); } catch(e){ /* keep previous stream */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — video base
+  // ---------------------------------------------------------------------------
+  let redness = 0; // 0 = safe indigo night, 1 = the oni is looking straight at you
+
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(5,3,10,0.5)';
+    ctx.fillRect(0, 0, W, H);
+
+    // phase tint: cool indigo while you may move, deep crimson while watched
+    const r = Math.round(24 + redness * 76);
+    const g = Math.round(20 - redness * 12);
+    const b = Math.round(58 - redness * 28);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = `rgba(${r},${g},${b},0.62)`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.44, Math.min(W,H)*0.16, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, `rgba(${8 + redness*22},1,6,0.86)`);
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GAME STATE
+  // ---------------------------------------------------------------------------
+  let state = 'idle'; // idle | calib | countdown | green | turning | red | stun | over
+  let progress = 0, baseScale = 0, goalScale = 0;
+  let lives = MAX_LIVES, perfectFreezes = 0, caughtCount = 0;
+  let roundStart = 0, timeLeft = ROUND_MS, lastTickSecond = -1;
+  let calibOkSince = 0, calibStart = 0, calibMaxNow = CALIB_MAX, countdownStart = 0;
+  let chantTimes = [], chantIdx = 0, greenEnd = 0;
+  let spinStart = 0, redEnd = 0, graceEnd = 0, stunEnd = 0;
+  let anchor = null, tension = 0, tensionShown = 0, overFrames = 0, redPeak = 0, redSeen = 0;
+  let scaleEMA = null, scaleSrc = null;
+  let shake = 0, flashAmt = 0, chimeLevel = 0, nextHeartAt = 0;
+  const sparks = [];
+  const rings = [];
+  const motes = Array.from({ length: 46 }, () => ({
+    x: Math.random(), y: Math.random(),
+    vx: (Math.random()-0.5) * 0.00022, vy: -0.00008 - Math.random()*0.00016,
+    r: 0.6 + Math.random()*1.6, ph: Math.random()*Math.PI*2
+  }));
+
+  function clamp01(v){ return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+  function buildChantDom(){
+    chantEl.innerHTML = '';
+    for (const s of SYLL){
+      const i = document.createElement('i');
+      i.textContent = s;
+      chantEl.appendChild(i);
+    }
+  }
+  function setChantLit(n){
+    const kids = chantEl.children;
+    for (let i = 0; i < kids.length; i++) kids[i].classList.toggle('on', i < n);
+  }
+  buildChantDom();
+
+  function updateLives(){
+    const kids = livesEl.children;
+    for (let i = 0; i < kids.length; i++) kids[i].classList.toggle('on', i < lives);
+  }
+
+  // Chant schedule: tempo, acceleration and the tail pause before the turn are all
+  // randomised — the fake-out pause is the whole tension of the real game.
+  function beginChant(now){
+    const iv = (300 - progress * 110) + Math.random() * 90;
+    const style = Math.random();
+    const accel = style < 0.34 ? 0.7 : (style < 0.68 ? 1.0 : 1.4);
+    chantTimes = [];
+    let t = now + 260;
+    for (let i = 0; i < SYLL.length; i++){
+      chantTimes.push(t);
+      const k = i / (SYLL.length - 1);
+      t += iv * (1 + (accel - 1) * k);
+    }
+    chantIdx = 0;
+    setChantLit(0);
+    chantEl.classList.remove('red');
+    const rr = Math.random();
+    greenEnd = t + 120 + rr * rr * 1500;
+    state = 'green';
+  }
+
+  function snapshot(lm, m){
+    const pts = [];
+    for (const [i, w] of CORE){
+      if (vis(lm, i)) pts.push({ i, w, x: lm[i].x, y: lm[i].y });
+    }
+    return { pts, scale: m ? m.s : 0.2, src: m ? m.src : null };
+  }
+
+  // How far you have drifted from where you froze, as a fraction of "caught".
+  function computeTension(lm, m){
+    if (!anchor || !lm || anchor.pts.length < 3) return 0;
+    let sum = 0, wsum = 0;
+    for (const a of anchor.pts){
+      if (!vis(lm, a.i)) continue;
+      const d = Math.hypot((lm[a.i].x - a.x) * arNow, lm[a.i].y - a.y);
+      sum += d * a.w; wsum += a.w;
+    }
+    if (wsum <= 0) return 0;
+    const scaleRef = Math.max(0.05, anchor.scale);
+    const drift = (sum / wsum) / scaleRef;
+    const driftThresh = 0.34 - progress * 0.12;     // the oni's eyes sharpen as you close in
+    let ratio = drift / driftThresh;
+    // sneaking forward changes your apparent size even if the skeleton barely moves
+    if (m && anchor.src && m.src === anchor.src){
+      const grow = Math.abs(m.s - anchor.scale) / scaleRef;
+      const growThresh = 0.13 - progress * 0.04;
+      ratio = Math.max(ratio, grow / growThresh);
+    }
+    return ratio;
+  }
+
+  function spawnSparks(x, y, hue, n, spread){
+    for (let i = 0; i < n; i++){
+      const a = Math.random() * Math.PI * 2;
+      const s = 1 + Math.random() * spread;
+      sparks.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: 1, hue, r: 1 + Math.random()*2.6 });
+    }
+  }
+  function spawnRing(x, y, hue, w){ rings.push({ x, y, r: 6, hue, a: 0.9, w }); }
+
+  function resetGame(){
+    progress = 0; baseScale = 0; goalScale = 0;
+    lives = MAX_LIVES; perfectFreezes = 0; caughtCount = 0;
+    timeLeft = ROUND_MS; lastTickSecond = Math.ceil(ROUND_MS / 1000);
+    anchor = null; tension = 0; tensionShown = 0; overFrames = 0; redPeak = 0; redSeen = 0;
+    scaleEMA = null; scaleSrc = null; chimeLevel = 0; redness = 0;
+    calibOkSince = 0; chantIdx = 0; chantTimes = [];
+    sparks.length = 0; rings.length = 0;
+    setChantLit(0); chantEl.classList.remove('red');
+    progEl.textContent = '0'; freezeEl.textContent = '0';
+    timeEl.textContent = Math.ceil(ROUND_MS / 1000);
+    timeEl.classList.remove('low');
+    trackFill.style.width = '0%'; trackTip.style.left = '0%';
+    updateLives();
+  }
+
+  const COUNTDOWN_LABELS = ['3', '2', '1', 'START!'];
+  const COUNTDOWN_STEP = 650;
+
+  function startGame(){
+    resetGame();
+    state = 'calib';
+    calibStart = performance.now();
+  }
+
+  function beginRound(now){
+    roundStart = now;
+    lastTickSecond = Math.ceil(ROUND_MS / 1000);
+    beginChant(now);
+  }
+
+  function catchPlayer(now){
+    if (state !== 'red') return;
+    state = 'stun';
+    stunEnd = now + STUN_MS;
+    caughtCount++;
+    lives = Math.max(0, lives - 1);
+    updateLives();
+    shake = 16; flashAmt = 1;
+    anchor = null; tension = 0; overFrames = 0;
+    chantEl.classList.add('red');
+    if (audioReady) catchZap(actx.currentTime);
+    spawnRing(W/2, H*0.40, 352, 5);
+    spawnSparks(W/2, H*0.40, 352, 42, 7);
+  }
+
+  function endGame(kind){
+    if (state === 'over') return;
+    state = 'over';
+    anchor = null;
+    redness = 0;
+    if (audioReady){
+      ringGain.gain.setTargetAtTime(0, actx.currentTime, 0.1);
+      padGain.gain.setTargetAtTime(0, actx.currentTime, 0.3);
+      if (kind === 'win') winFanfare(actx.currentTime);
+      else loseSound(actx.currentTime);
+    }
+
+    const remainSec = Math.max(0, Math.round(timeLeft / 1000));
+    let score;
+    if (kind === 'win') score = 5000 + remainSec * 100 + lives * 600 + perfectFreezes * 150;
+    else score = Math.round(progress * 2500) + perfectFreezes * 150;
+
+    finalLab.textContent = kind === 'win' ? 'TOUCHED — 鬼にタッチ' : (kind === 'timeup' ? 'TIME UP' : 'CAUGHT — 捕まった');
+    finalScore.textContent = score;
+    finalSub.textContent =
+      `到達距離 ${Math.round(progress*100)}% ・ 完全静止 ${perfectFreezes}回 ・ 見つかった ${caughtCount}回\n` +
+      (kind === 'win' ? `残り時間 ${remainSec}秒 ・ 残り命 ${lives}` : `残り時間 ${remainSec}秒`);
+    resultBox.style.display = 'block';
+    eyebrow.style.display = 'none';
+    titleEl.textContent = kind === 'win' ? 'CLEAR' : 'GAME OVER';
+    subEl.textContent = kind === 'win' ? '鬼の背にそっと手が届いた' : (kind === 'timeup' ? '時間切れ — 鬼はまだ遠い' : '三度見つかった — 鬼に連れて行かれた');
+    hintEl.style.display = 'none';
+    startBtn.textContent = 'もう一度';
+    chantEl.classList.remove('show');
+    overlay.classList.remove('hidden');
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — the path, the torii and the oni
+  // ---------------------------------------------------------------------------
+  function horizonY(){ return H * 0.52; }
+
+  function drawPath(t){
+    const c = fctx, hy = horizonY(), vx = W / 2;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+
+    // radial guides converging on the oni
+    for (let i = 0; i <= 8; i++){
+      const bx = vx + ((i - 4) / 4) * W * 1.7;
+      c.strokeStyle = `hsla(${248 - redness*210},70%,60%,0.1)`;
+      c.lineWidth = 1;
+      c.beginPath(); c.moveTo(vx, hy); c.lineTo(bx, H); c.stroke();
+    }
+    // transverse bands sweeping toward you as you gain ground
+    for (let k = 0; k < 11; k++){
+      let d = k * 0.95 + 0.4 - progress * 5.2;
+      d = ((d % 10.45) + 10.45) % 10.45 + 0.3;
+      const f = 0.9 / (0.9 + d);
+      const y = hy + (H - hy) * f;
+      const a = Math.min(0.34, f * 0.5);
+      c.strokeStyle = `hsla(${196 - redness*160},85%,${58 + redness*8}%,${a})`;
+      c.lineWidth = 0.6 + f * 2.6;
+      const halfW = W * (0.16 + f * 1.5);
+      c.beginPath(); c.moveTo(vx - halfW, y); c.lineTo(vx + halfW, y); c.stroke();
+    }
+    c.restore();
+  }
+
+  function drawTorii(){
+    const c = fctx, hy = horizonY(), vx = W / 2;
+    const R = Math.min(W, H) * (0.055 + progress * 0.26);
+    const halfW = R * 1.75, hgt = R * 2.5;
+    const baseY = hy + R * 0.95;
+    const topY = baseY - hgt;
+    const a = 0.16 + progress * 0.3;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.strokeStyle = `hsla(354,90%,64%,${a})`;
+    c.lineWidth = Math.max(1.5, R * 0.075);
+    c.lineCap = 'round';
+    c.shadowBlur = 16; c.shadowColor = `hsla(354,100%,60%,${a})`;
+    // pillars
+    c.beginPath(); c.moveTo(vx - halfW*0.86, baseY); c.lineTo(vx - halfW*0.72, topY + hgt*0.14); c.stroke();
+    c.beginPath(); c.moveTo(vx + halfW*0.86, baseY); c.lineTo(vx + halfW*0.72, topY + hgt*0.14); c.stroke();
+    // lower lintel
+    c.beginPath(); c.moveTo(vx - halfW*0.82, topY + hgt*0.27); c.lineTo(vx + halfW*0.82, topY + hgt*0.27); c.stroke();
+    // upper curved lintel
+    c.beginPath();
+    c.moveTo(vx - halfW, topY + hgt*0.1);
+    c.quadraticCurveTo(vx, topY - hgt*0.05, vx + halfW, topY + hgt*0.1);
+    c.stroke();
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  // spin: 0 = back turned, 1 = fully facing you
+  function drawOni(t, spin){
+    const c = fctx, hy = horizonY(), vx = W / 2;
+    const R = Math.min(W, H) * (0.055 + progress * 0.26);
+    const oy = hy - R * 0.15;
+    const flip = Math.cos((1 - spin) * Math.PI); // -1 (back) .. +1 (front)
+    const front = flip > 0;                      // note: not the camera `facing`
+    const sx = Math.max(0.06, Math.abs(flip));
+    const bob = Math.sin(t * 0.0016) * R * 0.05;
+
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.translate(vx, oy + bob);
+    c.scale(sx, 1);
+
+    if (front){
+      const glow = 0.55 + 0.45 * spin;
+      // halo
+      const hg = c.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 2.4);
+      hg.addColorStop(0, `hsla(354,100%,62%,${0.3*glow})`);
+      hg.addColorStop(1, 'hsla(354,100%,50%,0)');
+      c.fillStyle = hg;
+      c.beginPath(); c.arc(0, 0, R * 2.4, 0, Math.PI*2); c.fill();
+
+      // horns
+      c.strokeStyle = `hsla(44,100%,72%,${0.9*glow})`;
+      c.lineWidth = Math.max(2, R * 0.11); c.lineCap = 'round';
+      c.shadowBlur = 14; c.shadowColor = 'rgba(255,209,102,0.8)';
+      c.beginPath(); c.moveTo(-R*0.56, -R*0.72); c.quadraticCurveTo(-R*0.84, -R*1.3, -R*0.5, -R*1.5); c.stroke();
+      c.beginPath(); c.moveTo( R*0.56, -R*0.72); c.quadraticCurveTo( R*0.84, -R*1.3,  R*0.5, -R*1.5); c.stroke();
+
+      // mask outline
+      c.strokeStyle = `hsla(354,95%,66%,${0.95*glow})`;
+      c.lineWidth = Math.max(2, R * 0.09);
+      c.shadowBlur = 20; c.shadowColor = 'rgba(255,59,92,0.85)';
+      c.beginPath();
+      c.moveTo(0, -R*0.98);
+      c.quadraticCurveTo(R*0.92, -R*0.82, R*0.82, R*0.06);
+      c.quadraticCurveTo(R*0.68, R*1.02, 0, R*1.14);
+      c.quadraticCurveTo(-R*0.68, R*1.02, -R*0.82, R*0.06);
+      c.quadraticCurveTo(-R*0.92, -R*0.82, 0, -R*0.98);
+      c.closePath();
+      c.fillStyle = `hsla(348,80%,12%,${0.6*glow})`;
+      c.fill(); c.stroke();
+
+      // eyes
+      for (const ex of [-R*0.36, R*0.36]){
+        const ey = -R*0.16;
+        const eg = c.createRadialGradient(ex, ey, 0, ex, ey, R*0.5);
+        eg.addColorStop(0, `hsla(48,100%,88%,${glow})`);
+        eg.addColorStop(0.35, `hsla(20,100%,64%,${0.8*glow})`);
+        eg.addColorStop(1, 'hsla(354,100%,50%,0)');
+        c.fillStyle = eg;
+        c.beginPath(); c.arc(ex, ey, R*0.5, 0, Math.PI*2); c.fill();
+        c.fillStyle = `hsla(50,100%,94%,${glow})`;
+        c.beginPath(); c.ellipse(ex, ey, R*0.15, R*0.11, 0, 0, Math.PI*2); c.fill();
+      }
+      // brows
+      c.strokeStyle = `hsla(0,0%,100%,${0.7*glow})`;
+      c.lineWidth = Math.max(1.5, R*0.05);
+      c.beginPath(); c.moveTo(-R*0.62, -R*0.5); c.lineTo(-R*0.14, -R*0.3); c.stroke();
+      c.beginPath(); c.moveTo( R*0.62, -R*0.5); c.lineTo( R*0.14, -R*0.3); c.stroke();
+
+      // fanged grin
+      c.strokeStyle = `hsla(48,100%,80%,${0.85*glow})`;
+      c.lineWidth = Math.max(1.5, R*0.055);
+      c.beginPath(); c.moveTo(-R*0.44, R*0.42); c.quadraticCurveTo(0, R*0.78, R*0.44, R*0.42); c.stroke();
+      c.fillStyle = `hsla(48,100%,88%,${0.85*glow})`;
+      for (const fx2 of [-0.26, 0, 0.26]){
+        c.beginPath();
+        c.moveTo(R*fx2 - R*0.06, R*0.46);
+        c.lineTo(R*fx2, R*0.7);
+        c.lineTo(R*fx2 + R*0.06, R*0.46);
+        c.closePath(); c.fill();
+      }
+
+      // gaze beams while it stares hard
+      if (spin > 0.9 && redness > 0.5){
+        const beam = (redness - 0.5) * 2 * (0.25 + tensionShown * 0.5);
+        c.strokeStyle = `hsla(354,100%,70%,${Math.min(0.5, beam)})`;
+        c.lineWidth = Math.max(1, R*0.05);
+        for (const ex of [-R*0.36, R*0.36]){
+          c.beginPath(); c.moveTo(ex, -R*0.16); c.lineTo(ex*2.6, R*3.4); c.stroke();
+        }
+      }
+    } else {
+      // back of the head — a dark knot against the night, eyes shut
+      c.shadowBlur = 12; c.shadowColor = 'rgba(120,140,255,0.5)';
+      c.strokeStyle = 'hsla(232,70%,70%,0.5)';
+      c.lineWidth = Math.max(1.5, R * 0.075);
+      c.beginPath(); c.arc(0, 0, R * 0.95, 0, Math.PI*2); c.stroke();
+      c.fillStyle = 'hsla(240,60%,10%,0.55)';
+      c.beginPath(); c.arc(0, 0, R * 0.95, 0, Math.PI*2); c.fill();
+      // topknot
+      c.strokeStyle = 'hsla(232,70%,76%,0.45)';
+      c.lineWidth = Math.max(1.5, R * 0.09);
+      c.beginPath(); c.arc(0, -R * 1.02, R * 0.3, 0, Math.PI*2); c.stroke();
+      // hair strands
+      c.lineWidth = Math.max(1, R * 0.04);
+      for (let i = -3; i <= 3; i++){
+        const a0 = -Math.PI/2 + i * 0.28;
+        c.beginPath();
+        c.moveTo(Math.cos(a0) * R * 0.3, Math.sin(a0) * R * 0.3);
+        c.lineTo(Math.cos(a0) * R * 1.06, Math.sin(a0) * R * 1.06);
+        c.stroke();
+      }
+      c.shadowBlur = 0;
+    }
+    c.restore();
+
+    // stillness ring — how close the oni is to noticing you
+    if (state === 'red' || state === 'stun'){
+      const rr = R * 1.55;
+      c.save();
+      c.globalCompositeOperation = 'lighter';
+      c.translate(vx, oy + bob);
+      c.strokeStyle = 'hsla(0,0%,100%,0.14)';
+      c.lineWidth = Math.max(2, R * 0.07);
+      c.beginPath(); c.arc(0, 0, rr, 0, Math.PI*2); c.stroke();
+      const fillA = Math.min(1, tensionShown);
+      const hue = 150 - fillA * 150;
+      c.strokeStyle = `hsla(${hue},100%,62%,0.92)`;
+      c.shadowBlur = 16; c.shadowColor = `hsla(${hue},100%,60%,0.9)`;
+      c.beginPath();
+      c.arc(0, 0, rr, -Math.PI/2, -Math.PI/2 + Math.PI*2*fillA);
+      c.stroke();
+      c.shadowBlur = 0;
+      c.restore();
+    }
+  }
+
+  function drawPlayer(lm){
+    if (!lm) return;
+    const c = fctx;
+    const danger = (state === 'red' || state === 'stun') ? Math.min(1, tensionShown) : 0;
+    const hue = 158 - danger * 158;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.shadowBlur = 16; c.shadowColor = `hsla(${hue},100%,60%,0.8)`;
+    c.lineCap = 'round';
+    c.lineWidth = 4;
+    c.strokeStyle = `hsla(${hue},95%,66%,0.85)`;
+    for (const [a, b] of POSE_LINKS){
+      if (!vis(lm, a) || !vis(lm, b)) continue;
+      c.beginPath(); c.moveTo(px(lm[a]), py(lm[a])); c.lineTo(px(lm[b]), py(lm[b])); c.stroke();
+    }
+    // joints
+    c.shadowBlur = 10;
+    for (const [i] of CORE){
+      if (!vis(lm, i)) continue;
+      const x = px(lm[i]), y = py(lm[i]);
+      c.fillStyle = `hsla(${hue},100%,82%,0.9)`;
+      c.beginPath(); c.arc(x, y, 4, 0, Math.PI*2); c.fill();
+    }
+    // head glow
+    if (vis(lm, 0)){
+      const hx = px(lm[0]), hy2 = py(lm[0]);
+      let hr = Math.min(W, H) * 0.05;
+      if (vis(lm, 7) && vis(lm, 8)) hr = Math.max(12, Math.abs(px(lm[7]) - px(lm[8])) * 0.95);
+      const g = c.createRadialGradient(hx, hy2, 0, hx, hy2, hr * 1.8);
+      g.addColorStop(0, `hsla(${hue},100%,80%,0.55)`);
+      g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+      c.fillStyle = g;
+      c.beginPath(); c.arc(hx, hy2, hr * 1.8, 0, Math.PI*2); c.fill();
+    }
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  function drawMotes(t){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const m of motes){
+      m.x += m.vx; m.y += m.vy;
+      if (m.y < -0.05) { m.y = 1.05; m.x = Math.random(); }
+      if (m.x < -0.05) m.x = 1.05; else if (m.x > 1.05) m.x = -0.05;
+      const tw = 0.4 + 0.6 * Math.sin(t * 0.002 + m.ph);
+      c.fillStyle = `hsla(${44 - redness*44},90%,78%,${0.16 + tw*0.2})`;
+      c.beginPath(); c.arc(m.x * W, m.y * H, m.r, 0, Math.PI*2); c.fill();
+    }
+    c.restore();
+  }
+
+  function updateDrawSparks(){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i = sparks.length - 1; i >= 0; i--){
+      const s = sparks[i];
+      s.x += s.vx; s.y += s.vy; s.vx *= 0.94; s.vy = s.vy * 0.94 + 0.08; s.life -= 0.018;
+      if (s.life <= 0){ sparks.splice(i, 1); continue; }
+      c.fillStyle = `hsla(${s.hue},100%,${64 + s.life*24}%,${s.life})`;
+      c.beginPath(); c.arc(s.x, s.y, s.r * s.life, 0, Math.PI*2); c.fill();
+    }
+    for (let i = rings.length - 1; i >= 0; i--){
+      const r = rings[i];
+      r.r += 7; r.a *= 0.93;
+      if (r.a < 0.02){ rings.splice(i, 1); continue; }
+      c.strokeStyle = `hsla(${r.hue},100%,68%,${r.a})`;
+      c.lineWidth = r.w;
+      c.beginPath(); c.arc(r.x, r.y, r.r, 0, Math.PI*2); c.stroke();
+    }
+    c.restore();
+  }
+
+  function drawCountdown(label, q){
+    const scale = 1 + (1 - Math.min(1, q / 0.3)) * 0.6;
+    const alpha = q > 0.75 ? 1 - (q - 0.75) / 0.25 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(W / 2, H * 0.42);
+    ctx.scale(scale, scale);
+    ctx.font = '800 88px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 30; ctx.shadowColor = 'rgba(255,209,102,0.9)';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  function drawBanner(text, color, sizePx){
+    ctx.save();
+    ctx.font = `800 ${sizePx}px 'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 26; ctx.shadowColor = color;
+    ctx.fillStyle = color;
+    ctx.fillText(text, W / 2, H * 0.7);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    arNow = vh > 0 ? vw / vh : 16 / 9;
+
+    const fresh = (t - RESULT.t) < 400;
+    const lm = fresh ? RESULT.lm : null;
+    const m = measure(lm);
+
+    // smoothed apparent size (re-seeded when the measurement source changes)
+    if (m){
+      if (scaleEMA === null || scaleSrc !== m.src){ scaleEMA = m.s; scaleSrc = m.src; }
+      else scaleEMA = scaleEMA * 0.7 + m.s * 0.3;
+    }
+
+    // ---- state machine -------------------------------------------------------
+    if (state === 'calib'){
+      // narrow-FOV cameras or small rooms may never get below CALIB_MAX — relax the
+      // gate slowly after 12s so the game can never deadlock at the start line
+      calibMaxNow = CALIB_MAX + Math.min(0.2, Math.max(0, (t - calibStart - 12000) / 1000) * 0.02);
+      const ok = !!m && scaleEMA !== null && scaleEMA < calibMaxNow && scaleEMA > CALIB_MIN;
+      if (ok){
+        if (!calibOkSince) calibOkSince = t;
+        if (t - calibOkSince >= CALIB_HOLD){
+          baseScale = scaleEMA;
+          goalScale = Math.min(0.62, Math.max(baseScale * 1.85, baseScale + 0.09));
+          state = 'countdown';
+          countdownStart = t;
+        }
+      } else {
+        calibOkSince = 0;
+      }
+    } else if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx >= COUNTDOWN_LABELS.length){
+        chantEl.classList.add('show');
+        beginRound(t);
+      }
+    } else if (state === 'green'){
+      while (chantIdx < chantTimes.length && t >= chantTimes[chantIdx]){
+        chantIdx++;
+        setChantLit(chantIdx);
+        if (audioReady) woodblock(actx.currentTime, chantIdx - 1, chantIdx === chantTimes.length);
+      }
+      if (t >= greenEnd){
+        state = 'turning';
+        spinStart = t;
+        chantEl.classList.add('red');
+        if (audioReady) gong(actx.currentTime);
+      }
+    } else if (state === 'turning'){
+      if (t - spinStart >= SPIN_MS){
+        state = 'red';
+        graceEnd = t + GRACE_MS;
+        redEnd = t + Math.max(900, 1100 + Math.random() * 1500 - progress * 300);
+        anchor = null; tension = 0; tensionShown = 0; overFrames = 0; redPeak = 0; redSeen = 0;
+        nextHeartAt = t + 300;
+      }
+    } else if (state === 'red'){
+      if (t < graceEnd){
+        // still settling — keep re-anchoring so stopping isn't punished
+        if (lm) anchor = snapshot(lm, m);
+        tension = 0; overFrames = 0;
+      } else {
+        if (!anchor && lm) anchor = snapshot(lm, m);
+        const raw = lm ? computeTension(lm, m) : tension * 0.98;
+        if (lm) redSeen++;
+        tension = raw;
+        redPeak = Math.max(redPeak, raw);
+        if (raw >= 1) overFrames++; else overFrames = 0;
+        if (overFrames >= 2) catchPlayer(t);
+      }
+      if (state === 'red' && t >= redEnd){
+        // the bonus needs you actually visible — hiding from the camera isn't stillness
+        if (redPeak < 0.45 && redSeen > 8){
+          perfectFreezes++;
+          freezeEl.textContent = perfectFreezes;
+          spawnRing(W/2, H*0.40, 160, 3);
+          if (audioReady) stepChime(actx.currentTime, 4);
+        }
+        anchor = null; tension = 0;
+        beginChant(t);
+      }
+    } else if (state === 'stun'){
+      if (t >= stunEnd){
+        if (lives <= 0) endGame('caught');
+        else beginChant(t);
+      }
+    }
+
+    // ---- progress: your apparent size IS your distance -----------------------
+    if ((state === 'green' || state === 'turning') && scaleEMA !== null && goalScale > baseScale){
+      const raw = clamp01((scaleEMA - baseScale) / (goalScale - baseScale));
+      if (raw > progress){
+        progress = raw;
+        const lvl = Math.floor(progress * 10);
+        if (lvl > chimeLevel){
+          chimeLevel = lvl;
+          if (audioReady) stepChime(actx.currentTime, lvl - 1);
+          if (lm && vis(lm, 0)) spawnRing(px(lm[0]), py(lm[0]), 160, 2);
+        }
+      }
+      if (progress >= 1) endGame('win');
+    }
+
+    // ---- clock ---------------------------------------------------------------
+    if (state === 'green' || state === 'turning' || state === 'red' || state === 'stun'){
+      timeLeft = Math.max(0, ROUND_MS - (t - roundStart));
+      const sec = Math.ceil(timeLeft / 1000);
+      if (sec !== lastTickSecond){
+        lastTickSecond = sec;
+        timeEl.textContent = sec;
+        timeEl.classList.toggle('low', sec <= 10);
+        if (sec <= 10 && sec > 0 && audioReady) tickWarn(actx.currentTime);
+      }
+      if (timeLeft <= 0) endGame('timeup');
+    }
+
+    // ---- audio beds ----------------------------------------------------------
+    const watching = (state === 'red' || state === 'turning' || state === 'stun');
+    redness += ((watching ? 1 : 0) - redness) * 0.12;
+    tensionShown = tensionShown * 0.7 + Math.min(1.4, tension) * 0.3;
+
+    if (audioReady){
+      const at = actx.currentTime;
+      const live = (state !== 'idle' && state !== 'over');
+      padGain.gain.setTargetAtTime(live ? 0.1 + progress * 0.1 : 0, at, 0.4);
+      padFilter.frequency.setTargetAtTime(220 + progress * 900, at, 0.4);
+      ringGain.gain.setTargetAtTime(state === 'red' ? 0.006 + Math.min(1, tensionShown) * 0.032 : 0, at, 0.15);
+      if (state === 'red' && t >= nextHeartAt){
+        const inten = Math.min(1, tensionShown);
+        heartbeat(at, inten);
+        nextHeartAt = t + 900 - inten * 380;
+      }
+    }
+
+    // ---- render --------------------------------------------------------------
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random()-0.5) * shake, (Math.random()-0.5) * shake);
+      shake *= 0.86;
+    }
+    drawVideoBase();
+
+    // fade the glow layer -> afterglow trails
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.26)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    let spin = 0;
+    if (state === 'turning') spin = clamp01((t - spinStart) / SPIN_MS);
+    else if (state === 'red' || state === 'stun') spin = 1;
+    else if (state === 'green') spin = 0;
+
+    drawMotes(t);
+    if (state !== 'idle'){
+      drawPath(t);
+      drawTorii();
+      drawOni(t, spin);
+    }
+    drawPlayer(lm);
+    updateDrawSparks();
+
+    // composite the glow layer
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx < COUNTDOWN_LABELS.length){
+        drawCountdown(COUNTDOWN_LABELS[idx], (el % COUNTDOWN_STEP) / COUNTDOWN_STEP);
+      }
+    } else if (state === 'stun'){
+      drawBanner('見つかった！', '#ff3b5c', Math.max(26, Math.min(W, H) * 0.075));
+    } else if (state === 'red'){
+      drawBanner('動くな', '#ff8fa3', Math.max(22, Math.min(W, H) * 0.055));
+    }
+
+    ctx.restore(); // shake
+
+    flashAmt *= 0.9;
+    flashEl.style.background = `rgba(255,59,92,${flashAmt * 0.34})`;
+
+    // ---- HUD -----------------------------------------------------------------
+    const pct = Math.round(progress * 100);
+    progEl.textContent = pct;
+    trackFill.style.width = pct + '%';
+    trackTip.style.left = pct + '%';
+
+    if (state === 'calib'){
+      if (!m) stateDot.textContent = '全身がカメラに映るように立ってください';
+      else if (scaleEMA !== null && scaleEMA >= calibMaxNow) stateDot.textContent = 'もっと後ろへ下がってください';
+      else stateDot.textContent = 'そのまま… 位置を測っています';
+      stateDot.className = 'silent';
+    } else if (state === 'countdown'){
+      stateDot.textContent = 'まもなく開始';
+      stateDot.className = 'silent';
+    } else if (state === 'green'){
+      stateDot.textContent = m ? '今のうちに近づけ！' : '体が見えません';
+      stateDot.className = m ? 'go' : 'silent';
+    } else if (state === 'turning'){
+      stateDot.textContent = '振り向く…！';
+      stateDot.className = 'stop';
+    } else if (state === 'red'){
+      if (!m) stateDot.textContent = '体が見えません';
+      else stateDot.textContent = tensionShown > 0.6 ? '⚠ 動いている！' : '動くな — 息を止めて';
+      stateDot.className = 'stop';
+    } else if (state === 'stun'){
+      stateDot.textContent = `見つかった！ 残り命 ${lives}`;
+      stateDot.className = 'stop';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        if (typeof Pose === 'undefined' || typeof Camera === 'undefined'){
+          throw new Error('姿勢検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+        }
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        if (!pose) initPose();
+        await startStream();
+        await startCameraLoop();
+        running = true;
+        booted = true;
+        requestAnimationFrame(frame);
+      } else {
+        if (actx && actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      chantEl.classList.remove('show');
+      resultBox.style.display = 'none';
+      eyebrow.style.display = 'block';
+      titleEl.textContent = 'DARUMA';
+      subEl.textContent = 'だるまさんがころんだ — 鬼に見つからず、近づけ';
+      hintEl.style.display = 'block';
+      errorMsg.style.display = 'none';
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+      startGame();
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
