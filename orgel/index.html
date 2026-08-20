@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04060f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="カメラに見せた光が譜面に焼きつき、流れる走査線が通るたびに音になる光のオルゴール。影を落とすと音が消える - ORGEL">
+<title>ORGEL ─ 光のオルゴール</title>
+<style>
+  :root{
+    --void:#04060f;
+    --haze:#111a33;
+    --ghost:#eef2ff;
+    --warn:#ff5470;
+    --accent:#8affe0;
+    --koto:#8affe0;
+    --fue:#9dff7a;
+    --kane:#c08bff;
+    --gold:#ffd479;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  /* faint music-box comb texture over everything */
+  #grain{ position:fixed; inset:0; z-index:6; pointer-events:none; mix-blend-mode:screen; opacity:.32;
+    background:repeating-linear-gradient(to bottom, rgba(160,220,255,0.05) 0px, rgba(160,220,255,0.05) 1px, transparent 2px, transparent 4px); }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(44px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--koto),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--kane),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--fue),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(6vmin,-4vmin) scale(1.15); }
+  }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.4rem; font-weight:800; letter-spacing:0.16em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,#8affe0,#9dff7a,#ffd479,#c08bff,#8affe0);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite;
+    margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:1.8rem; position:relative; }
+  #startBtn{
+    position:relative;
+    padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,#8affe0,#c08bff); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(140,180,255,0.5);
+    transition:transform .18s ease, box-shadow .18s ease;
+    animation:breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(138,255,224,0.4); }
+    50%{ box-shadow:0 0 44px rgba(192,139,255,0.6); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{
+    position:relative;
+    margin-top:2.2rem; max-width:24rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.95;
+    letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--accent); font-weight:700; }
+  #hint b.k{ color:var(--koto); }
+  #hint b.f{ color:var(--fue); }
+  #hint b.n{ color:var(--kane); }
+  #hint em{ color:var(--warn); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(8,10,24,0.44); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(180,200,255,0.14); border-radius:16px; padding:0.65rem 0.9rem;
+    color:var(--ghost); min-width:116px;
+  }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.3rem; }
+  .panel .cnt{ font-size:1.6rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .panel .cnt small{ font-size:0.68rem; font-weight:600; color:rgba(238,242,255,0.55); margin-left:.2rem; }
+  .panel[data-side="r"]{ text-align:right; }
+  .subLab{ font-size:0.6rem; letter-spacing:0.1em; color:rgba(238,242,255,0.55); margin-top:0.38rem; min-height:0.85em; }
+  .subLab i{ font-style:normal; color:var(--gold); font-weight:700; }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,242,255,0.1); margin-top:0.5rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,#8affe0,#c08bff); border-radius:2px;
+    transition:width .16s linear; }
+  .voices{ display:flex; gap:.6rem; margin-top:0.45rem; justify-content:flex-end; font-size:0.58rem; letter-spacing:.06em; }
+  .voices > span{ display:flex; align-items:center; gap:.24rem; color:rgba(238,242,255,0.55); font-variant-numeric:tabular-nums; }
+  .voices > span::before{ content:''; width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .voices .vk{ color:var(--koto); }
+  .voices .vf{ color:var(--fue); }
+  .voices .vn{ color:var(--kane); }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.66rem; letter-spacing:0.16em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(180,200,255,0.16);
+    background:rgba(8,10,24,0.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease;
+    white-space:nowrap;
+  }
+  #stateDot.playing{ color:var(--accent); border-color:rgba(138,255,224,0.5); box-shadow:0 0 18px rgba(138,255,224,0.22); }
+  #stateDot.silent{ color:rgba(160,170,200,0.85); border-color:rgba(150,160,200,0.3); box-shadow:none; }
+  #stateDot.calib{ color:var(--gold); border-color:rgba(255,212,121,0.45); box-shadow:0 0 18px rgba(255,212,121,0.2); }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.5rem; flex-wrap:wrap;
+    justify-content:flex-end; max-width:70vw; opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.66rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(8,10,24,0.5); border:1px solid rgba(180,200,255,0.18);
+    border-radius:100px; padding:0.5rem 0.85rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease, color .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(138,255,224,0.16); border-color:rgba(138,255,224,0.5); color:#8affe0; }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.24em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="grain"></div>
+
+  <div id="brand"><div class="b1">ORGEL</div><div class="b2">光のオルゴール / 光を譜面に</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="writeBtn">✎ 書込 ON</button>
+    <button class="btn" id="tempoBtn">♩ ふつう</button>
+    <button class="btn" id="clearBtn">✕ 消去</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">BAR / 小節</div>
+      <div class="cnt"><span id="barEl">1</span><small>巡目</small></div>
+      <div class="subLab">和音 <i id="chordEl">Dm7</i></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">SCORE / 譜面の濃さ</div>
+      <div class="cnt"><span id="inkEl">0</span><small>%</small></div>
+      <div class="meter"><b id="densityBar"></b></div>
+      <div class="voices">
+        <span class="vk"><span id="kotoEl">0</span></span>
+        <span class="vf"><span id="fueEl">0</span></span>
+        <span class="vn"><span id="kaneEl">0</span></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">ORGEL</div>
+    <div id="sub">光のオルゴール — 見せた光が、譜面になる</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・カメラに<b>光や動き</b>を見せると、その形が<b>譜面</b>に焼きつきます<br>
+      ・左から右へ流れる<b>走査線</b>が通るたび、焼きついた光が音になります<br>
+      ・<b>上ほど高い音</b>／横に長く残すと<b>のびる音</b>に変わります<br>
+      ・光の色で音色が変化：<b class="k">白・暖色＝琴</b>／<b class="f">緑＝笛</b>／<b class="n">青紫＝鐘</b><br>
+      ・<em>影を落とす</em>と、そこに焼きついた光が消えていきます<br>
+      ・焼きついた光はゆっくり褪せます。重ねるほど厚い響きに
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas    = document.getElementById('stage');
+  const ctx       = canvas.getContext('2d');
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const startBtn  = document.getElementById('startBtn');
+  const errorMsg  = document.getElementById('errorMsg');
+  const hud       = document.getElementById('hud');
+  const topbar    = document.getElementById('topbar');
+  const brand     = document.getElementById('brand');
+  const centerHud = document.getElementById('centerHud');
+  const stateDot  = document.getElementById('stateDot');
+  const flipBtn   = document.getElementById('flipBtn');
+  const writeBtn  = document.getElementById('writeBtn');
+  const tempoBtn  = document.getElementById('tempoBtn');
+  const clearBtn  = document.getElementById('clearBtn');
+  const barEl     = document.getElementById('barEl');
+  const chordEl   = document.getElementById('chordEl');
+  const inkEl     = document.getElementById('inkEl');
+  const densityBar= document.getElementById('densityBar');
+  const kotoEl    = document.getElementById('kotoEl');
+  const fueEl     = document.getElementById('fueEl');
+  const kaneEl    = document.getElementById('kaneEl');
+
+  // glow layer (additive) + cheap bloom (downscaled copy drawn back up)
+  const fx    = document.createElement('canvas');
+  const fctx  = fx.getContext('2d');
+  const bloom = document.createElement('canvas');
+  const bctx  = bloom.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = Math.max(1, Math.round(W * DPR));
+    canvas.height= Math.max(1, Math.round(H * DPR));
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = canvas.width; fx.height = canvas.height;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    bloom.width  = Math.max(1, Math.round(canvas.width  / 3));
+    bloom.height = Math.max(1, Math.round(canvas.height / 3));
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  SCORE GRID
+  //  The camera frame is sampled into COLS x ROWS cells that map 1:1 onto the
+  //  screen, so what you see is exactly what the machine reads.
+  // ---------------------------------------------------------------------------
+  const COLS = 32, ROWS = 12;
+  const CELLS = COLS * ROWS;
+
+  const ink     = new Float32Array(CELLS);  // burnt-in score, 0..1
+  const tim     = new Uint8Array(CELLS);    // 0 koto / 1 fue / 2 kane
+  const bg      = new Float32Array(CELLS);  // slowly adapting background luminance
+  const prevLum = new Float32Array(CELLS);
+  const wBuf    = new Float32Array(CELLS);  // live write strength (this frame)
+  const eBuf    = new Float32Array(CELLS);  // live erase strength (this frame)
+  const lumArr  = new Float32Array(CELLS);  // scratch: this frame's luminance
+  let prevMean  = 0;                        // last frame's mean luminance
+
+  // sampling canvases: video -> mid (box-ish downscale) -> work (one px per cell)
+  const MW = COLS * 6, MH = ROWS * 6;
+  const mid  = document.createElement('canvas'); mid.width = MW; mid.height = MH;
+  const mctx = mid.getContext('2d');
+  const work = document.createElement('canvas'); work.width = COLS; work.height = ROWS;
+  let wctx = null;
+  try { wctx = work.getContext('2d', { willReadFrequently: true }); }
+  catch(e){ wctx = work.getContext('2d'); }
+  if (mctx) mctx.imageSmoothingQuality = 'high';
+  if (wctx) wctx.imageSmoothingQuality = 'high';
+
+  const BRIGHT_TH = 13;   // luminance above background that counts as "light"
+  const DARK_TH   = 22;   // luminance below background that counts as "shadow"
+  const ERASE_RATE= 2.4;  // ink removed per second under a full shadow
+  const INK_DECAY = 0.958;// ink survival per second
+  const FIRE_TH   = 0.17; // ink needed for a cell to sound
+
+  let bgFrames = 0;       // background calibration counter
+  const CALIB_FRAMES = 34;
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  //  three voices (koto / fue / kane) fired by the scan line, over a slow
+  //  four-chord bass bed. everything shares a reverb + tempo-synced delay.
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null;
+  let noteBus = null, padBus = null;
+  let convolver = null, revGain = null;
+  let delay = null, fbGain = null, wetGain = null;
+  let noiseBuf = null;
+  let audioReady = false;
+  const voiceEnds = [];            // audio-clock times at which scheduled notes finish
+  const MAX_LIVE_VOICES = 26;
+
+  const BASE = 146.83;                 // D3
+  const PENT = [0, 3, 5, 7, 10];       // minor pentatonic — always consonant
+  const CHORDS = [
+    { semi:  0, name:'Dm7'   },
+    { semi:  3, name:'Fmaj7' },
+    { semi: -2, name:'C6'    },
+    { semi:  7, name:'Am7'   }
+  ];
+
+  function rowFreq(r){
+    const deg = (ROWS - 1 - r);        // row 0 is the top = highest pitch
+    const semi = Math.floor(deg / 5) * 12 + PENT[deg % 5];
+    return BASE * Math.pow(2, semi / 12);
+  }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++){
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+      }
+    }
+    return buf;
+  }
+  function makeNoise(seconds){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 22; comp.ratio.value = 4.0;
+    comp.attack.value = 0.004;  comp.release.value = 0.28;
+
+    convolver = actx.createConvolver();
+    convolver.buffer = makeImpulse(3.2, 2.2);
+    revGain = actx.createGain(); revGain.gain.value = 0.34;
+
+    noteBus = actx.createGain(); noteBus.gain.value = 1.0;
+    padBus  = actx.createGain(); padBus.gain.value  = 0.55;
+
+    delay   = actx.createDelay(2.0); delay.delayTime.value = 0.3;
+    fbGain  = actx.createGain();     fbGain.gain.value = 0.32;
+    wetGain = actx.createGain();     wetGain.gain.value = 0.22;
+    noteBus.connect(delay); delay.connect(fbGain); fbGain.connect(delay); delay.connect(wetGain);
+
+    noteBus.connect(master); noteBus.connect(convolver);
+    padBus.connect(master);  padBus.connect(convolver);
+    wetGain.connect(master); wetGain.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf = makeNoise(1.0);
+    audioReady = true;
+  }
+
+  function makePan(pan){
+    if (actx.createStereoPanner){
+      const p = actx.createStereoPanner();
+      p.pan.value = Math.max(-1, Math.min(1, pan));
+      return p;
+    }
+    return actx.createGain();
+  }
+  // Voice budgeting off the audio clock rather than a timer, so a throttled or
+  // suspended tab can never strand the counter and mute the instrument forever.
+  function retire(seconds){ voiceEnds.push(actx.currentTime + seconds); }
+  function liveVoiceCount(){
+    const now = actx.currentTime;
+    for (let i = voiceEnds.length - 1; i >= 0; i--){
+      if (voiceEnds[i] <= now) voiceEnds.splice(i, 1);
+    }
+    return voiceEnds.length;
+  }
+
+  // 琴 — plucked string, bright attack falling into a warm body
+  function voiceKoto(t, freq, vel, dur, pan){
+    const tail = Math.max(0.55, dur * 0.9 + 0.4);
+    const p = makePan(pan);
+    const filt = actx.createBiquadFilter();
+    filt.type = 'lowpass'; filt.Q.value = 3.2;
+    filt.frequency.setValueAtTime(Math.min(9000, freq * 8), t);
+    filt.frequency.exponentialRampToValueAtTime(Math.max(180, freq * 1.4), t + tail * 0.8);
+
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vel * 0.34), t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tail);
+
+    const o1 = actx.createOscillator(); o1.type = 'triangle'; o1.frequency.value = freq;
+    const o2 = actx.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = freq; o2.detune.value = 6;
+    const g2 = actx.createGain(); g2.gain.value = 0.35;
+    o1.connect(filt); o2.connect(g2); g2.connect(filt);
+    filt.connect(g); g.connect(p); p.connect(noteBus);
+    o1.start(t); o2.start(t); o1.stop(t + tail + 0.08); o2.stop(t + tail + 0.08);
+    retire(tail + 0.2);
+  }
+
+  // 笛 — breathy sustained tone that really holds for the length of the run
+  function voiceFue(t, freq, vel, dur, pan){
+    const hold = Math.max(0.35, dur);
+    const rel = 0.55;
+    const p = makePan(pan);
+    const filt = actx.createBiquadFilter();
+    filt.type = 'lowpass'; filt.frequency.value = Math.min(7000, freq * 5); filt.Q.value = 1.2;
+
+    const g = actx.createGain();
+    const peak = Math.max(0.0002, vel * 0.20);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.16);
+    g.gain.setValueAtTime(peak, t + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + hold + rel);
+
+    const o1 = actx.createOscillator(); o1.type = 'triangle'; o1.frequency.value = freq;
+    const o2 = actx.createOscillator(); o2.type = 'sine';     o2.frequency.value = freq * 2;
+    const g2 = actx.createGain(); g2.gain.value = 0.22;
+
+    const lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5.1;
+    const lfoG = actx.createGain(); lfoG.gain.value = 5;
+    lfo.connect(lfoG); lfoG.connect(o1.detune); lfoG.connect(o2.detune);
+
+    // gentle breath noise under the tone
+    const nSrc = actx.createBufferSource(); nSrc.buffer = noiseBuf; nSrc.loop = true;
+    const nFilt = actx.createBiquadFilter(); nFilt.type = 'bandpass';
+    nFilt.frequency.value = freq * 2; nFilt.Q.value = 1.6;
+    const nG = actx.createGain(); nG.gain.value = 0.05;
+
+    o1.connect(filt); o2.connect(g2); g2.connect(filt);
+    nSrc.connect(nFilt); nFilt.connect(nG); nG.connect(filt);
+    filt.connect(g); g.connect(p); p.connect(noteBus);
+
+    const end = t + hold + rel + 0.08;
+    o1.start(t); o2.start(t); lfo.start(t); nSrc.start(t);
+    o1.stop(end); o2.stop(end); lfo.stop(end); nSrc.stop(end);
+    retire(hold + rel + 0.2);
+  }
+
+  // 鐘 — FM bell, inharmonic shimmer with a long tail
+  function voiceKane(t, freq, vel, dur, pan){
+    const tail = Math.max(1.3, dur * 0.6 + 1.2);
+    const p = makePan(pan);
+
+    const car = actx.createOscillator(); car.type = 'sine'; car.frequency.value = freq;
+    const mod = actx.createOscillator(); mod.type = 'sine'; mod.frequency.value = freq * 2.76;
+    const modG = actx.createGain();
+    modG.gain.setValueAtTime(freq * 3.2, t);
+    modG.gain.exponentialRampToValueAtTime(Math.max(1, freq * 0.12), t + tail * 0.55);
+    mod.connect(modG); modG.connect(car.frequency);
+
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vel * 0.22), t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + tail);
+
+    const shimmer = actx.createOscillator(); shimmer.type = 'sine'; shimmer.frequency.value = freq * 4.02;
+    const sg = actx.createGain();
+    sg.gain.setValueAtTime(0.0001, t);
+    sg.gain.exponentialRampToValueAtTime(Math.max(0.0002, vel * 0.05), t + 0.01);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t + tail * 0.45);
+
+    car.connect(g); shimmer.connect(sg);
+    g.connect(p); sg.connect(p); p.connect(noteBus);
+
+    const end = t + tail + 0.1;
+    car.start(t); mod.start(t); shimmer.start(t);
+    car.stop(end); mod.stop(end); shimmer.stop(end);
+    retire(tail + 0.2);
+  }
+
+  const VOICES = [voiceKoto, voiceFue, voiceKane];
+
+  // low bass bed, one note per bar
+  function bassNote(t, semi, seconds){
+    if (!audioReady) return;
+    const f = (BASE / 2) * Math.pow(2, semi / 12);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.13, t + 0.5);
+    g.gain.setValueAtTime(0.13, t + seconds * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.6);
+
+    const filt = actx.createBiquadFilter();
+    filt.type = 'lowpass'; filt.frequency.value = 420; filt.Q.value = 1.0;
+
+    const o1 = actx.createOscillator(); o1.type = 'sine';     o1.frequency.value = f;
+    const o2 = actx.createOscillator(); o2.type = 'triangle'; o2.frequency.value = f * 2; o2.detune.value = -4;
+    const g2 = actx.createGain(); g2.gain.value = 0.3;
+    const o3 = actx.createOscillator(); o3.type = 'sine';     o3.frequency.value = f * 3;
+    const g3 = actx.createGain(); g3.gain.value = 0.09;
+
+    o1.connect(filt); o2.connect(g2); g2.connect(filt); o3.connect(g3); g3.connect(filt);
+    filt.connect(g); g.connect(padBus);
+
+    const end = t + seconds + 0.8;
+    o1.start(t); o2.start(t); o3.start(t);
+    o1.stop(end); o2.stop(end); o3.stop(end);
+  }
+
+  // soft felted thump at the top of each bar
+  function barTick(t){
+    if (!audioReady || !noiseBuf) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
+    bp.frequency.setValueAtTime(520, t);
+    bp.frequency.exponentialRampToValueAtTime(120, t + 0.14);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.10, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    src.connect(bp); bp.connect(g); g.connect(padBus);
+    src.start(t); src.stop(t + 0.22);
+  }
+
+  // brushed sweep when the score is wiped
+  function wipeSound(t){
+    if (!audioReady || !noiseBuf) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.4;
+    bp.frequency.setValueAtTime(3200, t);
+    bp.frequency.exponentialRampToValueAtTime(180, t + 0.5);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    src.connect(bp); bp.connect(g); g.connect(padBus);
+    src.start(t); src.stop(t + 0.6);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    try {
+      await startStream();
+      bgFrames = 0;                    // re-calibrate against the new view
+      prevLum.fill(0);
+    } catch(e){ /* keep the previous stream */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  // cover-fit crop of the video for the current viewport — used for BOTH the
+  // on-screen ghost and the sampling pass so the grid lines up with what you see
+  function computeCover(){
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const target = W / H, vAspect = vw / vh;
+    let sx = 0, sy = 0, sw = vw, sh = vh;
+    if (vAspect > target){ sw = vh * target; sx = (vw - sw) / 2; }
+    else { sh = vw / target; sy = (vh - sh) / 2; }
+    return { sx, sy, sw, sh };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  FRAME ANALYSIS — light writes the score, shadow rubs it out
+  // ---------------------------------------------------------------------------
+  let writeOn = true;
+  let density = 0, litCells = 0;
+  const timCount = [0, 0, 0];
+
+  function timbreOf(hue, sat){
+    if (sat < 0.22) return 0;                          // white / grey light -> 琴
+    if (hue >= 60 && hue < 190) return 1;              // green -> 笛
+    if (hue >= 190 && hue < 320) return 2;             // blue / violet -> 鐘
+    return 0;                                          // warm -> 琴
+  }
+
+  function analyze(dt){
+    if (!wctx || !mctx) return;
+    if (!video.videoWidth || video.readyState < 2) return;
+
+    const cov = computeCover();
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.clearRect(0, 0, MW, MH);
+    mctx.save();
+    if (mirror){ mctx.translate(MW, 0); mctx.scale(-1, 1); }
+    try { mctx.drawImage(video, cov.sx, cov.sy, cov.sw, cov.sh, 0, 0, MW, MH); }
+    catch(e){ mctx.restore(); return; }
+    mctx.restore();
+
+    let img;
+    try {
+      wctx.clearRect(0, 0, COLS, ROWS);
+      wctx.drawImage(mid, 0, 0, COLS, ROWS);
+      img = wctx.getImageData(0, 0, COLS, ROWS);
+    } catch(e){ return; }
+    if (!img || !img.data) return;
+
+    const d = img.data;
+    if (d[3] < 200) return;        // the frame never actually landed on the canvas
+
+    const calibrating = bgFrames < CALIB_FRAMES;
+    // faster background adaptation while calibrating, then a slow ~8s memory
+    const tau = calibrating ? 0.25 : 8.0;
+    const k = 1 - Math.exp(-dt / tau);
+
+    // Pass 1 — luminance + frame mean. Everything below is measured RELATIVE to
+    // the frame mean so that the camera's auto-exposure hunting (which shifts the
+    // whole image at once) can never read as a giant shadow and erase the score.
+    let lumSum = 0;
+    for (let i = 0; i < CELLS; i++){
+      const p = i * 4;
+      const lum = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2];
+      lumArr[i] = lum; lumSum += lum;
+    }
+    const meanLum = lumSum / CELLS;
+
+    if (bgFrames === 0){
+      bg.set(lumArr); prevLum.set(lumArr);
+      prevMean = meanLum;
+    }
+    let bgSum = 0;
+    for (let i = 0; i < CELLS; i++) bgSum += bg[i];
+    const meanBg = bgSum / CELLS;
+
+    // Pass 2 — decide write / erase per cell
+    for (let i = 0; i < CELLS; i++){
+      const lum = lumArr[i];
+      const signed = (lum - meanLum) - (bg[i] - meanBg);
+      const moved  = Math.abs((lum - meanLum) - (prevLum[i] - prevMean));
+      prevLum[i] = lum;
+      bg[i] += (lum - bg[i]) * k;
+
+      let w = 0, e = 0;
+      if (signed > BRIGHT_TH)      w = Math.min(1, (signed - BRIGHT_TH) / 58);
+      else if (signed < -DARK_TH)  e = Math.min(1, (-signed - DARK_TH) / 55);
+      else                         w = Math.min(1, Math.max(0, (moved - 7) / 46)) * 0.7;
+      if (lum < 26) w = 0;         // nothing that dark counts as light
+
+      wBuf[i] = w; eBuf[i] = e;
+      if (calibrating) continue;
+
+      const p = i * 4;
+      const R = d[p], G = d[p + 1], B = d[p + 2];
+
+      if (e > 0.05 && ink[i] > 0){
+        ink[i] = Math.max(0, ink[i] - e * ERASE_RATE * dt);
+      }
+      if (writeOn && w > 0.07 && w > ink[i]){
+        const mx = Math.max(R, G, B), mn = Math.min(R, G, B), ch = mx - mn;
+        let hue = 0;
+        if (ch > 0){
+          if (mx === R)      hue = ((G - B) / ch) % 6;
+          else if (mx === G) hue = (B - R) / ch + 2;
+          else               hue = (R - G) / ch + 4;
+          hue *= 60; if (hue < 0) hue += 360;
+        }
+        const sat = mx > 0 ? ch / mx : 0;
+        ink[i] = w;
+        tim[i] = timbreOf(hue, sat);
+      }
+    }
+    prevMean = meanLum;
+    bgFrames++;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  SEQUENCER — an absolute column cursor so no column can fire twice
+  // ---------------------------------------------------------------------------
+  const TEMPOS = [
+    { sec: 12.0, label:'ゆっくり' },
+    { sec:  8.0, label:'ふつう'   },
+    { sec:  5.2, label:'はやい'   }
+  ];
+  let tempoIdx = 1;
+  let barSec = TEMPOS[tempoIdx].sec;
+
+  let absCol = 0;        // absolute (monotonic) column position of the scan line
+  let nextK  = 0;        // next absolute column index to fire
+  let barIndex = 0;      // completed bars
+  const rowSkipK = new Int32Array(ROWS);   // suppress re-firing inside a held run
+
+  const bursts   = [];   // ring flashes at fired cells
+  const sustains = [];   // glowing bars for notes that are still ringing
+  const sparks   = [];   // rising particles
+  let barFlash = 0, wipeFlash = 0;
+
+  function chordFor(bar){ return CHORDS[((bar % CHORDS.length) + CHORDS.length) % CHORDS.length]; }
+
+  function onBarStart(bar){
+    barIndex = bar;
+    barFlash = 1;
+    const ch = chordFor(bar);
+    if (audioReady){
+      const t = actx.currentTime;
+      bassNote(t, ch.semi, barSec);
+      barTick(t);
+    }
+    for (let r = 0; r < ROWS; r++) rowSkipK[r] = 0;
+  }
+
+  function runLength(col, row){
+    let n = 0;
+    for (let c = col; c < COLS && n < 10; c++){
+      if (ink[row * COLS + c] > FIRE_TH) n++;
+      else break;
+    }
+    return Math.max(1, n);
+  }
+
+  function fireColumn(col, k){
+    const secPerCol = barSec / COLS;
+    // gather the loudest few cells in this column
+    const picks = [];
+    for (let r = 0; r < ROWS; r++){
+      if (k < rowSkipK[r]) continue;
+      const v = ink[r * COLS + col];
+      if (v > FIRE_TH) picks.push({ r, v });
+    }
+    if (!picks.length) return;
+    picks.sort((a, b) => b.v - a.v);
+    const take = Math.min(3, picks.length);
+    // the loudest cells keep their voice when the budget runs out; the rest
+    // still light up, they just don't add to the pile-up
+    let budget = audioReady ? Math.max(0, MAX_LIVE_VOICES - liveVoiceCount()) : 0;
+
+    for (let n = 0; n < take; n++){
+      const r = picks[n].r, v = picks[n].v;
+      const i = r * COLS + col;
+      const len = runLength(col, r);
+      rowSkipK[r] = k + len;
+
+      const dur = Math.max(0.45, len * secPerCol);
+      const freq = rowFreq(r);
+      const vel = Math.min(1, 0.35 + v * 0.85);
+      const pan = ((col + 0.5) / COLS * 2 - 1) * 0.55;
+      const voiceIdx = Math.min(2, Math.max(0, tim[i] | 0));
+
+      if (audioReady && budget > 0){
+        budget--;
+        const fn = VOICES[voiceIdx];
+        if (fn) fn(actx.currentTime, freq, vel, dur, pan);
+      }
+
+      const cw = W / COLS, chh = H / ROWS;
+      const cx = (col + 0.5) * cw, cy = (r + 0.5) * chh;
+      bursts.push({ x: cx, y: cy, hue: TIM_HUE[voiceIdx], life: 1, rad: Math.min(cw, chh) * 0.45 });
+      sustains.push({
+        r, c0: col, c1: col + len, hue: TIM_HUE[voiceIdx],
+        life: 1, decay: 1 / Math.max(0.35, dur)
+      });
+      const sc = 3 + Math.round(v * 4);
+      for (let s = 0; s < sc; s++) spawnSpark(cx, cy, TIM_HUE[voiceIdx], v);
+    }
+  }
+
+  function advanceSequencer(dt){
+    const colsPerSec = COLS / barSec;
+    absCol += colsPerSec * dt;
+    let guard = 0;
+    while (nextK <= absCol && guard < 64){
+      guard++;
+      const col = ((nextK % COLS) + COLS) % COLS;
+      if (col === 0) onBarStart(Math.floor(nextK / COLS));
+      fireColumn(col, nextK);
+      nextK++;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CONTROLS
+  // ---------------------------------------------------------------------------
+  function clearScore(){
+    ink.fill(0);
+    sustains.length = 0;
+    wipeFlash = 1;
+    if (audioReady) wipeSound(actx.currentTime);
+  }
+  function toggleWrite(){
+    writeOn = !writeOn;
+    writeBtn.textContent = writeOn ? '✎ 書込 ON' : '✎ 書込 OFF';
+    writeBtn.classList.toggle('active', writeOn);
+  }
+  function cycleTempo(){
+    tempoIdx = (tempoIdx + 1) % TEMPOS.length;
+    barSec = TEMPOS[tempoIdx].sec;
+    tempoBtn.textContent = '♩ ' + TEMPOS[tempoIdx].label;
+    if (audioReady && delay){
+      delay.delayTime.setTargetAtTime(Math.min(1.9, barSec / 8), actx.currentTime, 0.15);
+    }
+  }
+  clearBtn.addEventListener('click', clearScore);
+  writeBtn.addEventListener('click', toggleWrite);
+  tempoBtn.addEventListener('click', cycleTempo);
+  window.addEventListener('keydown', (ev) => {
+    if (!running || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    const key = (ev.key || '').toLowerCase();
+    if (key === 'c') clearScore();
+    else if (key === 'w') toggleWrite();
+    else if (key === 't') cycleTempo();
+  });
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  const TIM_HUE = [166, 96, 274];   // 琴 teal / 笛 green / 鐘 violet
+
+  function roundRect(c, x, y, w, h, r){
+    const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+    c.beginPath();
+    c.moveTo(x + rad, y);
+    c.lineTo(x + w - rad, y);
+    c.quadraticCurveTo(x + w, y, x + w, y + rad);
+    c.lineTo(x + w, y + h - rad);
+    c.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+    c.lineTo(x + rad, y + h);
+    c.quadraticCurveTo(x, y + h, x, y + h - rad);
+    c.lineTo(x, y + rad);
+    c.quadraticCurveTo(x, y, x + rad, y);
+    c.closePath();
+  }
+
+  function drawVideoGhost(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const cov = computeCover();
+    try { ctx.drawImage(video, cov.sx, cov.sy, cov.sw, cov.sh, 0, 0, W, H); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(4,6,15,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(38,44,86,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.48, Math.min(W,H)*0.2, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,3,10,0.86)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // the staff: pitch lanes + bar sub-divisions
+  function drawStaff(){
+    const chh = H / ROWS, cw = W / COLS;
+    ctx.save();
+    ctx.lineWidth = 1;
+    for (let r = 0; r <= ROWS; r++){
+      const deg = ROWS - r;
+      const octave = (deg % 5 === 0);
+      ctx.strokeStyle = octave ? 'rgba(160,200,255,0.16)' : 'rgba(160,200,255,0.07)';
+      const y = Math.round(r * chh) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    for (let c = 0; c <= COLS; c += 4){
+      ctx.strokeStyle = (c % 8 === 0) ? 'rgba(160,200,255,0.14)' : 'rgba(160,200,255,0.06)';
+      const x = Math.round(c * cw) + 0.5;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawScore(beamCol){
+    const cw = W / COLS, chh = H / ROWS;
+    const pad = Math.min(cw, chh) * 0.16;
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    litCells = 0; timCount[0] = timCount[1] = timCount[2] = 0;
+    let sum = 0;
+
+    for (let r = 0; r < ROWS; r++){
+      for (let col = 0; col < COLS; col++){
+        const i = r * COLS + col;
+        const v = ink[i];
+        sum += v;
+        if (v < 0.035) continue;
+        const t = Math.min(2, tim[i] | 0);
+        if (v > FIRE_TH){ litCells++; timCount[t]++; }
+
+        const hue = TIM_HUE[t];
+        const x = col * cw + pad, y = r * chh + pad;
+        const w = cw - pad * 2, h = chh - pad * 2;
+
+        // cells right under the scan line lean forward and brighten
+        let dc = (col + 0.5) - beamCol;
+        if (dc < -COLS / 2) dc += COLS; else if (dc > COLS / 2) dc -= COLS;
+        const ad = Math.abs(dc);
+        const near = ad < 1.4 ? (1.4 - ad) / 1.4 : 0;
+
+        c.fillStyle = `hsla(${hue},92%,58%,${v * 0.13})`;
+        roundRect(c, x - pad * 2, y - pad * 2, w + pad * 4, h + pad * 4, Math.min(cw, chh) * 0.4);
+        c.fill();
+
+        c.fillStyle = `hsla(${hue},94%,${50 + v * 22 + near * 16}%,${0.16 + v * 0.66})`;
+        roundRect(c, x, y, w, h, Math.min(w, h) * 0.32);
+        c.fill();
+
+        if (near > 0){
+          c.fillStyle = `hsla(${hue},100%,88%,${near * v * 0.5})`;
+          roundRect(c, x, y, w, h, Math.min(w, h) * 0.32);
+          c.fill();
+        }
+      }
+    }
+    c.restore();
+    density = sum / CELLS;
+  }
+
+  // live feedback: what is being written / erased right now
+  function drawLive(){
+    const cw = W / COLS, chh = H / ROWS;
+    const pad = Math.min(cw, chh) * 0.16;
+    ctx.save();
+    ctx.lineWidth = Math.max(1, Math.min(cw, chh) * 0.07);
+    for (let i = 0; i < CELLS; i++){
+      const w = wBuf[i], e = eBuf[i];
+      if (w < 0.18 && e < 0.14) continue;
+      const r = (i / COLS) | 0, col = i % COLS;
+      const x = col * cw + pad, y = r * chh + pad;
+      if (e >= 0.14 && ink[i] > 0.02){
+        ctx.strokeStyle = `rgba(255,84,112,${Math.min(0.75, e * 0.8)})`;
+      } else if (w >= 0.18 && writeOn){
+        ctx.strokeStyle = `rgba(238,246,255,${Math.min(0.5, w * 0.45)})`;
+      } else continue;
+      roundRect(ctx, x, y, cw - pad * 2, chh - pad * 2, Math.min(cw, chh) * 0.28);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawSustains(dt){
+    const cw = W / COLS, chh = H / ROWS;
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i = sustains.length - 1; i >= 0; i--){
+      const s = sustains[i];
+      s.life -= s.decay * dt;
+      if (s.life <= 0){ sustains.splice(i, 1); continue; }
+      const x = s.c0 * cw + cw * 0.1;
+      const w = (s.c1 - s.c0) * cw - cw * 0.2;
+      const y = s.r * chh + chh * 0.3;
+      const h = chh * 0.4;
+      const a = Math.min(1, s.life) * 0.55;
+      c.fillStyle = `hsla(${s.hue},100%,78%,${a})`;
+      roundRect(c, x, y, Math.max(2, w), h, h / 2);
+      c.fill();
+    }
+    c.restore();
+  }
+
+  function drawBursts(dt){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i = bursts.length - 1; i >= 0; i--){
+      const b = bursts[i];
+      b.life -= dt * 2.1;
+      if (b.life <= 0){ bursts.splice(i, 1); continue; }
+      const p = 1 - b.life;
+      const rad = b.rad * (1 + p * 3.6);
+      c.strokeStyle = `hsla(${b.hue},100%,80%,${b.life * 0.7})`;
+      c.lineWidth = 2.2 * b.life + 0.4;
+      c.beginPath(); c.arc(b.x, b.y, rad, 0, Math.PI * 2); c.stroke();
+
+      const g = c.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.rad * 2.4);
+      g.addColorStop(0, `hsla(${b.hue},100%,90%,${b.life * 0.55})`);
+      g.addColorStop(1, `hsla(${b.hue},100%,70%,0)`);
+      c.fillStyle = g;
+      c.beginPath(); c.arc(b.x, b.y, b.rad * 2.4, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  }
+
+  const MAX_SPARKS = 240;
+  function spawnSpark(x, y, hue, v){
+    if (sparks.length >= MAX_SPARKS) return;
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.5;
+    const s = 18 + Math.random() * (40 + v * 70);
+    sparks.push({
+      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      life: 1, decay: 0.7 + Math.random() * 0.7,
+      r: 1 + Math.random() * 2.1, hue
+    });
+  }
+  function drawSparks(dt){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i = sparks.length - 1; i >= 0; i--){
+      const p = sparks[i];
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 26 * dt;
+      p.life -= p.decay * dt;
+      if (p.life <= 0){ sparks.splice(i, 1); continue; }
+      c.fillStyle = `hsla(${p.hue},100%,${64 + p.life * 26}%,${p.life * 0.85})`;
+      c.beginPath(); c.arc(p.x, p.y, p.r * p.life + 0.4, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  }
+
+  function drawBeam(beamCol){
+    const cw = W / COLS;
+    const bx = beamCol * cw;
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+
+    // trailing wash behind the head
+    const tw = cw * 7;
+    const g = c.createLinearGradient(bx - tw, 0, bx, 0);
+    g.addColorStop(0, 'hsla(172,100%,72%,0)');
+    g.addColorStop(1, 'hsla(172,100%,72%,0.18)');
+    c.fillStyle = g;
+    c.fillRect(Math.max(0, bx - tw), 0, Math.min(tw, bx), H);
+    if (bx - tw < 0){
+      const g2 = c.createLinearGradient(W + (bx - tw), 0, W, 0);
+      g2.addColorStop(0, 'hsla(172,100%,72%,0)');
+      g2.addColorStop(1, `hsla(172,100%,72%,${0.18 * (1 - bx / tw)})`);
+      c.fillStyle = g2;
+      c.fillRect(W + (bx - tw), 0, tw - bx, H);
+    }
+
+    // the head itself
+    const hg = c.createLinearGradient(bx - 5, 0, bx + 5, 0);
+    hg.addColorStop(0, 'hsla(172,100%,80%,0)');
+    hg.addColorStop(0.5, 'hsla(172,100%,92%,0.9)');
+    hg.addColorStop(1, 'hsla(172,100%,80%,0)');
+    c.fillStyle = hg;
+    c.fillRect(bx - 5, 0, 10, H);
+    c.fillStyle = 'hsla(180,100%,96%,0.85)';
+    c.fillRect(bx - 0.8, 0, 1.6, H);
+    c.restore();
+  }
+
+  function drawFlashes(dt){
+    if (barFlash > 0){
+      barFlash = Math.max(0, barFlash - dt * 2.4);
+      fctx.save();
+      fctx.globalCompositeOperation = 'lighter';
+      fctx.fillStyle = `hsla(200,100%,80%,${barFlash * 0.05})`;
+      fctx.fillRect(0, 0, W, H);
+      fctx.restore();
+    }
+    if (wipeFlash > 0){
+      wipeFlash = Math.max(0, wipeFlash - dt * 1.6);
+      const x = (1 - wipeFlash) * W;
+      fctx.save();
+      fctx.globalCompositeOperation = 'lighter';
+      const g = fctx.createLinearGradient(x - 90, 0, x + 20, 0);
+      g.addColorStop(0, 'hsla(0,100%,70%,0)');
+      g.addColorStop(1, `hsla(350,100%,78%,${wipeFlash * 0.4})`);
+      fctx.fillStyle = g;
+      fctx.fillRect(x - 90, 0, 110, H);
+      fctx.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HUD
+  // ---------------------------------------------------------------------------
+  let lastBarShown = -1, lastInkShown = -1, lastState = '';
+  function updateHud(){
+    const bar = barIndex + 1;
+    if (bar !== lastBarShown){
+      lastBarShown = bar;
+      barEl.textContent = bar;
+      chordEl.textContent = chordFor(barIndex).name;
+    }
+    const pct = Math.round(Math.min(1, density * 3.4) * 100);
+    if (pct !== lastInkShown){
+      lastInkShown = pct;
+      inkEl.textContent = pct;
+      densityBar.style.width = pct + '%';
+    }
+    kotoEl.textContent = timCount[0];
+    fueEl.textContent  = timCount[1];
+    kaneEl.textContent = timCount[2];
+
+    let text, cls;
+    if (bgFrames < CALIB_FRAMES){
+      text = '譜面を校正中…'; cls = 'calib';
+    } else if (!writeOn){
+      text = '✎ 書込 OFF ・ 譜面を保持中'; cls = 'playing';
+    } else if (litCells === 0){
+      text = 'カメラに光を見せてください'; cls = 'silent';
+    } else {
+      text = `♪ 演奏中 ・ 譜面 ${litCells} 粒 ・ ${chordFor(barIndex).name}`; cls = 'playing';
+    }
+    if (text !== lastState){
+      lastState = text;
+      stateDot.textContent = text;
+      stateDot.className = cls;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let lastT = 0, lastGainT = 0;
+  function frame(now){
+    requestAnimationFrame(frame);
+    const dt = Math.min(0.05, Math.max(0.001, (now - lastT) / 1000 || 0.016));
+    lastT = now;
+
+    analyze(dt);
+
+    // the score slowly fades — old marks leave the loop on their own
+    const keep = Math.pow(INK_DECAY, dt);
+    for (let i = 0; i < CELLS; i++){
+      if (ink[i] > 0){
+        ink[i] *= keep;
+        if (ink[i] < 0.004) ink[i] = 0;
+      }
+    }
+
+    if (bgFrames >= CALIB_FRAMES) advanceSequencer(dt);
+    const beamCol = ((absCol % COLS) + COLS) % COLS;
+
+    // keep the note bus from piling up when the score gets dense (throttled — no
+    // need to stack an automation event on every animation frame)
+    if (audioReady && now - lastGainT > 120){
+      lastGainT = now;
+      noteBus.gain.setTargetAtTime(1 / (1 + density * 5.0), actx.currentTime, 0.35);
+    }
+
+    // ---- draw ----
+    ctx.clearRect(0, 0, W, H);
+    drawVideoGhost();
+    drawStaff();
+
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.34)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    drawScore(beamCol);
+    drawSustains(dt);
+    drawBursts(dt);
+    drawSparks(dt);
+    drawBeam(beamCol);
+    drawFlashes(dt);
+
+    // bloom: downscale the glow layer, then paint it back up large + additive
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.clearRect(0, 0, bloom.width, bloom.height);
+    bctx.drawImage(fx, 0, 0, bloom.width, bloom.height);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.7;
+    ctx.drawImage(bloom, 0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    drawLive();
+    updateHud();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        throw new Error('このブラウザはカメラに対応していません。');
+      }
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      await startStream();
+      running = true;
+
+      bgFrames = 0;
+      absCol = 0; nextK = 0; barIndex = 0;
+      writeBtn.classList.add('active');
+      if (delay) delay.delayTime.value = Math.min(1.9, barSec / 8);
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      lastT = performance.now();
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
