@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04030e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="人型の穴が空いた光の壁が正面から迫ってくる。体の形を合わせて穴をくぐり抜けるシルエット型抜きゲーム - KATA">
+<title>KATA ─ 光の型抜き</title>
+<style>
+  :root{
+    --void:#04030e; --haze:#170b2e; --ghost:#eef2ff;
+    --cyan:#58f7ff; --magenta:#ff4fd8; --gold:#ffd75e; --warn:#ff3b5c; --lime:#7dff9e;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #scan{ position:fixed; inset:0; z-index:6; pointer-events:none; mix-blend-mode:screen; opacity:.35;
+    background:repeating-linear-gradient(to bottom, rgba(140,200,255,0.05) 0px, rgba(140,200,255,0.05) 1px, transparent 2px, transparent 3px); }
+  #flash{ position:fixed; inset:0; z-index:7; pointer-events:none; background:rgba(255,255,255,0.0); }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .6s ease, visibility .6s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(46px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--cyan),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--magenta),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,#8b6bff,transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.15); } }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.4rem; font-weight:800; letter-spacing:0.16em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--cyan),var(--magenta),var(--gold),#8b6bff,var(--cyan));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 7.5s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:1.7rem; position:relative; white-space:pre-line; }
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--cyan),var(--magenta)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(88,247,255,0.42);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 2.8s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(88,247,255,0.4); }
+    50%{ box-shadow:0 0 44px rgba(255,79,216,0.5); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{ position:relative; margin-top:2rem; max-width:23.5rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--cyan); font-weight:700; }
+  #hint em{ color:var(--warn); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+  #resultBox{ display:none; position:relative; margin-bottom:1.6rem; }
+  #resultBox .rlab{ font-size:0.62rem; letter-spacing:0.3em; color:rgba(238,242,255,0.45); }
+  #resultBox .rscore{ font-size:2.6rem; font-weight:800; color:var(--gold); line-height:1.3; font-variant-numeric:tabular-nums; }
+  #resultBox .rsub{ font-size:0.76rem; color:rgba(238,242,255,0.6); letter-spacing:0.05em; line-height:1.9; }
+
+  /* ---- HUD ---- */
+  #hud{ position:fixed; z-index:12; left:0; right:0; top:0;
+    display:flex; align-items:flex-start; justify-content:space-between; padding:1.1rem 1rem 0;
+    pointer-events:none; opacity:0; transition:opacity .6s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(8,6,22,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(140,160,255,0.18); border-radius:16px; padding:0.62rem 0.9rem;
+    color:var(--ghost); min-width:112px; }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.25rem; }
+  .panel .val{ font-size:1.5rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--gold); }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .val{ color:var(--cyan); }
+  .subLab{ font-size:0.62rem; letter-spacing:0.1em; color:rgba(238,242,255,0.5); margin-top:0.32rem; }
+  #lifeEl{ color:var(--warn); letter-spacing:0.12em; }
+  #lifeEl .dead{ color:rgba(238,242,255,0.18); }
+
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:1.4rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.5rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; width:min(20rem, 78vw); }
+  #centerHud.show{ opacity:1; }
+  #fitWrap{ width:100%; height:5px; border-radius:3px; background:rgba(238,242,255,0.11); overflow:hidden; }
+  #fitBar{ display:block; height:100%; width:0%; border-radius:3px;
+    background:linear-gradient(90deg,var(--cyan),var(--lime)); transition:width .09s linear; }
+  #fitBar.great{ background:linear-gradient(90deg,var(--lime),var(--gold)); }
+  #fitBar.bad{ background:linear-gradient(90deg,#ff7a5c,var(--warn)); }
+  #stateDot{ font-size:0.66rem; letter-spacing:0.16em; color:rgba(238,242,255,0.62); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(140,160,255,0.18);
+    background:rgba(8,6,22,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .2s ease, border-color .2s ease, box-shadow .2s ease; white-space:nowrap; }
+  #stateDot.hot{ color:var(--lime); border-color:rgba(125,255,158,0.5); box-shadow:0 0 18px rgba(125,255,158,0.28); }
+  #stateDot.warnState{ color:var(--warn); border-color:rgba(255,59,92,0.5); box-shadow:0 0 18px rgba(255,59,92,0.28); }
+  #stateDot.silent{ color:rgba(150,150,175,0.85); border-color:rgba(120,120,150,0.32); box-shadow:none; }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(8,6,22,0.55); border:1px solid rgba(140,160,255,0.2);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease; }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(88,247,255,0.16); border-color:rgba(88,247,255,0.5); color:var(--cyan); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; display:none; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.32em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="scan"></div>
+  <div id="flash"></div>
+
+  <div id="brand"><div class="b1">KATA</div><div class="b2">光の型抜き</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="ghostBtn">型ガイド ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">SCORE</div>
+      <div class="val" id="scoreEl">0</div>
+      <div class="subLab">COMBO <span id="comboEl">0</span></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">LEVEL</div>
+      <div class="val" id="levelEl">1</div>
+      <div class="subLab">LIFE <span id="lifeEl">♥♥♥</span></div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="fitWrap"><b id="fitBar"></b></div>
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA GAME</div>
+    <div id="resultBox">
+      <div class="rlab">GAME OVER</div>
+      <div class="rscore" id="finalScore">0</div>
+      <div class="rsub" id="finalSub"></div>
+    </div>
+    <div id="title">KATA</div>
+    <div id="sub">迫りくる光の壁の人型に、体の形を合わせろ</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・カメラの前に立つと、あなたが<b>光のシルエット</b>になります<br>
+      ・正面から<b>人型の穴が空いた光の壁</b>が迫ってきます<br>
+      ・壁が届くまでに<b>同じ形</b>になって、穴をくぐり抜けろ<br>
+      ・穴に収まった部分は<b>青緑</b>、はみ出した部分は<em>赤</em>に光ります<br>
+      ・<b>適合率</b>が高いほど高得点。<em>3回ぶつかると終了</em><br>
+      ・上半身が写るくらいまで<b>カメラから離れて</b>ください
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const ghostBtn = document.getElementById('ghostBtn');
+  const scoreEl  = document.getElementById('scoreEl');
+  const comboEl  = document.getElementById('comboEl');
+  const levelEl  = document.getElementById('levelEl');
+  const lifeEl   = document.getElementById('lifeEl');
+  const fitBar   = document.getElementById('fitBar');
+  const resultBox= document.getElementById('resultBox');
+  const finalScore = document.getElementById('finalScore');
+  const finalSub = document.getElementById('finalSub');
+  const eyebrow  = document.getElementById('eyebrow');
+  const titleEl  = document.getElementById('title');
+  const subEl    = document.getElementById('sub');
+  const hintEl   = document.getElementById('hint');
+  const flashEl  = document.getElementById('flash');
+
+  // additive glow layer (silhouette, ghost target, particles)
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+  // the light wall itself — a full-screen plate with the pose hole punched out
+  const wall  = document.createElement('canvas');
+  const wctx  = wall.getContext('2d');
+  // the plate's gradient + circuit grid never change, so they are baked once
+  const plate = document.createElement('canvas');
+  const pctx  = plate.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    wall.width = W * DPR; wall.height = H * DPR;
+    wctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    plate.width = W * DPR; plate.height = H * DPR;
+    pctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    buildPlate();
+  }
+
+  function buildPlate(){
+    pctx.clearRect(0, 0, W, H);
+    const g = pctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, 'rgba(11,8,32,0.97)');
+    g.addColorStop(0.5, 'rgba(20,10,44,0.97)');
+    g.addColorStop(1, 'rgba(8,5,22,0.97)');
+    pctx.fillStyle = g;
+    pctx.fillRect(0, 0, W, H);
+
+    pctx.strokeStyle = 'rgba(130,140,255,0.10)';
+    pctx.lineWidth = 1;
+    const step = Math.max(38, Math.min(W, H) / 14);
+    pctx.beginPath();
+    for (let x = (W / 2) % step; x < W; x += step){ pctx.moveTo(x, 0); pctx.lineTo(x, H); }
+    for (let y = (H / 2) % step; y < H; y += step){ pctx.moveTo(0, y); pctx.lineTo(W, y); }
+    pctx.stroke();
+  }
+  window.addEventListener('resize', () => { resize(); rebuildWall(); });
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  GAME CONSTANTS
+  // ---------------------------------------------------------------------------
+  const MASK_W = 128, MASK_H = 72, MASK_THRESH = 70, MASK_CELLS = 128 * 72;
+  const MIN_PERSON_CELLS = 200;
+  const START_LIFE = 3;
+  const TICK_MARKS = [0.34, 0.58, 0.76, 0.88, 0.96];
+
+  // pose templates: arm angles in degrees on the *screen* (0 = right, -90 = up,
+  // 90 = down). arms[0] = the arm on the right of the screen, arms[1] = left.
+  // the view is mirrored, so the player simply copies the shape they see.
+  const POSES = [
+    { name:'ばんざい',   diff:1, arms:[[-64,-68],[-116,-112]] },
+    { name:'T字',        diff:1, arms:[[0,0],[180,180]] },
+    { name:'ハの字',     diff:1, arms:[[52,52],[128,128]] },
+    { name:'かたて',     diff:2, arms:[[-70,-70],[148,148]] },
+    { name:'かたて・逆', diff:2, arms:[[32,32],[-110,-110]] },
+    { name:'ちからこぶ', diff:2, arms:[[0,-88],[180,-92]] },
+    { name:'かかし',     diff:2, arms:[[0,0],[180,-92]] },
+    { name:'てんとち',   diff:3, arms:[[-42,-42],[138,138]] },
+    { name:'まる',       diff:3, arms:[[-58,-142],[-122,-38]] },
+    { name:'つばさ',     diff:3, arms:[[-26,34],[206,146]] },
+    { name:'ジグザグ',   diff:3, arms:[[-14,-100],[194,82]] }
+  ];
+
+  function durFor(lv){ return Math.max(2400, 5400 - lv * 190); }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, sfxBus = null, padBus = null;
+  let convolver = null, revGain = null;
+  let droneOsc = null, droneOsc2 = null, droneGain = null;
+  let appOsc = null, appFilter = null, appGain = null;
+  const padOsc = [], padGain = [];
+  let audioReady = false;
+  const noiseBuf = { buf: null };
+
+  const CHORD_ROOTS = [0, -3, -5, 2];
+  const PENTA = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22];
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -17; comp.knee.value = 20; comp.ratio.value = 3.4;
+    comp.attack.value = 0.004;  comp.release.value = 0.24;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(2.2, 2.6);
+    revGain = actx.createGain(); revGain.gain.value = 0.26;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    padBus = actx.createGain(); padBus.gain.value = 0.55;
+
+    sfxBus.connect(master); sfxBus.connect(convolver);
+    padBus.connect(master); padBus.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(1.2);
+
+    // deep cosmic drone bed
+    const droneFilter = actx.createBiquadFilter();
+    droneFilter.type = 'lowpass'; droneFilter.frequency.value = 260; droneFilter.Q.value = 2;
+    droneGain = actx.createGain(); droneGain.gain.value = 0.05;
+    droneOsc  = actx.createOscillator(); droneOsc.type = 'sawtooth'; droneOsc.frequency.value = 55;
+    droneOsc2 = actx.createOscillator(); droneOsc2.type = 'sawtooth'; droneOsc2.frequency.value = 55.4;
+    droneOsc.connect(droneFilter); droneOsc2.connect(droneFilter);
+    droneFilter.connect(droneGain); droneGain.connect(padBus);
+    droneOsc.start(); droneOsc2.start();
+
+    // approach tone — rises as the wall closes in
+    appOsc = actx.createOscillator(); appOsc.type = 'sawtooth'; appOsc.frequency.value = 70;
+    appFilter = actx.createBiquadFilter(); appFilter.type = 'lowpass';
+    appFilter.frequency.value = 500; appFilter.Q.value = 7;
+    appGain = actx.createGain(); appGain.gain.value = 0.0001;
+    appOsc.connect(appFilter); appFilter.connect(appGain); appGain.connect(padBus);
+    appOsc.start();
+
+    // three-voice pad chord that shifts with every wall
+    for (let i = 0; i < 3; i++){
+      const o = actx.createOscillator();
+      o.type = i === 2 ? 'sine' : 'triangle';
+      o.frequency.value = 220;
+      const g = actx.createGain(); g.gain.value = 0.0001;
+      o.connect(g); g.connect(padBus);
+      o.start();
+      padOsc.push(o); padGain.push(g);
+    }
+
+    audioReady = true;
+  }
+
+  function setPadChord(index){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const root = 110 * Math.pow(2, CHORD_ROOTS[index % CHORD_ROOTS.length] / 12);
+    const ratios = [1, Math.pow(2, 7 / 12), Math.pow(2, 15 / 12)];
+    for (let i = 0; i < padOsc.length; i++){
+      padOsc[i].frequency.setTargetAtTime(root * ratios[i], t, 0.25);
+      padGain[i].gain.setTargetAtTime(0.035, t, 0.4);
+    }
+  }
+  function chordRootHz(index){
+    return 220 * Math.pow(2, CHORD_ROOTS[index % CHORD_ROOTS.length] / 12);
+  }
+
+  function setApproachTone(s, active){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    if (!active){
+      appGain.gain.setTargetAtTime(0.0001, t, 0.12);
+      return;
+    }
+    appOsc.frequency.setTargetAtTime(64 + s * s * 250, t, 0.08);
+    appFilter.frequency.setTargetAtTime(340 + s * 1500, t, 0.1);
+    appGain.gain.setTargetAtTime(0.035 + s * 0.075, t, 0.1);
+  }
+
+  function tickSound(t, n){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(520 * Math.pow(2, n / 9), t);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.12);
+  }
+
+  function whoosh(t){
+    if (!audioReady) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+    bp.frequency.setValueAtTime(380, t);
+    bp.frequency.exponentialRampToValueAtTime(3400, t + 0.42);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.32, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    src.connect(bp); bp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t + 0.6);
+  }
+
+  function chordUp(t, notes, rootHz){
+    if (!audioReady) return;
+    for (let i = 0; i < notes; i++){
+      const semi = PENTA[Math.min(PENTA.length - 1, i)];
+      const o = actx.createOscillator(); o.type = i % 2 === 0 ? 'triangle' : 'sine';
+      o.frequency.value = rootHz * Math.pow(2, semi / 12);
+      const g = actx.createGain();
+      const st = t + i * 0.055;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.15, st + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.5);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.55);
+    }
+  }
+
+  function crashSound(t){
+    if (!audioReady) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2600, t);
+    lp.frequency.exponentialRampToValueAtTime(220, t + 0.4);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    src.connect(lp); lp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t + 0.5);
+
+    const thud = actx.createOscillator(); thud.type = 'sine';
+    thud.frequency.setValueAtTime(120, t);
+    thud.frequency.exponentialRampToValueAtTime(38, t + 0.3);
+    const tg = actx.createGain();
+    tg.gain.setValueAtTime(0.5, t);
+    tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    thud.connect(tg); tg.connect(sfxBus);
+    thud.start(t); thud.stop(t + 0.42);
+
+    for (const f of [104, 110.5]){
+      const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+      const g2 = actx.createGain();
+      g2.gain.setValueAtTime(0.0001, t);
+      g2.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      o.connect(g2); g2.connect(sfxBus);
+      o.start(t); o.stop(t + 0.52);
+    }
+  }
+
+  function levelUpSound(t){
+    if (!audioReady) return;
+    [0, 7].forEach((semi, i) => {
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.value = 880 * Math.pow(2, semi / 12);
+      const g = actx.createGain();
+      const st = t + i * 0.08;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.1, st + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.3);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.32);
+    });
+  }
+
+  function gameOverSound(t){
+    if (!audioReady) return;
+    [0, -4, -9].forEach((semi, i) => {
+      const o = actx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.value = 220 * Math.pow(2, semi / 12);
+      const g = actx.createGain();
+      const st = t + i * 0.2;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.2, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.6);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.62);
+    });
+  }
+
+  function fadeOutBeds(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    appGain.gain.setTargetAtTime(0.0001, t, 0.15);
+    for (let i = 0; i < padGain.length; i++) padGain[i].gain.setTargetAtTime(0.0001, t, 0.5);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  POSE + SEGMENTATION
+  //  MediaPipe Pose gives us both the body landmarks (to size and anchor the
+  //  hole to *this* player) and a segmentation mask (to judge, pixel by pixel,
+  //  how much of the body actually fits through it).
+  // ---------------------------------------------------------------------------
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = MASK_W; maskCanvas.height = MASK_H;
+  const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+
+  // feedback layer: one pixel per mask cell, tinted by "inside the hole or not"
+  const fbCanvas = document.createElement('canvas');
+  fbCanvas.width = MASK_W; fbCanvas.height = MASK_H;
+  const fbCtx = fbCanvas.getContext('2d');
+  const fbImg = fbCtx.createImageData(MASK_W, MASK_H);
+
+  let maskData = null;
+  const TRACK = { ok:false, t:0, lx:0.5, ly:0.5, rx:0.5, ry:0.5 };
+  const RESULT = { t:0 };
+
+  function onPoseResults(results){
+    if (!results) return;
+    if (results.segmentationMask){
+      try {
+        maskCtx.clearRect(0, 0, MASK_W, MASK_H);
+        maskCtx.drawImage(results.segmentationMask, 0, 0, MASK_W, MASK_H);
+        maskData = maskCtx.getImageData(0, 0, MASK_W, MASK_H).data;
+      } catch(e){ maskData = null; }
+    }
+    const lm = results.poseLandmarks;
+    if (lm && lm.length > 24){
+      const ls = lm[11], rs = lm[12];
+      const okL = ls && (ls.visibility === undefined || ls.visibility > 0.45);
+      const okR = rs && (rs.visibility === undefined || rs.visibility > 0.45);
+      if (okL && okR){
+        TRACK.lx = ls.x; TRACK.ly = ls.y;
+        TRACK.rx = rs.x; TRACK.ry = rs.y;
+        TRACK.ok = true; TRACK.t = performance.now();
+      }
+    }
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false, pose = null;
+
+  function initPose(){
+    pose = new Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      enableSegmentation: true,
+      smoothSegmentation: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    pose.onResults(onPoseResults);
+  }
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function startCameraLoop(){
+    if (mpCamera) { mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await pose.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let ghostOn = true;
+  ghostBtn.addEventListener('click', () => {
+    ghostOn = !ghostOn;
+    ghostBtn.textContent = ghostOn ? '型ガイド ON' : '型ガイド OFF';
+    ghostBtn.classList.toggle('active', ghostOn);
+  });
+
+  // cover-fit rect of the camera frame inside the viewport
+  function videoRect(){
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    return { dx: (W - dw) / 2, dy: (H - dh) / 2, dw, dh };
+  }
+  function normToScreen(nx, ny){
+    const r = videoRect();
+    const x = r.dx + nx * r.dw;
+    return { x: mirror ? W - x : x, y: r.dy + ny * r.dh };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HOLE GEOMETRY — a union of capsules built from a stick-figure template,
+  //  measured in shoulder-widths so it always fits the player in front of it.
+  // ---------------------------------------------------------------------------
+  //  scoring groups: 0 = core (head/neck/torso), 1|3 = upper arms, 2|4 =
+  //  forearm + hand. the core capsules come first so overlapping cells count as
+  //  core, and upper arm and forearm are kept apart on purpose — score a whole
+  //  arm as one region and a filled upper arm alone saturates it, which would
+  //  make the elbow angle (the whole character of a pose) stop mattering.
+  function poseCapsules(p){
+    const caps = [];
+    caps.push({ x1:0, y1:-1.04, x2:0, y2:-0.68, r:0.48, g:0 });        // head
+    caps.push({ x1:0, y1:-0.44, x2:0, y2: 0.06, r:0.30, g:0 });        // neck
+    caps.push({ x1:0, y1: 0.02, x2:0, y2: 2.60, r:0.66, g:0, ext:true }); // torso, open to the floor
+    for (let i = 0; i < 2; i++){
+      const side = (i === 0) ? 1 : -1;
+      const gu = 1 + i * 2, gf = 2 + i * 2;
+      const pair = p.arms[i] || [0, 0];
+      const a1 = pair[0] * Math.PI / 180;
+      const a2 = pair[1] * Math.PI / 180;
+      const shx = side * 0.52, shy = -0.02;
+      const elx = shx + Math.cos(a1) * 0.92, ely = shy + Math.sin(a1) * 0.92;
+      const wrx = elx + Math.cos(a2) * 0.86, wry = ely + Math.sin(a2) * 0.86;
+      caps.push({ x1:shx, y1:shy, x2:elx, y2:ely, r:0.30, g:gu });
+      caps.push({ x1:elx, y1:ely, x2:wrx, y2:wry, r:0.26, g:gf });
+      caps.push({ x1:wrx, y1:wry, x2:wrx, y2:wry, r:0.29, g:gf });
+    }
+    return caps;
+  }
+
+  function placeCaps(unitCaps, anchor, u, tiltDeg){
+    const a = tiltDeg * Math.PI / 180;
+    const cs = Math.cos(a), sn = Math.sin(a);
+    const out = [];
+    for (const c of unitCaps){
+      const x1 = anchor.x + (c.x1 * cs - c.y1 * sn) * u;
+      const y1 = anchor.y + (c.x1 * sn + c.y1 * cs) * u;
+      let x2 = anchor.x + (c.x2 * cs - c.y2 * sn) * u;
+      let y2 = anchor.y + (c.x2 * sn + c.y2 * cs) * u;
+      if (c.ext){
+        // the torso opening must always reach past the bottom of the screen,
+        // otherwise legs below the hole would be scored as a collision
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.hypot(dx, dy);
+        if (len > 1e-3 && dy > 0.05 * len){
+          const need = (H + u * 0.9 - y1) / dy;
+          if (need > 1){ x2 = x1 + dx * need; y2 = y1 + dy * need; }
+        }
+      }
+      const r = c.r * u;
+      out.push({
+        x1, y1, x2, y2, r, g: c.g,
+        bx0: Math.min(x1, x2) - r, by0: Math.min(y1, y2) - r,
+        bx1: Math.max(x1, x2) + r, by1: Math.max(y1, y2) + r
+      });
+    }
+    return out;
+  }
+
+  function capsBBox(caps){
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const c of caps){
+      x0 = Math.min(x0, c.x1 - c.r, c.x2 - c.r);
+      y0 = Math.min(y0, c.y1 - c.r, c.y2 - c.r);
+      x1 = Math.max(x1, c.x1 + c.r, c.x2 + c.r);
+      y1 = Math.max(y1, c.y1 + c.r, c.y2 + c.r);
+    }
+    return { x0, y0, x1, y1 };
+  }
+
+  // -1 when the point misses the shape, otherwise the group of the first
+  // capsule that contains it (core capsules are tested first by construction)
+  function capGroup(caps, x, y){
+    for (let i = 0; i < caps.length; i++){
+      const c = caps[i];
+      if (x < c.bx0 || x > c.bx1 || y < c.by0 || y > c.by1) continue;
+      const dx = c.x2 - c.x1, dy = c.y2 - c.y1;
+      const ll = dx * dx + dy * dy;
+      let k = 0;
+      if (ll > 1e-6){
+        k = ((x - c.x1) * dx + (y - c.y1) * dy) / ll;
+        k = k < 0 ? 0 : (k > 1 ? 1 : k);
+      }
+      const ox = c.x1 + dx * k - x, oy = c.y1 + dy * k - y;
+      if (ox * ox + oy * oy <= c.r * c.r) return c.g;
+    }
+    return -1;
+  }
+
+  // perspective: the wall rushes in toward the camera, growing about the
+  // vanishing point until it lands exactly on the target shape at s = 1
+  function vanish(){ return { x: W / 2, y: H * 0.45 }; }
+  function scaleCaps(caps, s){
+    const v = vanish();
+    const out = [];
+    for (const c of caps){
+      out.push({
+        x1: v.x + (c.x1 - v.x) * s, y1: v.y + (c.y1 - v.y) * s,
+        x2: v.x + (c.x2 - v.x) * s, y2: v.y + (c.y2 - v.y) * s,
+        r: Math.max(1, c.r * s)
+      });
+    }
+    return out;
+  }
+
+  function capsulePath(c, caps){
+    c.beginPath();
+    for (const cp of caps){
+      const a = Math.atan2(cp.y2 - cp.y1, cp.x2 - cp.x1);
+      c.moveTo(cp.x1 + Math.cos(a + Math.PI / 2) * cp.r, cp.y1 + Math.sin(a + Math.PI / 2) * cp.r);
+      c.arc(cp.x1, cp.y1, cp.r, a + Math.PI / 2, a + Math.PI * 1.5);
+      c.arc(cp.x2, cp.y2, cp.r, a - Math.PI / 2, a + Math.PI / 2);
+      c.closePath();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  FIT SCAN — walks the segmentation mask and asks, cell by cell, whether the
+  //  body is inside the hole. doubles as the green/red feedback silhouette.
+  // ---------------------------------------------------------------------------
+  const FIT = { person:0, inside:0, hole:0, quality:0, ratio:0 };
+  const holeG = [0, 0, 0, 0, 0], insideG = [0, 0, 0, 0, 0];
+  // MediaPipe hands the mask over as an RGBA image whose channels all carry the
+  // same confidence, so the premultiplied red channel reads it. if a build ever
+  // ships a mask that lives purely in alpha (black pixels, varying opacity),
+  // red stays flat while alpha clearly outlines a body — detect that and switch.
+  let useAlpha = false;
+
+  function scanFit(caps, bbox){
+    FIT.person = 0; FIT.inside = 0; FIT.hole = 0;
+    for (let g = 0; g < holeG.length; g++){ holeG[g] = 0; insideG[g] = 0; }
+    const img = fbImg.data;
+    const fresh = maskData && (performance.now() - RESULT.t) < 600;
+    if (!fresh){
+      for (let i = 3; i < img.length; i += 4) img[i] = 0;
+      FIT.quality = 0; FIT.ratio = 0;
+      fbCtx.putImageData(fbImg, 0, 0);
+      return;
+    }
+    const r = videoRect();
+    let maxRed = 0, alphaHigh = 0;
+    for (let my = 0; my < MASK_H; my++){
+      const sy = r.dy + ((my + 0.5) / MASK_H) * r.dh;
+      const okY = sy >= -2 && sy <= H + 2;
+      for (let mx = 0; mx < MASK_W; mx++){
+        const idx = my * MASK_W + mx;
+        const o = idx * 4;
+        let sx = r.dx + ((mx + 0.5) / MASK_W) * r.dw;
+        if (mirror) sx = W - sx;
+        const onScreen = okY && sx >= -2 && sx <= W + 2;
+        const red = maskData[o], alpha = maskData[o + 3];
+        if (red > maxRed) maxRed = red;
+        if (alpha > 200) alphaHigh++;
+        const conf = useAlpha ? alpha : (red * alpha) / 255;
+        const isPerson = onScreen && conf > MASK_THRESH;
+        let inHole = false;
+        if (caps && onScreen && sx >= bbox.x0 && sx <= bbox.x1 && sy >= bbox.y0 && sy <= bbox.y1){
+          const g = capGroup(caps, sx, sy);
+          if (g >= 0){
+            inHole = true;
+            FIT.hole++; holeG[g]++;
+            if (isPerson) insideG[g]++;
+          }
+        }
+        if (isPerson){
+          FIT.person++;
+          if (inHole) FIT.inside++;
+          if (!caps){
+            img[o] = 90; img[o+1] = 235; img[o+2] = 255; img[o+3] = 130;
+          } else if (inHole){
+            img[o] = 90; img[o+1] = 255; img[o+2] = 190; img[o+3] = 135;
+          } else {
+            img[o] = 255; img[o+1] = 70; img[o+2] = 110; img[o+3] = 195;
+          }
+        } else {
+          img[o+3] = 0;
+        }
+      }
+    }
+    fbCtx.putImageData(fbImg, 0, 0);
+
+    // flat red channel + an alpha channel that outlines *something* (not the
+    // whole frame) means the mask is alpha-encoded — read it that way from now on
+    if (!useAlpha && maxRed < 40 && alphaHigh > MASK_CELLS * 0.05 && alphaHigh < MASK_CELLS * 0.6){
+      useAlpha = true;
+    }
+
+    if (!caps || FIT.person < MIN_PERSON_CELLS){
+      FIT.quality = 0; FIT.ratio = 0;
+      return;
+    }
+    // how much of you clears the wall — catches limbs that would be hit
+    const ratio = FIT.inside / FIT.person;
+    // ...and how much of the shape you actually occupy, measured per region.
+    // a global fill ratio is useless here: the torso opening dwarfs the limbs,
+    // so simply standing still would "fill" a T-shaped hole. scoring each limb
+    // segment separately is what forces the player to really strike the pose.
+    const coreScore = holeG[0] > 0 ? Math.min(1, (insideG[0] / holeG[0]) / 0.5) : 1;
+    let wSum = 0, sSum = 0;
+    for (let g = 1; g < holeG.length; g++){
+      const w = holeG[g];
+      if (w > 15){                    // a segment reaching off-screen just drops out
+        wSum += w;
+        sSum += w * Math.min(1, (insideG[g] / w) / 0.36);
+      }
+    }
+    const limbScore = wSum ? sSum / wSum : 1;
+    const shape = 0.2 * coreScore + 0.8 * limbScore;
+    FIT.ratio = ratio;
+    FIT.quality = Math.max(0, Math.min(1, ratio * shape));
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — base, silhouette, wall
+  // ---------------------------------------------------------------------------
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const r = videoRect();
+    try { ctx.drawImage(video, r.dx, r.dy, r.dw, r.dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(4,3,14,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(46,30,90,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.45, Math.min(W,H)*0.18, W/2, H*0.5, Math.max(W,H)*0.76);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,1,8,0.88)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawSilhouette(){
+    const r = videoRect();
+    fctx.save();
+    fctx.globalCompositeOperation = 'lighter';
+    fctx.imageSmoothingEnabled = true;
+    if (mirror){ fctx.translate(W, 0); fctx.scale(-1, 1); }
+    fctx.globalAlpha = 0.5;
+    fctx.drawImage(fbCanvas, r.dx - 6, r.dy - 6, r.dw + 12, r.dh + 12);
+    fctx.globalAlpha = 1;
+    fctx.drawImage(fbCanvas, r.dx, r.dy, r.dw, r.dh);
+    fctx.restore();
+  }
+
+  function drawGhost(caps){
+    if (!ghostOn) return;
+    fctx.save();
+    fctx.globalCompositeOperation = 'lighter';
+    capsulePath(fctx, caps);
+    fctx.fillStyle = 'rgba(46,120,190,0.13)';
+    fctx.fill();
+    fctx.restore();
+  }
+
+  function drawWall(caps, alpha, hot){
+    wctx.clearRect(0, 0, W, H);
+    wctx.drawImage(plate, 0, 0, W, H);
+
+    // neon rim: paint fat glowing strokes, then punch the hole out of them
+    wctx.save();
+    wctx.lineCap = 'round'; wctx.lineJoin = 'round';
+    wctx.shadowBlur = 26;
+    wctx.shadowColor = hot ? 'rgba(255,79,216,0.95)' : 'rgba(88,247,255,0.9)';
+    wctx.strokeStyle = hot ? 'rgba(255,190,240,0.95)' : 'rgba(190,250,255,0.95)';
+    for (const c of caps){
+      wctx.beginPath();
+      wctx.moveTo(c.x1, c.y1); wctx.lineTo(c.x2, c.y2);
+      wctx.lineWidth = c.r * 2 + 7;
+      wctx.stroke();
+    }
+    wctx.restore();
+
+    wctx.save();
+    wctx.globalCompositeOperation = 'destination-out';
+    capsulePath(wctx, caps);
+    wctx.fillStyle = 'rgba(0,0,0,1)';
+    wctx.fill();
+    wctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.drawImage(wall, 0, 0, W, H);
+    ctx.restore();
+  }
+
+  // ---- streaming dust, sells the depth of the approach ----
+  const dust = [];
+  function seedDust(){
+    dust.length = 0;
+    for (let i = 0; i < 80; i++){
+      dust.push({
+        a: Math.random() * Math.PI * 2,
+        r: 0.02 + Math.random() * 0.9,
+        sp: 0.0016 + Math.random() * 0.0044,
+        hue: 190 + Math.random() * 110
+      });
+    }
+  }
+  seedDust();
+  function updateDrawDust(speed){
+    const v = vanish();
+    const maxR = Math.max(W, H) * 0.8;
+    fctx.save();
+    fctx.globalCompositeOperation = 'lighter';
+    for (const d of dust){
+      d.r += d.sp * (0.6 + speed * 2.2);
+      if (d.r > 1){ d.r = 0.02; d.a = Math.random() * Math.PI * 2; }
+      const x = v.x + Math.cos(d.a) * d.r * maxR;
+      const y = v.y + Math.sin(d.a) * d.r * maxR;
+      const al = Math.min(1, d.r * 1.6) * 0.5;
+      fctx.fillStyle = `hsla(${d.hue},100%,78%,${al})`;
+      fctx.beginPath(); fctx.arc(x, y, 0.6 + d.r * 2.1, 0, Math.PI * 2); fctx.fill();
+    }
+    fctx.restore();
+  }
+
+  // ---- bursts & popups ----
+  const bursts = [];
+  const popups = [];
+  function spawnBurst(x, y, hue, n){
+    for (let i = 0; i < n; i++){
+      const a = Math.random() * Math.PI * 2, s = 2 + Math.random() * 6;
+      bursts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, hue });
+    }
+  }
+  function updateDrawBursts(){
+    fctx.save(); fctx.globalCompositeOperation = 'lighter';
+    for (let i = bursts.length - 1; i >= 0; i--){
+      const b = bursts[i];
+      b.x += b.vx; b.y += b.vy; b.vx *= 0.93; b.vy *= 0.93; b.life -= 0.028;
+      if (b.life <= 0){ bursts.splice(i, 1); continue; }
+      fctx.fillStyle = `hsla(${b.hue},100%,70%,${b.life})`;
+      fctx.beginPath(); fctx.arc(b.x, b.y, 3 * b.life + 1, 0, Math.PI * 2); fctx.fill();
+    }
+    fctx.restore();
+  }
+  function spawnPopup(x, y, text, color, size){
+    popups.push({ x, y, text, color, size: size || 22, life: 1, vy: -0.7 });
+  }
+  function updateDrawPopups(){
+    for (let i = popups.length - 1; i >= 0; i--){
+      const p = popups[i];
+      p.y += p.vy; p.life -= 0.016;
+      if (p.life <= 0){ popups.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.6));
+      ctx.fillStyle = p.color;
+      ctx.font = `800 ${p.size}px sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowBlur = 18; ctx.shadowColor = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+  }
+
+  function drawCountdown(label, q){
+    const scale = 1 + (1 - Math.min(1, q / 0.3)) * 0.6;
+    const alpha = q > 0.75 ? 1 - (q - 0.75) / 0.25 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(W / 2, H * 0.42);
+    ctx.scale(scale, scale);
+    ctx.font = '800 88px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 30; ctx.shadowColor = 'rgba(88,247,255,0.9)';
+    ctx.fillStyle = '#58f7ff';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GAME STATE
+  // ---------------------------------------------------------------------------
+  let state = 'idle';               // idle | countdown | playing | over
+  let score = 0, combo = 0, maxCombo = 0, level = 1, life = START_LIFE;
+  let cleared = 0, perfectCount = 0, bestFit = 0, wallIndex = 0;
+  let currentWall = null;
+  let countdownStart = 0;
+  let shake = 0, flashAmt = 0, flashHue = 'white';
+  let smoothU = 0, smoothX = 0, smoothY = 0, haveAnchor = false;
+  let lastPoseName = '';
+  let lastScanMaskT = -1, lastScanCaps = null;
+
+  const COUNTDOWN_LABELS = ['3', '2', '1', 'START!'];
+  const COUNTDOWN_STEP = 650;
+
+  function updateTracking(){
+    const fresh = TRACK.ok && (performance.now() - TRACK.t) < 700;
+    if (!fresh) return;
+    const a = normToScreen(TRACK.lx, TRACK.ly);
+    const b = normToScreen(TRACK.rx, TRACK.ry);
+    const u = Math.max(Math.min(W, H) * 0.07, Math.min(Math.min(W, H) * 0.4, Math.hypot(a.x - b.x, a.y - b.y)));
+    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    if (!haveAnchor){
+      smoothU = u; smoothX = cx; smoothY = cy; haveAnchor = true;
+    } else {
+      smoothU += (u - smoothU) * 0.18;
+      smoothX += (cx - smoothX) * 0.2;
+      smoothY += (cy - smoothY) * 0.2;
+    }
+  }
+
+  function pickPose(){
+    const tier = level < 3 ? 1 : (level < 7 ? 2 : 3);
+    const pool = POSES.filter(p => p.diff <= tier && p.name !== lastPoseName);
+    const list = pool.length ? pool : POSES;
+    return list[(Math.random() * list.length) | 0];
+  }
+
+  function spawnWall(){
+    const p = pickPose();
+    lastPoseName = p.name;
+    const u = haveAnchor ? smoothU : Math.min(W, H) * 0.16;
+    let ax = haveAnchor ? smoothX : W / 2;
+    let ay = haveAnchor ? smoothY : H * 0.42;
+
+    let offset = 0;
+    if (level >= 4) offset = (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.75) * u;
+    let tilt = 0;
+    if (level >= 9 && Math.random() < 0.55) tilt = (Math.random() < 0.5 ? -1 : 1) * (9 + Math.random() * 9);
+
+    ax = Math.max(W * 0.26, Math.min(W * 0.74, ax + offset));
+    ay = Math.max(H * 0.2, Math.min(H * 0.55, ay));
+
+    const caps = placeCaps(poseCapsules(p), { x: ax, y: ay }, u, tilt);
+    currentWall = {
+      pose: p, caps, bbox: capsBBox(caps), tilt,
+      born: performance.now(), dur: durFor(level),
+      phase: 'approach', judged: false, tickIdx: 0,
+      grade: null, quality: 0, best: 0, resultAt: 0
+    };
+    wallIndex++;
+    setPadChord(wallIndex);
+  }
+
+  // the hole lives in screen pixels, so a rotate/resize has to re-place it
+  // around the player instead of leaving it stranded off-frame
+  function rebuildWall(){
+    const w = currentWall;
+    if (!w || !w.pose) return;
+    const u = haveAnchor ? smoothU : Math.min(W, H) * 0.16;
+    const ax = Math.max(W * 0.26, Math.min(W * 0.74, haveAnchor ? smoothX : W / 2));
+    const ay = Math.max(H * 0.2, Math.min(H * 0.55, haveAnchor ? smoothY : H * 0.42));
+    w.caps = placeCaps(poseCapsules(w.pose), { x: ax, y: ay }, u, w.tilt || 0);
+    w.bbox = capsBBox(w.caps);
+  }
+
+  function updateHud(){
+    scoreEl.textContent = score;
+    comboEl.textContent = combo;
+    levelEl.textContent = level;
+    let hearts = '';
+    for (let i = 0; i < START_LIFE; i++){
+      hearts += (i < life) ? '♥' : '<span class="dead">♥</span>';
+    }
+    lifeEl.innerHTML = hearts;
+  }
+
+  function judgeWall(w, t){
+    if (w.judged) return;
+    w.judged = true;
+    w.phase = 'result';
+    w.resultAt = t;
+
+    const q = Math.max(w.best, FIT.quality);
+    w.quality = q;
+    const pct = Math.round(q * 100);
+    bestFit = Math.max(bestFit, pct);
+
+    let grade;
+    if (pct >= 80) grade = 'PERFECT';
+    else if (pct >= 65) grade = 'GREAT';
+    else if (pct >= 45) grade = 'CLEAR';
+    else grade = 'CRASH';
+    w.grade = grade;
+
+    const cx = (w.bbox.x0 + w.bbox.x1) / 2;
+    const cy = Math.min(H * 0.72, Math.max(H * 0.22, (w.bbox.y0 + w.bbox.y1) / 2));
+
+    if (grade === 'CRASH'){
+      life--;
+      combo = 0;
+      shake = 18; flashAmt = 0.8; flashHue = 'red';
+      spawnBurst(cx, cy, 350, 34);
+      spawnPopup(W / 2, H * 0.36, 'CRASH ' + pct + '%', '#ff3b5c', 34);
+      if (audioReady) crashSound(actx.currentTime);
+    } else {
+      cleared++;
+      const base = grade === 'PERFECT' ? 1000 : (grade === 'GREAT' ? 600 : 300);
+      const pts = base + Math.round(q * 300) + combo * 40;
+      score += pts;
+      combo++;
+      maxCombo = Math.max(maxCombo, combo);
+      if (grade === 'PERFECT') perfectCount++;
+      level++;
+      shake = grade === 'PERFECT' ? 7 : 4;
+      flashAmt = grade === 'PERFECT' ? 0.75 : 0.45; flashHue = 'white';
+      spawnBurst(cx, cy, grade === 'PERFECT' ? 50 : 170, grade === 'PERFECT' ? 40 : 22);
+      spawnPopup(W / 2, H * 0.34, grade + ' ' + pct + '%',
+        grade === 'PERFECT' ? '#ffd75e' : (grade === 'GREAT' ? '#7dff9e' : '#58f7ff'),
+        grade === 'PERFECT' ? 34 : 28);
+      spawnPopup(W / 2, H * 0.34 + 34, '+' + pts, 'rgba(238,242,255,0.85)', 18);
+      if (audioReady){
+        const now = actx.currentTime;
+        whoosh(now);
+        chordUp(now + 0.05, grade === 'PERFECT' ? 5 : (grade === 'GREAT' ? 4 : 3), chordRootHz(wallIndex));
+        if (level % 5 === 0) levelUpSound(now + 0.4);
+      }
+    }
+    updateHud();
+  }
+
+  function resetGame(){
+    score = 0; combo = 0; maxCombo = 0; level = 1; life = START_LIFE;
+    cleared = 0; perfectCount = 0; bestFit = 0; wallIndex = 0;
+    currentWall = null; lastPoseName = '';
+    bursts.length = 0; popups.length = 0;
+    shake = 0; flashAmt = 0;
+    updateHud();
+    fitBar.style.width = '0%';
+  }
+
+  function startGame(){
+    resetGame();
+    state = 'countdown';
+    countdownStart = performance.now();
+  }
+
+  function endGame(){
+    if (state !== 'playing') return;
+    state = 'over';
+    currentWall = null;
+    fadeOutBeds();
+    if (audioReady) gameOverSound(actx.currentTime);
+    finalScore.textContent = score;
+    finalSub.innerHTML = `くぐり抜けた壁 ${cleared} ・ 最大コンボ ${maxCombo}<br>PERFECT ${perfectCount} ・ 最高適合率 ${bestFit}% ・ 到達レベル ${level}`;
+    resultBox.style.display = 'block';
+    eyebrow.style.display = 'none';
+    titleEl.textContent = 'GAME OVER';
+    subEl.textContent = '';
+    hintEl.style.display = 'none';
+    startBtn.textContent = 'もう一度';
+    overlay.classList.remove('hidden');
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+      shake *= 0.86;
+    }
+    drawVideoBase();
+
+    // fade the glow layer -> trailing afterglow
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.3)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    updateTracking();
+
+    // the pose model runs slower than the display, so only re-scan the mask
+    // when a new one has actually landed (or when the target shape changed)
+    const w = currentWall;
+    const active = !!(w && state === 'playing');
+    const capsNow = active ? w.caps : null;
+    if (RESULT.t !== lastScanMaskT || capsNow !== lastScanCaps || (t - RESULT.t) >= 600){
+      scanFit(capsNow, active ? w.bbox : null);
+      lastScanMaskT = RESULT.t;
+      lastScanCaps = capsNow;
+    }
+
+    let s = 0;
+    let approaching = false;
+
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx >= COUNTDOWN_LABELS.length){
+        state = 'playing';
+        spawnWall();
+      }
+    }
+
+    if (state === 'playing' && w){
+      if (w.phase === 'approach'){
+        s = Math.min(1, (t - w.born) / w.dur);
+        approaching = true;
+        if (s > 0.8) w.best = Math.max(w.best, FIT.quality);
+        while (w.tickIdx < TICK_MARKS.length && s >= TICK_MARKS[w.tickIdx]){
+          if (audioReady) tickSound(actx.currentTime, w.tickIdx);
+          w.tickIdx++;
+        }
+        if (s >= 1) judgeWall(w, t);
+      }
+      if (w.phase === 'result'){
+        const el = t - w.resultAt;
+        const span = (w.grade === 'CRASH') ? 1200 : 850;
+        if (el >= span){
+          if (life <= 0) endGame();
+          else spawnWall();
+        }
+      }
+    }
+
+    // ---- draw the target ghost and the approaching wall ----
+    if (active && w){
+      drawGhost(w.caps);
+      if (w.phase === 'approach'){
+        const drawn = scaleCaps(w.caps, Math.max(0.12, s));
+        drawWall(drawn, 0.2 + Math.pow(s, 1.4) * 0.72, FIT.quality >= 0.8);
+      } else {
+        const el = t - w.resultAt;
+        if (w.grade === 'CRASH'){
+          const a = el < 620 ? 0.94 : Math.max(0, 0.94 - (el - 620) / 580);
+          drawWall(scaleCaps(w.caps, 1), a, false);
+        } else {
+          const k = Math.min(1, el / 850);
+          drawWall(scaleCaps(w.caps, 1 + k * 2.4), Math.max(0, 0.9 - k * 0.9), true);
+        }
+      }
+    }
+
+    drawSilhouette();
+    updateDrawDust(approaching ? s : 0.15);
+    updateDrawBursts();
+
+    // composite the glow layer over the scene
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0, W, H);
+    ctx.restore();
+
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx < COUNTDOWN_LABELS.length){
+        drawCountdown(COUNTDOWN_LABELS[idx], (el % COUNTDOWN_STEP) / COUNTDOWN_STEP);
+      }
+    }
+
+    updateDrawPopups();
+    ctx.restore(); // shake transform
+
+    setApproachTone(s, approaching && audioReady);
+
+    flashAmt *= 0.88;
+    flashEl.style.background = flashHue === 'red'
+      ? `rgba(255,59,92,${flashAmt * 0.34})`
+      : `rgba(230,250,255,${flashAmt * 0.3})`;
+
+    // ---- HUD ----
+    const pct = Math.round(FIT.quality * 100);
+    fitBar.style.width = pct + '%';
+    fitBar.className = pct >= 80 ? 'great' : (pct < 45 ? 'bad' : '');
+
+    if (state === 'playing' && w){
+      if (w.phase === 'result'){
+        stateDot.textContent = w.grade === 'CRASH'
+          ? `✕ ぶつかった ・ 適合 ${Math.round(w.quality * 100)}%`
+          : `✓ ${w.grade} ・ 適合 ${Math.round(w.quality * 100)}%`;
+        stateDot.className = w.grade === 'CRASH' ? 'warnState' : 'hot';
+      } else if (FIT.person < MIN_PERSON_CELLS){
+        stateDot.textContent = '全身がうつるようにカメラから離れて';
+        stateDot.className = 'silent';
+      } else {
+        stateDot.textContent = `型：${w.pose.name} ・ 適合 ${pct}%`;
+        stateDot.className = pct >= 80 ? 'hot' : (pct < 45 ? 'warnState' : '');
+      }
+    } else if (state === 'countdown'){
+      stateDot.textContent = 'カメラの前に立ってください';
+      stateDot.className = 'silent';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        if (typeof Pose === 'undefined' || typeof Camera === 'undefined'){
+          throw new Error('人物検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+        }
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        if (!pose) initPose();
+        await startStream();
+        await startCameraLoop();
+        running = true;
+        booted = true;
+        requestAnimationFrame(frame);
+      } else {
+        if (actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      ghostBtn.classList.add('active');
+      resultBox.style.display = 'none';
+      eyebrow.style.display = 'block';
+      titleEl.textContent = 'KATA';
+      subEl.textContent = '迫りくる光の壁の人型に、体の形を合わせろ';
+      hintEl.style.display = 'block';
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+      startGame();
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
