@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04060d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="手を振り下ろすと音が鳴り、5秒のループが一周するたびに直前の演奏が影の分身となって重なり続ける身体の輪唱楽器。腕を交差させると全てのこだまが消える - YAMABIKO">
+<title>YAMABIKO ─ 身体の輪唱</title>
+<style>
+  :root{
+    --void:#04060d;
+    --haze:#0d1526;
+    --ghost:#eef2ff;
+    --warn:#ff5470;
+    --accent:#7ff5e6;
+    --violet:#b48cff;
+    --gold:#ffd479;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(44px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,#7ff5e6,transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,#b48cff,transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,#ffd479,transparent 70%); animation-delay:-10s; }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(6vmin,-4vmin) scale(1.15); }
+  }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.14em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,#7ff5e6,#b48cff,#ffd479,#7ff5e6);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite;
+    margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:2rem; position:relative; }
+  #startBtn{
+    position:relative;
+    padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,#7ff5e6,#b48cff); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(140,120,255,0.5);
+    transition:transform .18s ease, box-shadow .18s ease;
+    animation:breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(127,245,230,0.4); }
+    50%{ box-shadow:0 0 44px rgba(180,140,255,0.6); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{
+    position:relative;
+    margin-top:2.2rem; max-width:23rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--accent); font-weight:700; }
+  #hint em{ color:var(--violet); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(6,9,20,0.44); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(180,190,255,0.14); border-radius:16px; padding:0.65rem 0.9rem;
+    color:var(--ghost); min-width:118px;
+  }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.3rem; }
+  .panel .cnt{ font-size:1.6rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .panel .cnt small{ font-size:0.66rem; font-weight:600; color:rgba(238,242,255,0.55); margin-left:.15rem; }
+  .dots{ display:flex; gap:6px; margin-top:0.45rem; }
+  .panel[data-side="r"] .dots{ justify-content:flex-end; }
+  .dots i{
+    width:9px; height:9px; border-radius:50%; background:rgba(238,242,255,0.13);
+    transition:background .2s ease, box-shadow .2s ease, transform .2s ease;
+  }
+  .dots i.on{ transform:scale(1.2); }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,242,255,0.1); margin-top:0.5rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,#7ff5e6,#b48cff); border-radius:2px; }
+  .tim{ font-size:0.6rem; letter-spacing:0.08em; margin-top:0.4rem; color:var(--accent); min-height:0.85em; }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .tim{ text-align:right; color:var(--gold); }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.66rem; letter-spacing:0.18em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(180,190,255,0.16);
+    background:rgba(6,9,20,0.42); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease;
+    white-space:nowrap;
+  }
+  #stateDot.playing{ color:#7ff5e6; border-color:rgba(127,245,230,0.5); box-shadow:0 0 18px rgba(127,245,230,0.24); }
+  #stateDot.echoing{ color:#b48cff; border-color:rgba(180,140,255,0.5); box-shadow:0 0 18px rgba(180,140,255,0.26); }
+  #stateDot.silent{ color:rgba(150,155,180,0.85); border-color:rgba(120,125,150,0.32); box-shadow:none; }
+  #stateDot.warnState{ color:var(--warn); border-color:rgba(255,84,112,0.5); box-shadow:0 0 18px rgba(255,84,112,0.28); }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.66rem; letter-spacing:0.08em; font-weight:700;
+    color:var(--ghost); background:rgba(6,9,20,0.5); border:1px solid rgba(180,190,255,0.18);
+    border-radius:100px; padding:0.5rem 0.85rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(127,245,230,0.16); border-color:rgba(127,245,230,0.5); color:#7ff5e6; }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+
+  <div id="brand"><div class="b1">YAMABIKO</div><div class="b2">山彦 / 過去の自分と重ねる</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="recBtn">重ね ON</button>
+    <button class="btn" id="clearBtn">こだま消去</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">ECHOES / こだま</div>
+      <div class="cnt"><span id="layerCount">0</span><small>層</small></div>
+      <div class="dots" id="echoDots"><i></i><i></i><i></i><i></i></div>
+      <div class="tim" id="echoTim"></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">TAKE / 録音中</div>
+      <div class="cnt"><span id="takeCount">0</span><small>音</small></div>
+      <div class="meter"><b id="beatMeter"></b></div>
+      <div class="tim" id="takeTim"></div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">YAMABIKO</div>
+    <div id="sub">山彦 — 過去の自分と重ねる輪唱</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・カメラの前で<b>手を振り下ろす</b>と音が鳴ります（左手＝琴、右手＝鈴）<br>
+      ・<b>左右の位置</b>で音の高さ、<b>顔より上</b>で振ると1オクターブ上<br>
+      ・<b>5秒のループ</b>が一周するたび、その演奏が<em>こだま</em>となって影のまま鳴り続けます<br>
+      ・こだまは最大<b>4層</b>。山彦のように少しずつ高く澄んで重なります<br>
+      ・<b>腕を胸の前で交差</b>させたまま待つと、すべてのこだまが消えます
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas    = document.getElementById('stage');
+  const ctx       = canvas.getContext('2d');
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const startBtn  = document.getElementById('startBtn');
+  const errorMsg  = document.getElementById('errorMsg');
+  const hud       = document.getElementById('hud');
+  const topbar    = document.getElementById('topbar');
+  const brand     = document.getElementById('brand');
+  const centerHud = document.getElementById('centerHud');
+  const stateDot  = document.getElementById('stateDot');
+  const flipBtn   = document.getElementById('flipBtn');
+  const recBtn    = document.getElementById('recBtn');
+  const clearBtn  = document.getElementById('clearBtn');
+  const layerCountEl = document.getElementById('layerCount');
+  const takeCountEl  = document.getElementById('takeCount');
+  const echoTimEl    = document.getElementById('echoTim');
+  const takeTimEl    = document.getElementById('takeTim');
+  const beatMeterEl  = document.getElementById('beatMeter');
+  const echoDots     = Array.from(document.querySelectorAll('#echoDots i'));
+
+  // glow layer (trails) — drawn additively over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  LOOP / MUSIC CONSTANTS
+  // ---------------------------------------------------------------------------
+  const BPM        = 96;
+  const BEATS      = 8;
+  const BEAT_MS    = 60000 / BPM;          // 625ms
+  const LOOP_MS    = BEAT_MS * BEATS;      // 5000ms
+  const GRID_MS    = BEAT_MS / 2;          // 312.5ms — eighth-note quantize grid
+  const MAX_LAYERS = 4;
+  const COLS       = 7;                    // pitch columns across the frame
+  const OCT_LINE   = 0.42;                 // above this (normalized y) = octave up
+  const OCT_STEP   = 5;                    // 5 pentatonic degrees == one octave
+
+  const POSE_FPS       = 24;
+  const POSE_SLOT_MS   = 1000 / POSE_FPS;
+  const POSE_SLOTS     = Math.ceil(LOOP_MS / POSE_SLOT_MS);   // 120
+
+  const ECHO_HUES  = [172, 285, 44, 330];
+  const ECHO_SHIFT = [0, 2, 4, 7];         // in pentatonic degrees — the echo returns higher
+
+  const BASE  = 146.83;                    // D3
+  const PENTA = [0, 3, 5, 7, 10];          // D minor pentatonic
+  function degToSemi(d){
+    const dd = Math.max(0, Math.min(20, Math.round(d)));
+    return 12 * Math.floor(dd / 5) + PENTA[dd % 5];
+  }
+
+  const STRIKE_ON      = 1.35;   // normalized units / second
+  const STRIKE_OFF     = 0.7;
+  const STRIKE_REFRACT = 190;    // ms
+  const ERASE_HOLD_MS  = 900;
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null;
+  let liveBus = null, ghostBus = null, ghostLP = null, clickBus = null, padBus = null;
+  let convolver = null, revGain = null, ghostRev = null;
+  let delay = null, fbGain = null, wet = null;
+  let droneGain = null;
+  let audioReady = false;
+  const noiseBuf = { buf: null };
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++){
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+      }
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 22; comp.ratio.value = 3.2;
+    comp.attack.value = 0.004;  comp.release.value = 0.26;
+
+    convolver = actx.createConvolver();
+    convolver.buffer = makeImpulse(3.4, 2.2);
+    revGain = actx.createGain(); revGain.gain.value = 0.34;
+    convolver.connect(revGain); revGain.connect(master);
+
+    liveBus  = actx.createGain(); liveBus.gain.value  = 1.0;
+    clickBus = actx.createGain(); clickBus.gain.value = 1.0;
+    padBus   = actx.createGain(); padBus.gain.value   = 0.8;
+
+    // echoes are darker and wetter than the live voice — distance in the mountains
+    ghostBus = actx.createGain(); ghostBus.gain.value = 1.0;
+    ghostLP  = actx.createBiquadFilter();
+    ghostLP.type = 'lowpass'; ghostLP.frequency.value = 2400; ghostLP.Q.value = 0.6;
+    ghostRev = actx.createGain(); ghostRev.gain.value = 0.9;
+    ghostBus.connect(ghostLP);
+    ghostLP.connect(master);
+    ghostLP.connect(ghostRev); ghostRev.connect(convolver);
+
+    liveBus.connect(master); liveBus.connect(convolver);
+    padBus.connect(master);  padBus.connect(convolver);
+    clickBus.connect(master);
+
+    // dotted-eighth feedback delay on the live voice
+    delay  = actx.createDelay(2.0); delay.delayTime.value = (GRID_MS * 1.5) / 1000;
+    fbGain = actx.createGain();     fbGain.gain.value = 0.3;
+    wet    = actx.createGain();     wet.gain.value = 0.2;
+    liveBus.connect(delay); delay.connect(fbGain); fbGain.connect(delay); delay.connect(wet);
+    wet.connect(master);
+
+    // low mountain drone — swells as the echoes stack up
+    const droneFilter = actx.createBiquadFilter();
+    droneFilter.type = 'lowpass'; droneFilter.frequency.value = 260; droneFilter.Q.value = 1.4;
+    droneGain = actx.createGain(); droneGain.gain.value = 0.0;
+    for (const detune of [-6, 6]){
+      const o = actx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = BASE / 2;
+      o.detune.value = detune;
+      o.connect(droneFilter);
+      o.start();
+    }
+    droneFilter.connect(droneGain); droneGain.connect(padBus);
+
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(0.6);
+    audioReady = true;
+  }
+
+  function safe(v){ return Math.max(0.00012, v); }
+
+  // right hand — a struck bell (echoes use fewer partials: cheaper and softer)
+  const BELL_PARTS = [[1, 0.50, 1.9], [2.01, 0.22, 1.1], [3.02, 0.10, 0.62], [4.97, 0.05, 0.34]];
+  function bell(t, f, amp, bus, soft){
+    const parts = soft ? BELL_PARTS.slice(0, 2) : BELL_PARTS;
+    const stretch = soft ? 1.35 : 1;
+    for (let i = 0; i < parts.length; i++){
+      const r = parts[i][0], a = parts[i][1], d = parts[i][2] * stretch;
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = f * r;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(safe(a * amp * 0.34), t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(bus);
+      o.start(t); o.stop(t + d + 0.08);
+    }
+  }
+
+  // left hand — a plucked koto string
+  function koto(t, f, amp, bus, soft){
+    const dur = soft ? 1.6 : 1.25;
+    const o  = actx.createOscillator(); o.type  = 'sawtooth'; o.frequency.value = f;
+    const o2 = actx.createOscillator(); o2.type = 'triangle'; o2.frequency.value = f * 2.003;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.1;
+    lp.frequency.setValueAtTime(Math.min(9000, f * 9), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(220, f * 1.5), t + 0.55);
+    const g  = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(safe(0.26 * amp), t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const g2 = actx.createGain(); g2.gain.value = 0.24;
+    o.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g); g.connect(bus);
+    o.start(t); o2.start(t); o.stop(t + dur + 0.1); o2.stop(t + dur + 0.1);
+
+    if (noiseBuf.buf){
+      const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+      const bp = actx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = Math.min(6000, f * 3); bp.Q.value = 2;
+      const ng = actx.createGain();
+      ng.gain.setValueAtTime(safe(0.15 * amp), t);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+      src.connect(bp); bp.connect(ng); ng.connect(bus);
+      src.start(t); src.stop(t + 0.09);
+    }
+  }
+
+  function playVoice(hand, degree, amp, ghost){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const f = BASE * Math.pow(2, degToSemi(degree) / 12);
+    const bus = ghost ? ghostBus : liveBus;
+    if (hand === 'R') bell(t, f, amp, bus, ghost);
+    else              koto(t, f, amp, bus, ghost);
+  }
+
+  function tick(t, accent){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type = 'sine';
+    o.frequency.value = accent ? 1560 : 1040;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(accent ? 0.05 : 0.022, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    o.connect(g); g.connect(clickBus);
+    o.start(t); o.stop(t + 0.08);
+  }
+
+  // a new echo is born
+  function echoChime(t){
+    if (!audioReady) return;
+    [0, 5, 7, 12].forEach((semi, i) => {
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.value = BASE * 2 * Math.pow(2, semi / 12);
+      const g = actx.createGain();
+      const st = t + i * 0.06;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.075, st + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.7);
+      o.connect(g); g.connect(ghostBus);
+      o.start(st); o.stop(st + 0.75);
+    });
+  }
+
+  // all echoes wiped
+  function eraseSound(t){
+    if (!audioReady) return;
+    if (noiseBuf.buf){
+      const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+      bp.frequency.setValueAtTime(2600, t);
+      bp.frequency.exponentialRampToValueAtTime(180, t + 0.7);
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.22, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+      src.connect(bp); bp.connect(g); g.connect(liveBus);
+      src.start(t); src.stop(t + 0.85);
+    }
+    [0, -5, -12].forEach((semi, i) => {
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = BASE * Math.pow(2, semi / 12);
+      const g = actx.createGain();
+      const st = t + i * 0.11;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.11, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.55);
+      o.connect(g); g.connect(liveBus);
+      o.start(st); o.stop(st + 0.6);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  //  POSE TRACKING
+  // ---------------------------------------------------------------------------
+  const IDX  = { NOSE:0, LSH:11, RSH:12, LEL:13, REL:14, LWR:15, RWR:16, LHIP:23, RHIP:24 };
+  const KEYS = ['n','ls','rs','le','re','lw','rw','lh','rh'];
+  const KEY_IDX = { n:IDX.NOSE, ls:IDX.LSH, rs:IDX.RSH, le:IDX.LEL, re:IDX.REL,
+                    lw:IDX.LWR, rw:IDX.RWR, lh:IDX.LHIP, rh:IDX.RHIP };
+  const SKEL = [['ls','rs'],['ls','le'],['le','lw'],['rs','re'],['re','rw'],
+                ['ls','lh'],['rs','rh'],['lh','rh']];
+
+  function vis(lm, i){
+    return !!lm && !!lm[i] && (lm[i].visibility === undefined || lm[i].visibility > 0.5);
+  }
+
+  const RESULT = { lm: null, t: 0 };
+
+  let pose = null;
+  function initPose(){
+    pose = new Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+    pose.setOptions({
+      modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false,
+      minDetectionConfidence: 0.6, minTrackingConfidence: 0.5
+    });
+    pose.onResults(onPoseResults);
+  }
+  function onPoseResults(results){
+    const lm = (results && results.poseLandmarks) ? results.poseLandmarks : null;
+    if (!lm){ RESULT.lm = null; return; }
+    RESULT.lm = lm;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+  async function startCameraLoop(){
+    if (mpCamera){ mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await pose.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    WR.L.px = WR.L.py = null; WR.R.px = WR.R.py = null;
+    WR.L.sp = 0; WR.R.sp = 0; lastPoseT = 0;
+    try { await startStream(); } catch(e){ /* keep previous stream */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  // normalized DISPLAY coordinates (already mirrored) — everything downstream uses these
+  function ndx(p){ return mirror ? 1 - p.x : p.x; }
+
+  // ---------------------------------------------------------------------------
+  //  SEQUENCER STATE
+  // ---------------------------------------------------------------------------
+  function newTake(){
+    return { events: [], poses: new Array(POSE_SLOTS).fill(null) };
+  }
+
+  let layers = [];              // committed echo layers, oldest first
+  let take   = newTake();       // the take currently being recorded
+  let echoCount = 0;
+  let recordOn = true;
+
+  let loopStart = 0;
+  let prevCycle = 0, prevLoopT = 0, lastBeat = -1;
+
+  function ghostGain(i){
+    // newest layer loudest; each older one recedes into the mountain
+    const age = (layers.length - 1) - i;
+    return Math.max(0.28, 0.9 - age * 0.15);
+  }
+
+  function commitTake(){
+    if (recordOn && take.events.length >= 2){
+      if (layers.length >= MAX_LAYERS) layers.shift();
+      layers.push({
+        events: take.events,
+        poses:  take.poses,
+        hue:    ECHO_HUES[echoCount % ECHO_HUES.length],
+        shift:  ECHO_SHIFT[echoCount % ECHO_SHIFT.length],
+        born:   performance.now()
+      });
+      echoCount++;
+      if (audioReady) echoChime(actx.currentTime);
+      born = 1;
+    }
+    take = newTake();
+  }
+
+  function eraseAll(){
+    if (!layers.length && !take.events.length) return;
+    layers = [];
+    take = newTake();
+    echoCount = 0;
+    wipe = 1;
+    if (audioReady) eraseSound(actx.currentTime);
+  }
+  clearBtn.addEventListener('click', eraseAll);
+
+  recBtn.addEventListener('click', () => {
+    recordOn = !recordOn;
+    recBtn.textContent = recordOn ? '重ね ON' : '重ね OFF';
+    recBtn.classList.toggle('active', recordOn);
+  });
+
+  // fire every layer event whose quantized time falls in [a, b)
+  function playRange(a, b){
+    if (!(b > a)) return;
+    for (let i = 0; i < layers.length; i++){
+      const L = layers[i];
+      const amp = ghostGain(i) * 0.7;
+      for (let k = 0; k < L.events.length; k++){
+        const e = L.events[k];
+        if (e.tq >= a && e.tq < b){
+          playVoice(e.hand, e.deg + L.shift, amp, true);
+          spawnStrike(e.x * W, e.y * H, L.hue, 0.7);
+          colGlow[e.col] = Math.min(1, colGlow[e.col] + 0.55);
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  STRIKE DETECTION
+  // ---------------------------------------------------------------------------
+  const WR = {
+    L: { px:null, py:null, sp:0, vx:0, vy:0, sx:0, sy:0, hot:false, last:0 },
+    R: { px:null, py:null, sp:0, vx:0, vy:0, sx:0, sy:0, hot:false, last:0 }
+  };
+
+  function updateWrist(key, p, dt){
+    const st = WR[key];
+    if (!p){ st.px = null; st.py = null; st.sp *= 0.7; st.vx *= 0.7; st.vy *= 0.7; return; }
+    let sp = 0, vx = 0, vy = 0;
+    if (st.px !== null && dt > 0){
+      const s = 1000 / dt;
+      vx = (p.x - st.px) * s;
+      vy = (p.y - st.py) * s;
+      sp = Math.hypot(vx, vy);
+      if (sp > 7){ sp = 0; vx = 0; vy = 0; }   // reject tracking teleports
+    }
+    st.px = p.x; st.py = p.y;
+    st.sp = st.sp * 0.5 + sp * 0.5;
+    st.vx = st.vx * 0.5 + vx * 0.5;
+    st.vy = st.vy * 0.5 + vy * 0.5;
+  }
+
+  // A strike re-arms when the hand slows down OR reverses direction — the latter is
+  // what actually happens when you chop repeatedly, and without it a continuously
+  // moving hand would fire exactly one note and then stay silent forever.
+  function strikeRearmed(st){
+    if (st.sp < STRIKE_OFF) return true;
+    return (st.vx * st.sx + st.vy * st.sy) < 0;
+  }
+
+  function strike(hand, nx, ny, t){
+    const col = Math.max(0, Math.min(COLS - 1, Math.floor(nx * COLS)));
+    const deg = col + (ny < OCT_LINE ? OCT_STEP : 0);
+    const hue = (hand === 'R') ? 44 : 178;
+
+    playVoice(hand, deg, 1.0, false);
+    spawnStrike(nx * W, ny * H, hue, 1.0);
+    colGlow[col] = 1;
+    shake = 2.2;
+
+    // cap notes per take: keeps four replaying echoes from piling into a voice storm
+    if (take.events.length < 20){
+      const elapsed = t - loopStart;
+      const inLoop = (((elapsed % LOOP_MS) + LOOP_MS) % LOOP_MS);
+      let tq = Math.round(inLoop / GRID_MS) * GRID_MS;
+      if (tq >= LOOP_MS) tq -= LOOP_MS;
+      take.events.push({ tq, deg, hand, col, x: nx, y: ny });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  ERASE GESTURE — arms crossed in front of the chest
+  // ---------------------------------------------------------------------------
+  let eraseSince = 0, eraseArmed = true, eraseProg = 0;
+
+  function armsCrossed(lm){
+    if (!vis(lm, IDX.LWR) || !vis(lm, IDX.RWR) || !vis(lm, IDX.LSH) || !vis(lm, IDX.RSH)) return false;
+    const lw = lm[IDX.LWR], rw = lm[IDX.RWR], ls = lm[IDX.LSH], rs = lm[IDX.RSH];
+    const span = Math.abs(ls.x - rs.x) || 0.2;
+    // anatomical left wrist normally sits at the larger image x; crossed flips that
+    const crossed = lw.x < rw.x - span * 0.15;
+    const shoulderY = (ls.y + rs.y) / 2;
+    const chest = lw.y > shoulderY - span * 0.3 && rw.y > shoulderY - span * 0.3 &&
+                  lw.y < shoulderY + span * 2.4 && rw.y < shoulderY + span * 2.4;
+    // both wrists must sit inside the torso, at a similar height — a real folded-arms
+    // pose, not a hand that merely swept across the body mid-strike
+    const minX = Math.min(ls.x, rs.x) - span * 0.35;
+    const maxX = Math.max(ls.x, rs.x) + span * 0.35;
+    const inside = lw.x > minX && lw.x < maxX && rw.x > minX && rw.x < maxX;
+    const level = Math.abs(lw.y - rw.y) < span * 0.9;
+    return crossed && chest && inside && level;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  VISUAL EFFECTS
+  // ---------------------------------------------------------------------------
+  const colGlow = new Array(COLS).fill(0);
+  const sparks  = [];
+  const rings   = [];
+  const MAX_SPARKS = 220;
+  let shake = 0, beatPulse = 0, wipe = 0, born = 0;
+
+  function spawnStrike(x, y, hue, power){
+    rings.push({ x, y, r: 6, hue, a: 0.85 * power, grow: 5 + power * 4 });
+    const n = Math.round(8 + power * 14);
+    for (let i = 0; i < n; i++){
+      if (sparks.length >= MAX_SPARKS) break;
+      const a = Math.random() * Math.PI * 2;
+      const s = (0.6 + Math.random() * 2.6) * (0.5 + power * 0.8);
+      sparks.push({
+        x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.5,
+        life: 1, decay: 0.014 + Math.random() * 0.022,
+        r: 1 + Math.random() * 2.4, hue
+      });
+    }
+  }
+  function updateDrawSparks(){
+    for (let i = sparks.length - 1; i >= 0; i--){
+      const p = sparks[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.035; p.vx *= 0.985; p.life -= p.decay;
+      if (p.life <= 0){ sparks.splice(i, 1); continue; }
+      fctx.fillStyle = `hsla(${p.hue},100%,${62 + p.life * 26}%,${p.life * 0.85})`;
+      fctx.beginPath(); fctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2); fctx.fill();
+    }
+  }
+  function updateDrawRings(){
+    for (let i = rings.length - 1; i >= 0; i--){
+      const r = rings[i];
+      r.r += r.grow; r.a *= 0.9;
+      if (r.a < 0.02){ rings.splice(i, 1); continue; }
+      fctx.strokeStyle = `hsla(${r.hue},100%,72%,${r.a})`;
+      fctx.lineWidth = 2.4;
+      fctx.beginPath(); fctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); fctx.stroke();
+    }
+  }
+
+  // drifting mountain haze
+  const blobs = Array.from({ length: 6 }, () => ({
+    x: Math.random(), y: Math.random(),
+    r: 0.26 + Math.random() * 0.26,
+    sx: (Math.random() - 0.5) * 0.00006, sy: (Math.random() - 0.5) * 0.00004,
+    hue: 180 + Math.random() * 110, ph: Math.random() * Math.PI * 2
+  }));
+  function drawHaze(){
+    const now = performance.now() * 0.001;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (const b of blobs){
+      b.x += b.sx; b.y += b.sy;
+      if (b.x < -0.4) b.x = 1.4; if (b.x > 1.4) b.x = -0.4;
+      if (b.y < -0.4) b.y = 1.4; if (b.y > 1.4) b.y = -0.4;
+      const cx = b.x * W, cy = b.y * H, rr = b.r * Math.max(W, H);
+      const puls = 0.5 + 0.5 * Math.sin(now * 0.35 + b.ph);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
+      g.addColorStop(0, `hsla(${(b.hue + now * 3) % 360},58%,58%,${0.035 + puls * 0.04})`);
+      g.addColorStop(1, 'hsla(0,0%,0%,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(4,6,14,0.56)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(28,36,72,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    drawHaze();
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.18, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,3,8,0.86)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // the seven pitch columns
+  function drawColumns(){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < COLS; i++){
+      const cx = ((i + 0.5) / COLS) * W;
+      const gl = colGlow[i];
+      const hue = 168 + i * 24;
+      const bw = (W / COLS) * (0.16 + gl * 0.55);
+      const g = c.createLinearGradient(cx, H, cx, 0);
+      g.addColorStop(0,    `hsla(${hue},92%,66%,${0.06 + gl * 0.5})`);
+      g.addColorStop(0.5,  `hsla(${hue},92%,70%,${0.03 + gl * 0.26})`);
+      g.addColorStop(1,    `hsla(${hue},92%,70%,0)`);
+      c.fillStyle = g;
+      c.fillRect(cx - bw / 2, 0, bw, H);
+    }
+    // the octave line
+    c.strokeStyle = `hsla(46,90%,70%,${0.10 + beatPulse * 0.12})`;
+    c.lineWidth = 1;
+    c.setLineDash([6, 10]);
+    c.beginPath(); c.moveTo(0, OCT_LINE * H); c.lineTo(W, OCT_LINE * H); c.stroke();
+    c.setLineDash([]);
+    c.restore();
+  }
+
+  function snapshotPose(lm){
+    const o = {};
+    for (let i = 0; i < KEYS.length; i++){
+      const k = KEYS[i], idx = KEY_IDX[k];
+      o[k] = vis(lm, idx) ? { x: ndx(lm[idx]), y: lm[idx].y } : null;
+    }
+    return o;
+  }
+
+  function headRadius(snap){
+    if (snap.ls && snap.rs) return Math.max(13, Math.abs(snap.ls.x - snap.rs.x) * W * 0.34);
+    return 20;
+  }
+
+  function drawSkeleton(c, snap, hue, alpha, lineW, glow){
+    if (!snap) return;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.lineCap = 'round'; c.lineJoin = 'round'; c.lineWidth = lineW;
+    c.shadowBlur = glow; c.shadowColor = `hsla(${hue},95%,66%,0.85)`;
+    c.strokeStyle = `hsla(${hue},92%,70%,${alpha})`;
+    for (let i = 0; i < SKEL.length; i++){
+      const pa = snap[SKEL[i][0]], pb = snap[SKEL[i][1]];
+      if (!pa || !pb) continue;
+      c.beginPath();
+      c.moveTo(pa.x * W, pa.y * H);
+      c.lineTo(pb.x * W, pb.y * H);
+      c.stroke();
+    }
+    if (snap.n){
+      const r = headRadius(snap);
+      const x = snap.n.x * W, y = snap.n.y * H;
+      c.lineWidth = lineW * 0.8;
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = `hsla(${hue},92%,72%,${alpha * 0.22})`;
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    }
+    c.shadowBlur = 0;
+    for (const k of ['lw','rw']){
+      const p = snap[k];
+      if (!p) continue;
+      const x = p.x * W, y = p.y * H, rr = 18;
+      const g = c.createRadialGradient(x, y, 0, x, y, rr);
+      g.addColorStop(0, `hsla(${hue},100%,86%,${alpha})`);
+      g.addColorStop(1, `hsla(${hue},100%,66%,0)`);
+      c.fillStyle = g; c.beginPath(); c.arc(x, y, rr, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  }
+
+  function poseAt(L, loopT){
+    const slot = Math.max(0, Math.min(POSE_SLOTS - 1, Math.floor(loopT / POSE_SLOT_MS)));
+    for (let s = slot; s >= 0; s--) if (L.poses[s]) return L.poses[s];
+    for (let s = slot + 1; s < POSE_SLOTS; s++) if (L.poses[s]) return L.poses[s];
+    return null;
+  }
+
+  function drawLoopBar(loopT){
+    const bw = Math.min(560, W * 0.74);
+    const bx = (W - bw) / 2;
+    const by = Math.max(76, H * 0.13);   // stay clear of the topbar buttons on short screens
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(238,242,255,0.16)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.stroke();
+
+    for (let b = 0; b < BEATS; b++){
+      const x = bx + bw * (b / BEATS);
+      ctx.strokeStyle = (b === 0) ? 'rgba(238,242,255,0.5)' : 'rgba(238,242,255,0.2)';
+      ctx.lineWidth = (b === 0) ? 2 : 1;
+      const h2 = (b === 0) ? 7 : 4;
+      ctx.beginPath(); ctx.moveTo(x, by - h2); ctx.lineTo(x, by + h2); ctx.stroke();
+    }
+
+    for (let i = 0; i < layers.length; i++){
+      const L = layers[i];
+      const y = by + 13 + i * 7;
+      ctx.fillStyle = `hsla(${L.hue},95%,68%,0.9)`;
+      for (let k = 0; k < L.events.length; k++){
+        const x = bx + bw * (L.events[k].tq / LOOP_MS);
+        ctx.fillRect(x - 1.5, y - 2.5, 3, 5);
+      }
+    }
+
+    ctx.fillStyle = 'rgba(238,242,255,0.9)';
+    for (let k = 0; k < take.events.length; k++){
+      const x = bx + bw * (take.events[k].tq / LOOP_MS);
+      ctx.fillRect(x - 1.5, by - 15, 3, 6);
+    }
+
+    const phx = bx + bw * (loopT / LOOP_MS);
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 2;
+    ctx.shadowBlur = 14; ctx.shadowColor = 'rgba(140,255,240,0.9)';
+    ctx.beginPath();
+    ctx.moveTo(phx, by - 19);
+    ctx.lineTo(phx, by + 15 + layers.length * 7);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function drawEraseProgress(p){
+    const cx = W / 2, cy = H * 0.52, r = Math.min(W, H) * 0.11;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,84,112,0.22)';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,84,112,0.95)';
+    ctx.shadowBlur = 18; ctx.shadowColor = 'rgba(255,84,112,0.8)';
+    ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,190,200,0.9)';
+    ctx.font = '700 13px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('消去', cx, cy);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let lastT = 0, lastLayerCount = -1, lastPoseT = 0;
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+    const dt = Math.min(120, lastT ? t - lastT : 16);
+    lastT = t;
+
+    const elapsed = t - loopStart;
+    const cycle   = Math.floor(elapsed / LOOP_MS);
+    const loopT   = elapsed - cycle * LOOP_MS;
+
+    // ---- scene base -------------------------------------------------------
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+      shake *= 0.86;
+    }
+    drawVideoBase();
+
+    // fade the glow layer -> trailing afterglow
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.2)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    // ---- pose -------------------------------------------------------------
+    const fresh = (t - RESULT.t) < 500;
+    const lm = fresh ? RESULT.lm : null;
+
+    // erase gesture
+    const crossing = lm ? armsCrossed(lm) : false;
+    if (crossing && eraseArmed){
+      if (!eraseSince) eraseSince = t;
+      eraseProg = Math.min(1, (t - eraseSince) / ERASE_HOLD_MS);
+      if (eraseProg >= 1){
+        eraseAll();
+        eraseArmed = false;
+        eraseSince = 0;
+        eraseProg = 0;
+      }
+    } else {
+      eraseSince = 0;
+      eraseProg = 0;
+      if (!crossing) eraseArmed = true;
+    }
+    const eraseActive = crossing;
+
+    // wrists -> strikes.  Pose results arrive slower than rAF, so wrist velocity is
+    // measured only on frames that actually carry NEW landmarks — otherwise the
+    // repeated identical samples would drag the speed estimate to zero.
+    let liveSnap = null;
+    if (lm){
+      liveSnap = snapshotPose(lm);
+      const newPose = (RESULT.t !== lastPoseT);
+      if (newPose){
+        const pdt = lastPoseT ? Math.min(250, RESULT.t - lastPoseT) : 33;
+        lastPoseT = RESULT.t;
+        const pts = { L: liveSnap.lw, R: liveSnap.rw };
+        for (const key of ['L','R']){
+          const p = pts[key];
+          updateWrist(key, p, pdt);
+          const st = WR[key];
+          if (!p){ st.hot = false; continue; }
+          if (st.hot){
+            if (strikeRearmed(st)) st.hot = false;
+          } else if (st.sp > STRIKE_ON && !eraseActive && (t - st.last) > STRIKE_REFRACT){
+            st.hot = true; st.last = t;
+            st.sx = st.vx; st.sy = st.vy;   // remember the swing direction
+            strike(key, p.x, p.y, t);
+          }
+        }
+      }
+
+      // record the body track on a fixed grid so echoes can dance it back
+      const slot = Math.max(0, Math.min(POSE_SLOTS - 1, Math.floor(loopT / POSE_SLOT_MS)));
+      if (!take.poses[slot]) take.poses[slot] = liveSnap;
+    } else {
+      updateWrist('L', null, dt);
+      updateWrist('R', null, dt);
+      WR.L.hot = false; WR.R.hot = false;
+    }
+
+    // ---- sequencer --------------------------------------------------------
+    if (cycle !== prevCycle){
+      playRange(prevLoopT, LOOP_MS);   // tail of the outgoing cycle (old layers only)
+      commitTake();                    // the take becomes an echo
+      playRange(0, loopT);             // head of the new cycle (all layers)
+      prevCycle = cycle;
+    } else {
+      playRange(prevLoopT, loopT);
+    }
+    prevLoopT = loopT;
+
+    const beat = Math.min(BEATS - 1, Math.floor(loopT / BEAT_MS));
+    if (beat !== lastBeat){
+      lastBeat = beat;
+      if (audioReady) tick(actx.currentTime, beat === 0);
+      beatPulse = (beat === 0) ? 1 : 0.5;
+    }
+    beatPulse *= 0.9;
+
+    if (audioReady && layers.length !== lastLayerCount){
+      lastLayerCount = layers.length;
+      droneGain.gain.setTargetAtTime(0.012 + layers.length * 0.016, actx.currentTime, 0.6);
+    }
+
+    // ---- draw -------------------------------------------------------------
+    drawColumns();
+
+    for (let i = 0; i < layers.length; i++){
+      const L = layers[i];
+      const snap = poseAt(L, loopT);
+      const fadeIn = Math.min(1, (t - L.born) / 700);
+      drawSkeleton(fctx, snap, L.hue, (0.14 + ghostGain(i) * 0.2) * fadeIn, 2.2, 14);
+    }
+    if (liveSnap){
+      drawSkeleton(fctx, liveSnap, 186, 0.9, 3.4, 22);
+    }
+
+    for (let i = 0; i < COLS; i++) colGlow[i] *= 0.9;
+
+    updateDrawRings();
+    updateDrawSparks();
+
+    // composite the glow layer over the scene
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    // a new echo is born — a bloom of light
+    if (born > 0.01){
+      born *= 0.93;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = `rgba(160,200,255,${born * 0.16})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+    if (wipe > 0.01){
+      wipe *= 0.9;
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = `rgba(255,120,140,${wipe * 0.2})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+
+    ctx.restore(); // shake transform
+
+    drawLoopBar(loopT);
+    if (eraseProg > 0.02) drawEraseProgress(eraseProg);
+
+    // ---- HUD --------------------------------------------------------------
+    layerCountEl.textContent = layers.length;
+    takeCountEl.textContent  = take.events.length;
+    beatMeterEl.style.width  = (loopT / LOOP_MS * 100).toFixed(1) + '%';
+
+    let ghostNotes = 0;
+    for (let i = 0; i < layers.length; i++) ghostNotes += layers[i].events.length;
+    for (let i = 0; i < echoDots.length; i++){
+      const d = echoDots[i];
+      if (i < layers.length){
+        const L = layers[i];
+        d.classList.add('on');
+        d.style.background = `hsl(${L.hue},95%,66%)`;
+        d.style.boxShadow = `0 0 9px hsl(${L.hue},95%,66%)`;
+      } else {
+        d.classList.remove('on');
+        d.style.background = '';
+        d.style.boxShadow = '';
+      }
+    }
+    echoTimEl.textContent = layers.length
+      ? `輪唱 ${ghostNotes}音 ・ +${layers[layers.length - 1].shift}度`
+      : 'まだ こだま なし';
+    takeTimEl.textContent = recordOn ? `♩ ${beat + 1}/${BEATS}` : '重ね OFF';
+
+    if (!lm){
+      stateDot.textContent = '体をカメラに映してください';
+      stateDot.className = 'silent';
+    } else if (eraseProg > 0.02){
+      stateDot.textContent = '✕ こだまを消しています…';
+      stateDot.className = 'warnState';
+    } else if (layers.length){
+      stateDot.textContent = `こだま ${layers.length}層 ・ 輪唱中`;
+      stateDot.className = 'echoing';
+    } else {
+      stateDot.textContent = '手を振り下ろして鳴らす';
+      stateDot.className = 'playing';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (typeof Pose === 'undefined' || typeof Camera === 'undefined'){
+        throw new Error('姿勢検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+      }
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!pose) initPose();
+      await startStream();
+      await startCameraLoop();
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      recBtn.classList.add('active');
+
+      loopStart = performance.now();
+      lastT = loopStart;
+      prevCycle = 0; prevLoopT = 0; lastBeat = -1;
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
