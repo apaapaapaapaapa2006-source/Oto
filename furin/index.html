@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04060f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="カメラの前で手をはらうと空気そのものが流れ出す楽器。生まれた風に花びらが舞い、吊るされた風鈴が揺れて鳴る - FURIN">
+<title>FURIN ─ 風鈴と空気の楽器</title>
+<style>
+  :root{
+    --void:#04060f;
+    --haze:#101a3a;
+    --ghost:#eef4ff;
+    --sakura:#ff9ec4;
+    --glass:#9fe8ff;
+    --gold:#ffe4a3;
+    --warn:#ff6b8a;
+    --accent:#9fe8ff;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #gustFlash{ position:fixed; inset:0; z-index:7; pointer-events:none; background:rgba(159,232,255,0.0); }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(44px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--sakura),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--glass),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,#8ea8ff,transparent 70%); animation-delay:-9s; }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(6vmin,-4vmin) scale(1.15); }
+  }
+  #eyebrow{ color:rgba(238,244,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.16em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--sakura),var(--gold),var(--glass),#8ea8ff,var(--sakura));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite;
+    margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,244,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:2rem; position:relative; }
+  #startBtn{
+    position:relative;
+    padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--glass),var(--sakura)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(159,232,255,0.45);
+    transition:transform .18s ease, box-shadow .18s ease;
+    animation:breathe 3.4s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(159,232,255,0.4); }
+    50%{ box-shadow:0 0 44px rgba(255,158,196,0.55); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{
+    position:relative;
+    margin-top:2.2rem; max-width:23rem; color:rgba(238,244,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--glass); font-weight:700; }
+  #hint em{ color:var(--sakura); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(6,10,26,0.44); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(159,232,255,0.16); border-radius:16px; padding:0.65rem 0.9rem;
+    color:var(--ghost); min-width:112px;
+  }
+  .panel .lab{ font-size:0.58rem; letter-spacing:0.22em; color:rgba(238,244,255,0.5); margin-bottom:0.3rem; }
+  .panel .cnt{ font-size:1.7rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .panel .cnt small{ font-size:0.66rem; font-weight:600; color:rgba(238,244,255,0.55); margin-left:.2rem; }
+  .panel[data-side="r"]{ text-align:right; }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,244,255,0.1); margin-top:0.45rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,var(--glass),var(--sakura)); border-radius:2px;
+    transition:width .1s linear; }
+  .tim{ font-size:0.62rem; letter-spacing:0.1em; margin-top:0.42rem; color:var(--accent); min-height:0.9em; }
+  .dots{ display:flex; gap:5px; margin-top:0.45rem; }
+  .panel[data-side="r"] .dots{ justify-content:flex-end; }
+  .dots i{
+    width:8px; height:8px; border-radius:50%; background:rgba(238,244,255,0.14);
+    transition:background .16s ease, box-shadow .16s ease, transform .16s ease;
+  }
+  .dots i.on{ transform:scale(1.2); background:var(--glass); box-shadow:0 0 9px var(--glass); }
+  #dirArrow{ display:inline-block; font-size:0.72rem; color:var(--glass); margin-right:.25rem;
+    transition:transform .12s linear; }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.68rem; letter-spacing:0.2em; color:rgba(238,244,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(159,232,255,0.16);
+    background:rgba(6,10,26,0.42); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease;
+    white-space:nowrap;
+  }
+  #stateDot.breeze{ color:var(--glass); border-color:rgba(159,232,255,0.5); box-shadow:0 0 18px rgba(159,232,255,0.22); }
+  #stateDot.gust{ color:var(--gold); border-color:rgba(255,228,163,0.55); box-shadow:0 0 20px rgba(255,228,163,0.3); }
+  #stateDot.swirl{ color:var(--sakura); border-color:rgba(255,158,196,0.6); box-shadow:0 0 22px rgba(255,158,196,0.35); }
+  #stateDot.silent{ color:rgba(170,180,210,0.85); border-color:rgba(150,160,200,0.3); box-shadow:none; }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(6,10,26,0.5); border:1px solid rgba(159,232,255,0.18);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(159,232,255,0.16); border-color:rgba(159,232,255,0.5); color:var(--glass); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(238,244,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.24em; color:rgba(238,244,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="gustFlash"></div>
+
+  <div id="brand"><div class="b1">FURIN</div><div class="b2">風鈴 ・ 空気を奏でる</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="streakBtn">風筋 ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">WIND / 風速</div>
+      <div class="cnt"><span id="windVal">0</span><small>／100</small></div>
+      <div class="meter"><b id="windMeter"></b></div>
+      <div class="tim"><span id="dirArrow">➤</span><span id="dirLab">—</span></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">FURIN / 風鈴</div>
+      <div class="cnt"><span id="ringVal">0</span><small>回</small></div>
+      <div class="dots" id="cDots"></div>
+      <div class="tim" id="noteLab">—</div>
+    </div>
+  </div>
+
+  <div id="centerHud">
+    <div id="stateDot">WAITING</div>
+  </div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">FURIN</div>
+    <div id="sub">風鈴 — 空気をかき混ぜて奏でる</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・カメラの前で<b>手をはらう</b>と、その向きに<b>風</b>が生まれます<br>
+      ・風は<b>すぐには止まりません</b>。空気の流れが残り、花びらがその筋に乗って舞います<br>
+      ・吊るされた<b>風鈴</b>が風に揺れ、舌が当たると澄んだ音で鳴ります<br>
+      ・大きく速くはらうと<b>突風</b>。いくつもの鈴が重なって和音になります<br>
+      ・手で<em>ぐるりと円を描く</em>と<em>つむじ風</em>が生まれ、花びらが渦を巻いて音階が駆け上がります<br>
+      ・動きを止めれば<b>凪</b>。低い残響だけが部屋に残ります
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas    = document.getElementById('stage');
+  const ctx       = canvas.getContext('2d');
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const startBtn  = document.getElementById('startBtn');
+  const errorMsg  = document.getElementById('errorMsg');
+  const hud       = document.getElementById('hud');
+  const topbar    = document.getElementById('topbar');
+  const brand     = document.getElementById('brand');
+  const centerHud = document.getElementById('centerHud');
+  const stateDot  = document.getElementById('stateDot');
+  const flipBtn   = document.getElementById('flipBtn');
+  const streakBtn = document.getElementById('streakBtn');
+  const windValEl = document.getElementById('windVal');
+  const windMeter = document.getElementById('windMeter');
+  const dirArrow  = document.getElementById('dirArrow');
+  const dirLabEl  = document.getElementById('dirLab');
+  const ringValEl = document.getElementById('ringVal');
+  const noteLabEl = document.getElementById('noteLab');
+  const cDotsEl   = document.getElementById('cDots');
+  const gustFlash = document.getElementById('gustFlash');
+
+  // glow layer (trails) — drawn additively over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  AIR-FLOW FIELD (dense Lucas-Kanade optical flow on a coarse grid)
+  //  The camera never tracks a body — it reads the *motion of the air's
+  //  contents*, and that motion is integrated into a wind field that lingers.
+  // ---------------------------------------------------------------------------
+  const FLOW_W = 48, FLOW_H = 27, FLOW_N = FLOW_W * FLOW_H;
+  const MARGIN = 2; // LK needs a 1-cell halo around its 3x3 window
+
+  const fl    = document.createElement('canvas');
+  fl.width = FLOW_W; fl.height = FLOW_H;
+  const flctx = fl.getContext('2d', { willReadFrequently: true });
+
+  const lumA  = new Float32Array(FLOW_N);
+  const lumB  = new Float32Array(FLOW_N);
+  const lumCur  = new Float32Array(FLOW_N);
+  const lumPrev = new Float32Array(FLOW_N);
+  const flowX = new Float32Array(FLOW_N), flowY = new Float32Array(FLOW_N);
+  const windX = new Float32Array(FLOW_N), windY = new Float32Array(FLOW_N);
+  const windX2 = new Float32Array(FLOW_N), windY2 = new Float32Array(FLOW_N);
+  let havePrevFrame = false;
+
+  function resetFlow(){
+    havePrevFrame = false;
+    lumPrev.fill(0); lumCur.fill(0);
+    flowX.fill(0); flowY.fill(0);
+    windX.fill(0); windY.fill(0);
+  }
+
+  // returns true when a fresh flow estimate was produced this frame
+  function computeFlow(){
+    const vw = video.videoWidth | 0, vh = video.videoHeight | 0;
+    if (!vw || !vh || W < 2 || H < 2) return false;
+
+    // sample exactly the region the main canvas shows (cover-fit crop),
+    // mirrored the same way, so grid cells line up with screen pixels
+    const scale = Math.max(W / vw, H / vh);
+    const sw = Math.min(vw, W / scale), sh = Math.min(vh, H / scale);
+    const sx = (vw - sw) / 2, sy = (vh - sh) / 2;
+
+    flctx.save();
+    if (mirror){ flctx.translate(FLOW_W, 0); flctx.scale(-1, 1); }
+    try { flctx.drawImage(video, sx, sy, sw, sh, 0, 0, FLOW_W, FLOW_H); }
+    catch(e){ flctx.restore(); return false; }
+    flctx.restore();
+
+    let data;
+    try { data = flctx.getImageData(0, 0, FLOW_W, FLOW_H).data; }
+    catch(e){ return false; }
+
+    for (let i = 0; i < FLOW_N; i++){
+      const j = i * 4;
+      lumA[i] = (data[j]*0.299 + data[j+1]*0.587 + data[j+2]*0.114) / 255;
+    }
+    // separable 1-2-1 blur — sensor noise would otherwise read as wind
+    for (let y = 0; y < FLOW_H; y++){
+      for (let x = 0; x < FLOW_W; x++){
+        const i = y*FLOW_W + x;
+        const l = x > 0          ? lumA[i-1] : lumA[i];
+        const r = x < FLOW_W - 1 ? lumA[i+1] : lumA[i];
+        lumB[i] = (l + lumA[i]*2 + r) * 0.25;
+      }
+    }
+    for (let y = 0; y < FLOW_H; y++){
+      for (let x = 0; x < FLOW_W; x++){
+        const i = y*FLOW_W + x;
+        const u = y > 0          ? lumB[i-FLOW_W] : lumB[i];
+        const d = y < FLOW_H - 1 ? lumB[i+FLOW_W] : lumB[i];
+        lumCur[i] = (u + lumB[i]*2 + d) * 0.25;
+      }
+    }
+
+    if (!havePrevFrame){
+      lumPrev.set(lumCur);
+      havePrevFrame = true;
+      return false;
+    }
+
+    // an autoexposure step shifts every pixel at once; that is not wind, so the
+    // frame-wide mean of the temporal difference is removed before solving
+    let meanIt = 0;
+    for (let i = 0; i < FLOW_N; i++) meanIt += lumCur[i] - lumPrev[i];
+    meanIt /= FLOW_N;
+
+    for (let y = MARGIN; y < FLOW_H - MARGIN; y++){
+      for (let x = MARGIN; x < FLOW_W - MARGIN; x++){
+        const i = y*FLOW_W + x;
+        let a11 = 0, a12 = 0, a22 = 0, b1 = 0, b2 = 0, en = 0;
+        for (let dy = -1; dy <= 1; dy++){
+          for (let dx = -1; dx <= 1; dx++){
+            const k = i + dy*FLOW_W + dx;
+            const ix = (lumCur[k+1] - lumCur[k-1]) * 0.5;
+            const iy = (lumCur[k+FLOW_W] - lumCur[k-FLOW_W]) * 0.5;
+            const it = (lumCur[k] - lumPrev[k]) - meanIt;
+            a11 += ix*ix; a12 += ix*iy; a22 += iy*iy;
+            b1  -= ix*it; b2  -= iy*it; en += it < 0 ? -it : it;
+          }
+        }
+        let u = 0, v = 0;
+        const det = a11*a22 - a12*a12;
+        if (det > 1e-5 && en > 0.09){
+          u = (a22*b1 - a12*b2) / det;
+          v = (a11*b2 - a12*b1) / det;
+          const m = Math.hypot(u, v);
+          if (m > 2.2){ u = u/m*2.2; v = v/m*2.2; }
+          if (!isFinite(u) || !isFinite(v)){ u = 0; v = 0; }
+        }
+        flowX[i] = flowX[i]*0.55 + u*0.45;
+        flowY[i] = flowY[i]*0.55 + v*0.45;
+      }
+    }
+    lumPrev.set(lumCur);
+    return true;
+  }
+
+  // wind = flow with a fast attack and a slow release, then diffused sideways
+  let meanSpeed = 0, meanDirX = 0, meanDirY = 0, speedNorm = 0;
+  let motionCX = (FLOW_W - 1) / 2, motionCY = (FLOW_H - 1) / 2;
+
+  function updateWind(){
+    for (let i = 0; i < FLOW_N; i++){
+      const u = flowX[i], v = flowY[i];
+      const wx = windX[i], wy = windY[i];
+      windX[i] = wx + (u - wx) * ((u < 0 ? -u : u) > (wx < 0 ? -wx : wx) ? 0.5 : 0.055);
+      windY[i] = wy + (v - wy) * ((v < 0 ? -v : v) > (wy < 0 ? -wy : wy) ? 0.5 : 0.055);
+    }
+    // diffusion: air spreads into the cells around it
+    for (let y = 0; y < FLOW_H; y++){
+      for (let x = 0; x < FLOW_W; x++){
+        const i = y*FLOW_W + x;
+        let ax = windX[i]*4, ay = windY[i]*4, w = 4;
+        if (x > 0){ ax += windX[i-1]; ay += windY[i-1]; w++; }
+        if (x < FLOW_W-1){ ax += windX[i+1]; ay += windY[i+1]; w++; }
+        if (y > 0){ ax += windX[i-FLOW_W]; ay += windY[i-FLOW_W]; w++; }
+        if (y < FLOW_H-1){ ax += windX[i+FLOW_W]; ay += windY[i+FLOW_W]; w++; }
+        windX2[i] = ax / w; windY2[i] = ay / w;
+      }
+    }
+    windX.set(windX2); windY.set(windY2);
+
+    let sm = 0, sx = 0, sy = 0, cxAcc = 0, cyAcc = 0;
+    for (let y = MARGIN; y < FLOW_H - MARGIN; y++){
+      for (let x = MARGIN; x < FLOW_W - MARGIN; x++){
+        const i = y*FLOW_W + x;
+        const wx = windX[i], wy = windY[i];
+        const mg = Math.hypot(wx, wy);
+        sm += mg; sx += wx; sy += wy;
+        cxAcc += x * mg; cyAcc += y * mg;   // where the air is actually moving
+      }
+    }
+    const cells = (FLOW_W - MARGIN*2) * (FLOW_H - MARGIN*2);
+    meanSpeed = sm / cells;
+    meanDirX = sx / cells; meanDirY = sy / cells;
+    speedNorm = Math.max(0, Math.min(1, meanSpeed * 7));
+    if (sm > 1e-6){ motionCX = cxAcc / sm; motionCY = cyAcc / sm; }
+  }
+
+  const _w = { x: 0, y: 0 };
+  function sampleWind(x, y){
+    const gx = (x / W) * (FLOW_W - 1);
+    const gy = (y / H) * (FLOW_H - 1);
+    let ix = Math.floor(gx), iy = Math.floor(gy);
+    if (ix < 0) ix = 0; if (ix > FLOW_W - 2) ix = FLOW_W - 2;
+    if (iy < 0) iy = 0; if (iy > FLOW_H - 2) iy = FLOW_H - 2;
+    let tx = gx - ix, ty = gy - iy;
+    if (tx < 0) tx = 0; if (tx > 1) tx = 1;
+    if (ty < 0) ty = 0; if (ty > 1) ty = 1;
+    const i00 = iy*FLOW_W + ix, i10 = i00 + 1, i01 = i00 + FLOW_W, i11 = i01 + 1;
+    const w00 = (1-tx)*(1-ty), w10 = tx*(1-ty), w01 = (1-tx)*ty, w11 = tx*ty;
+    _w.x = windX[i00]*w00 + windX[i10]*w10 + windX[i01]*w01 + windX[i11]*w11;
+    _w.y = windY[i00]*w00 + windY[i10]*w10 + windY[i01]*w01 + windY[i11]*w11;
+    return _w;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  //  glass furin = inharmonic bell partials; a filtered-noise wind bed whose
+  //  brightness and pan follow the field; a low drone that swells in the calm.
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null;
+  let convolver = null, revGain = null;
+  let chimeBus = null, windBus = null, padBus = null;
+  let windSrc = null, windFilter = null, windGain = null, windPan = null;
+  let droneGain = null;
+  let audioReady = false;
+  const noiseBuf = { buf: null };
+
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  // yo-scale (陽旋法) on D — the bright, open pentatonic of a summer evening
+  const CHIME_MIDI = [74, 76, 79, 81, 83, 86, 88];
+  function midiFreq(m){ return 440 * Math.pow(2, (m - 69) / 12); }
+  function midiName(m){ return NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random()*2 - 1) * Math.pow(1 - i/len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random()*2 - 1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 22; comp.ratio.value = 3.0;
+    comp.attack.value = 0.004;  comp.release.value = 0.26;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(3.4, 2.4);
+    revGain = actx.createGain(); revGain.gain.value = 0.34;
+
+    chimeBus = actx.createGain(); chimeBus.gain.value = 0.9;
+    windBus  = actx.createGain(); windBus.gain.value  = 0.9;
+    padBus   = actx.createGain(); padBus.gain.value   = 0.7;
+
+    chimeBus.connect(master); chimeBus.connect(convolver);
+    windBus.connect(master);
+    padBus.connect(master);  padBus.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(2.0);
+
+    // --- wind bed: looping noise, bandpass brightens with speed ---
+    windSrc = actx.createBufferSource();
+    windSrc.buffer = noiseBuf.buf; windSrc.loop = true;
+    windFilter = actx.createBiquadFilter();
+    windFilter.type = 'bandpass'; windFilter.frequency.value = 320; windFilter.Q.value = 0.8;
+    windGain = actx.createGain(); windGain.gain.value = 0.0;
+    windPan = actx.createStereoPanner ? actx.createStereoPanner() : null;
+    windSrc.connect(windFilter); windFilter.connect(windGain);
+    if (windPan){ windGain.connect(windPan); windPan.connect(windBus); }
+    else windGain.connect(windBus);
+    windSrc.start();
+
+    // --- calm drone: the room itself, breathing ---
+    droneGain = actx.createGain(); droneGain.gain.value = 0.0;
+    const droneFilter = actx.createBiquadFilter();
+    droneFilter.type = 'lowpass'; droneFilter.frequency.value = 340; droneFilter.Q.value = 1.2;
+    for (const [f, det] of [[73.42, -4], [110.0, 5], [146.83, 0]]){
+      const o = actx.createOscillator();
+      o.type = 'sine'; o.frequency.value = f; o.detune.value = det;
+      const g = actx.createGain(); g.gain.value = f > 120 ? 0.25 : 0.5;
+      o.connect(g); g.connect(droneFilter);
+      o.start();
+    }
+    droneFilter.connect(droneGain); droneGain.connect(padBus);
+
+    audioReady = true;
+  }
+
+  const BELL_PARTIALS = [[1, 0.34, 3.6], [2.76, 0.16, 2.4], [5.40, 0.07, 1.5], [8.93, 0.03, 0.9]];
+  function chimeTone(t, freq, strength, pan){
+    if (!audioReady) return;
+    const s = Math.max(0.06, Math.min(1, strength));
+    const dest = actx.createGain(); dest.gain.value = 1;
+    if (actx.createStereoPanner){
+      const p = actx.createStereoPanner();
+      p.pan.value = Math.max(-1, Math.min(1, pan));
+      dest.connect(p); p.connect(chimeBus);
+    } else {
+      dest.connect(chimeBus);
+    }
+    for (const [ratio, amp, dur] of BELL_PARTIALS){
+      const o = actx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = freq * ratio * (1 + (Math.random()-0.5)*0.003);
+      const g = actx.createGain();
+      const peak = Math.max(0.0002, amp * s * (0.55 + 0.45*s));
+      const d = dur * (0.55 + 0.45*s);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(dest);
+      o.start(t); o.stop(t + d + 0.12);
+    }
+    // the tick of glass on glass
+    if (noiseBuf.buf){
+      const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+      const bp = actx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = Math.min(12000, freq * 3.4); bp.Q.value = 2.4;
+      const tg = actx.createGain();
+      tg.gain.setValueAtTime(Math.max(0.0002, 0.09 * s), t);
+      tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+      src.connect(bp); bp.connect(tg); tg.connect(dest);
+      src.start(t); src.stop(t + 0.09);
+    }
+  }
+
+  function whoosh(t, strength){
+    if (!audioReady || !noiseBuf.buf) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+    bp.frequency.setValueAtTime(240, t);
+    bp.frequency.exponentialRampToValueAtTime(1600, t + 0.22);
+    bp.frequency.exponentialRampToValueAtTime(300, t + 0.8);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.24 * strength), t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
+    src.connect(bp); bp.connect(g); g.connect(windBus);
+    src.start(t); src.stop(t + 0.9);
+  }
+
+  function swirlArpeggio(t, pan){
+    if (!audioReady) return;
+    for (let i = 0; i < 5; i++){
+      const m = CHIME_MIDI[Math.min(CHIME_MIDI.length - 1, i)] + 12;
+      chimeTone(t + i*0.085, midiFreq(m), 0.42, pan * (1 - i*0.18));
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let facing = 'user', mirror = true;
+
+  async function startStream(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      throw new Error('このブラウザはカメラ入力に対応していません。');
+    }
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    try { await startStream(); } catch(e){ /* keep previous stream */ }
+    resetFlow();
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let streaksOn = true;
+  streakBtn.addEventListener('click', () => {
+    streaksOn = !streaksOn;
+    streakBtn.textContent = streaksOn ? '風筋 ON' : '風筋 OFF';
+    streakBtn.classList.toggle('active', streaksOn);
+  });
+
+  // ---------------------------------------------------------------------------
+  //  SCENE — chimes, petals, tracers, vortices, waves
+  // ---------------------------------------------------------------------------
+  let chimes = [];
+  let petals = [];
+  let tracers = [];
+  const vortices = [];
+  const waves = [];
+
+  let layoutW = -1, layoutH = -1;
+  let CHIME_TOP = 0, CELL = 8;
+  let ringCount = 0, lastNoteText = '—';
+
+  function desiredChimeCount(){ return W < 520 ? 5 : 7; }
+
+  function buildChimes(n){
+    chimes = [];
+    for (let i = 0; i < n; i++){
+      chimes.push({
+        i,
+        nx: (i + 0.5) / n,
+        midi: CHIME_MIDI[Math.min(CHIME_MIDI.length - 1, Math.round(i * (CHIME_MIDI.length - 1) / Math.max(1, n - 1)))],
+        hue: 186 + i * 9,
+        ph: Math.random() * Math.PI * 2,
+        theta: 0, omega: 0, thetaAcc: 0,
+        phi: 0, phiVel: 0,
+        L: 100, r: 18,
+        lit: 0, cool: 0
+      });
+    }
+    // HUD dots follow the chime count
+    cDotsEl.innerHTML = '';
+    for (let i = 0; i < n; i++) cDotsEl.appendChild(document.createElement('i'));
+  }
+
+  function layout(){
+    const n = desiredChimeCount();
+    if (chimes.length !== n) buildChimes(n);
+    CHIME_TOP = Math.max(26, H * 0.055);
+    CELL = W / FLOW_W;
+    const baseR = Math.max(11, Math.min(27, (W / n) * 0.27));
+    for (const ch of chimes){
+      ch.r = baseR;
+      ch.L = H * (0.115 + 0.022 * (0.5 + 0.5 * Math.sin(ch.i * 1.7)));
+    }
+    const want = Math.round(Math.max(90, Math.min(230, (W * H) / 5200)));
+    if (!petals.length){
+      for (let i = 0; i < want; i++) petals.push(makePetal(true));
+    } else if (petals.length < want){
+      while (petals.length < want) petals.push(makePetal(true));
+    } else if (petals.length > want){
+      petals.length = want;
+    }
+    const wantT = Math.round(Math.max(40, Math.min(110, (W * H) / 12000)));
+    if (tracers.length !== wantT){
+      tracers = [];
+      for (let i = 0; i < wantT; i++) tracers.push(makeTracer());
+    }
+    layoutW = W; layoutH = H;
+  }
+
+  const PETAL_HUES = [340, 348, 330, 44, 200];
+  function makePetal(anywhere){
+    const hue = PETAL_HUES[(Math.random() * PETAL_HUES.length) | 0];
+    return {
+      x: Math.random() * W,
+      y: anywhere ? Math.random() * H : -20 - Math.random() * 60,
+      vx: (Math.random() - 0.5) * 0.6,
+      vy: 0.4 + Math.random() * 0.8,
+      s: 3.2 + Math.random() * 4.2,
+      rot: Math.random() * Math.PI * 2,
+      rotSpd: (Math.random() - 0.5) * 0.06,
+      ph: Math.random() * Math.PI * 2,
+      hue,
+      glow: 0.55 + Math.random() * 0.45,
+      cool: 0
+    };
+  }
+  function makeTracer(){
+    const x = Math.random() * W, y = Math.random() * H;
+    return { x, y, px: x, py: y, life: 40 + Math.random() * 90 };
+  }
+
+  function spawnWave(x, y, hue, a, r0){
+    waves.push({ x, y, hue, a, r: r0 });
+    if (waves.length > 60) waves.splice(0, waves.length - 60);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CHIME PHYSICS — bell pendulum + a clapper (舌) with its own swing.
+  //  A ring only happens when the clapper actually reaches the bell wall
+  //  with enough relative speed, so soft air makes no sound at all.
+  // ---------------------------------------------------------------------------
+  const GRAV = 1700;          // px/s^2 for the pendulum period
+  const BELL_DAMP = 0.35;     // low — a struck furin keeps swaying for seconds
+  const CLAP_DAMP = 0.80;
+  const CONTACT = 0.14;       // rad of free play inside the bell
+  const MIN_REL_VEL = 0.55;   // rad/s below which contact is silent
+  const RING_COOLDOWN = 150;  // ms
+  const BELL_WIND = 0.75;     // how hard the air pushes the glass body
+  const CLAP_WIND = 2.40;     // the clapper is light and answers the air directly
+
+  function updateChimes(dt, now){
+    for (const ch of chimes){
+      const x0 = ch.nx * W;
+      const L = ch.L;
+      const bx = x0 + Math.sin(ch.theta) * L;
+      const by = CHIME_TOP + Math.cos(ch.theta) * L;
+      const w = sampleWind(bx, by);
+      const wpx = w.x * CELL * 60;   // px/s
+      const wpy = w.y * CELL * 60;
+
+      // wind torque on the bell (horizontal push, plus a little lift)
+      const torque = (wpx * BELL_WIND + wpy * 0.06 * Math.sin(ch.theta)) / L;
+      const acc = -(GRAV / L) * Math.sin(ch.theta) - BELL_DAMP * ch.omega + torque;
+      ch.thetaAcc = acc;
+      ch.omega += acc * dt;
+      ch.theta += ch.omega * dt;
+      if (ch.theta > 1.0){ ch.theta = 1.0; ch.omega = Math.min(0, ch.omega); }
+      if (ch.theta < -1.0){ ch.theta = -1.0; ch.omega = Math.max(0, ch.omega); }
+
+      // clapper: shorter pendulum, dragged by the bell's pivot acceleration
+      const Lc = Math.max(8, L * 0.16);
+      const cAcc = -(GRAV / Lc) * Math.sin(ch.phi)
+                 - CLAP_DAMP * ch.phiVel
+                 - (L / Lc) * ch.thetaAcc * 0.35
+                 + (wpx * CLAP_WIND) / Lc;
+      ch.phiVel += cAcc * dt;
+      ch.phi += ch.phiVel * dt;
+
+      // contact with the bell wall
+      const rel = ch.phi - ch.theta;
+      if (rel > CONTACT || rel < -CONTACT){
+        const sign = rel > 0 ? 1 : -1;
+        const relVel = ch.phiVel - ch.omega;
+        ch.phi = ch.theta + sign * CONTACT;
+        ch.phiVel = ch.omega - relVel * 0.42;
+        const speed = relVel < 0 ? -relVel : relVel;
+        if (speed > MIN_REL_VEL && now - ch.cool > RING_COOLDOWN){
+          ch.cool = now;
+          ring(ch, Math.min(1, (speed - MIN_REL_VEL) / 2.2 + 0.18), bx, by);
+        }
+      }
+      ch.lit *= 0.94;
+    }
+  }
+
+  function ring(ch, strength, bx, by){
+    ch.lit = Math.min(1.4, ch.lit + 0.55 + strength * 0.6);
+    ringCount++;
+    lastNoteText = midiName(ch.midi);
+    if (audioReady) chimeTone(actx.currentTime, midiFreq(ch.midi), strength, (ch.nx * 2 - 1) * 0.7);
+    spawnWave(bx, by, ch.hue, 0.55 + strength * 0.4, ch.r * 1.1);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(4,6,15,0.56)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(28,38,90,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.18, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,3,10,0.86)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  function updateDrawTracers(){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.lineCap = 'round';
+    for (const tr of tracers){
+      tr.px = tr.x; tr.py = tr.y;
+      const w = sampleWind(tr.x, tr.y);
+      tr.x += w.x * CELL * 1.15;
+      tr.y += w.y * CELL * 1.15;
+      tr.life--;
+      if (tr.life <= 0 || tr.x < -30 || tr.x > W + 30 || tr.y < -30 || tr.y > H + 30){
+        const n = makeTracer();
+        tr.x = n.x; tr.y = n.y; tr.px = n.x; tr.py = n.y; tr.life = n.life;
+        continue;
+      }
+      if (!streaksOn) continue;
+      const d = Math.hypot(tr.x - tr.px, tr.y - tr.py);
+      if (d < 0.35) continue;
+      const a = Math.min(0.5, d * 0.045);
+      c.strokeStyle = `hsla(${192 + Math.min(40, d*1.6)},100%,78%,${a})`;
+      c.lineWidth = 1 + Math.min(1.6, d * 0.05);
+      c.beginPath(); c.moveTo(tr.px, tr.py); c.lineTo(tr.x, tr.y); c.stroke();
+    }
+    c.restore();
+  }
+
+  function updateDrawPetals(now){
+    const c = fctx;
+    const ambient = Math.sin(now * 0.00031) * 0.16;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const p of petals){
+      const w = sampleWind(p.x, p.y);
+      const tx = (w.x + ambient) * CELL;
+      const ty = w.y * CELL;
+      p.vx += (tx - p.vx) * 0.10 + Math.sin(now * 0.003 + p.ph) * 0.16;
+      p.vy += (ty - p.vy) * 0.10 + 0.11;
+
+      // swirl pockets drag the petals into a spiral
+      for (const vo of vortices){
+        const dx = p.x - vo.x, dy = p.y - vo.y;
+        const d2 = dx*dx + dy*dy;
+        if (d2 < vo.r * vo.r){
+          const d = Math.sqrt(d2) + 12;
+          const f = vo.life * vo.strength * (1 - d / (vo.r + 12)) * 1.6;
+          p.vx += (-dy / d) * f * vo.sign - (dx / d) * f * 0.28;
+          p.vy += ( dx / d) * f * vo.sign - (dy / d) * f * 0.28;
+        }
+      }
+
+      p.x += p.vx; p.y += p.vy;
+      p.rot += p.rotSpd + p.vx * 0.008;
+      if (p.cool > 0) p.cool--;
+
+      if (p.y > H + 34){ p.y = -24; p.x = Math.random() * W; p.vy = 0.5; p.vx *= 0.3; }
+      else if (p.y < -80){ p.y = H + 20; p.x = Math.random() * W; p.vy = 0.3; }
+      if (p.x < -40) p.x = W + 34;
+      else if (p.x > W + 40) p.x = -34;
+
+      // a petal blown through a furin knocks its clapper
+      if (p.cool === 0){
+        for (const ch of chimes){
+          const bx = ch.nx * W + Math.sin(ch.theta) * ch.L;
+          const by = CHIME_TOP + Math.cos(ch.theta) * ch.L;
+          const dx = p.x - bx, dy = p.y - by;
+          if (dx*dx + dy*dy < (ch.r * 1.5) * (ch.r * 1.5)){
+            const sp = Math.hypot(p.vx, p.vy);
+            if (sp > 2.4){
+              ch.phiVel += (p.vx > 0 ? 1 : -1) * Math.min(3.2, sp * 0.32);
+              p.cool = 40;
+            }
+            break;
+          }
+        }
+      }
+
+      const speed = Math.hypot(p.vx, p.vy);
+      const flut = 0.32 + 0.68 * Math.abs(Math.sin(now * 0.0042 + p.ph));
+      const s = p.s;
+      const a = Math.min(0.95, (0.26 + speed * 0.05) * p.glow);
+      c.save();
+      c.translate(p.x, p.y);
+      c.rotate(p.rot);
+      c.scale(1, flut);
+      const g = c.createRadialGradient(0, 0, 0, 0, 0, s * 2.2);
+      g.addColorStop(0, `hsla(${p.hue},100%,86%,${a})`);
+      g.addColorStop(1, `hsla(${p.hue},100%,66%,0)`);
+      c.fillStyle = g;
+      c.beginPath(); c.arc(0, 0, s * 2.2, 0, Math.PI * 2); c.fill();
+      c.fillStyle = `hsla(${p.hue},100%,88%,${Math.min(1, a * 1.5)})`;
+      c.beginPath();
+      c.moveTo(0, -s);
+      c.bezierCurveTo(s * 0.85, -s * 0.55, s * 0.72, s * 0.62, 0, s);
+      c.bezierCurveTo(-s * 0.72, s * 0.62, -s * 0.85, -s * 0.55, 0, -s);
+      c.fill();
+      c.restore();
+    }
+    c.restore();
+  }
+
+  function updateDrawWaves(){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = waves.length - 1; i >= 0; i--){
+      const wv = waves[i];
+      wv.r += 3.4; wv.a *= 0.93;
+      if (wv.a < 0.015){ waves.splice(i, 1); continue; }
+      c.strokeStyle = `hsla(${wv.hue},100%,80%,${wv.a})`;
+      c.lineWidth = 2;
+      c.beginPath(); c.arc(wv.x, wv.y, wv.r, 0, Math.PI * 2); c.stroke();
+    }
+    c.restore();
+  }
+
+  function updateDrawVortices(now){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = vortices.length - 1; i >= 0; i--){
+      const vo = vortices[i];
+      vo.life -= 0.0055;
+      if (vo.life <= 0){ vortices.splice(i, 1); continue; }
+      const turns = 2.6;
+      const steps = 64;
+      c.strokeStyle = `hsla(${330 + vo.sign * 20},100%,80%,${vo.life * 0.5})`;
+      c.lineWidth = 1.6;
+      c.beginPath();
+      for (let k = 0; k <= steps; k++){
+        const q = k / steps;
+        const ang = q * Math.PI * 2 * turns * vo.sign + now * 0.0035 * vo.sign;
+        const rad = vo.r * (0.12 + 0.88 * q) * (0.55 + 0.45 * vo.life);
+        const x = vo.x + Math.cos(ang) * rad;
+        const y = vo.y + Math.sin(ang) * rad;
+        if (k === 0) c.moveTo(x, y); else c.lineTo(x, y);
+      }
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  function drawChime(ch, now){
+    const c = ctx;
+    const x0 = ch.nx * W, y0 = CHIME_TOP;
+    const L = ch.L, r = ch.r;
+    const bx = x0 + Math.sin(ch.theta) * L;
+    const by = y0 + Math.cos(ch.theta) * L;
+    const lit = Math.min(1, ch.lit);
+    let rel = ch.phi - ch.theta;
+    if (rel > CONTACT) rel = CONTACT;
+    if (rel < -CONTACT) rel = -CONTACT;
+
+    c.save();
+    // cord
+    c.strokeStyle = `rgba(200,222,255,${0.20 + lit * 0.35})`;
+    c.lineWidth = 1.2;
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(bx, by); c.stroke();
+    c.fillStyle = 'rgba(200,222,255,0.45)';
+    c.beginPath(); c.arc(x0, y0, 2.4, 0, Math.PI * 2); c.fill();
+
+    c.translate(bx, by);
+    c.rotate(ch.theta);
+
+    if (lit > 0.01){
+      const hg = c.createRadialGradient(0, 0, 0, 0, 0, r * 4.2);
+      hg.addColorStop(0, `hsla(${ch.hue},100%,84%,${0.42 * lit})`);
+      hg.addColorStop(1, `hsla(${ch.hue},100%,70%,0)`);
+      c.fillStyle = hg;
+      c.beginPath(); c.arc(0, 0, r * 4.2, 0, Math.PI * 2); c.fill();
+    }
+
+    // glass dome
+    const gg = c.createLinearGradient(0, -r * 1.1, 0, r * 0.9);
+    gg.addColorStop(0,    `hsla(${ch.hue},92%,${74 + lit * 18}%,${0.30 + lit * 0.42})`);
+    gg.addColorStop(0.55, `hsla(${ch.hue},82%,62%,${0.15 + lit * 0.30})`);
+    gg.addColorStop(1,    `hsla(${ch.hue},88%,82%,${0.09 + lit * 0.26})`);
+    c.fillStyle = gg;
+    c.beginPath();
+    c.moveTo(-r, r * 0.55);
+    c.quadraticCurveTo(-r * 1.04, -r * 0.55, 0, -r);
+    c.quadraticCurveTo( r * 1.04, -r * 0.55, r, r * 0.55);
+    c.quadraticCurveTo( r * 0.55,  r * 0.88, 0, r * 0.88);
+    c.quadraticCurveTo(-r * 0.55,  r * 0.88, -r, r * 0.55);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = `hsla(${ch.hue},100%,${78 + lit * 18}%,${0.5 + lit * 0.5})`;
+    c.lineWidth = 1.4;
+    c.stroke();
+
+    // rim + highlight
+    c.strokeStyle = `hsla(${ch.hue},100%,90%,${0.35 + lit * 0.5})`;
+    c.lineWidth = 1;
+    c.beginPath(); c.moveTo(-r, r * 0.55); c.quadraticCurveTo(0, r * 0.74, r, r * 0.55); c.stroke();
+    c.strokeStyle = `rgba(255,255,255,${0.32 + lit * 0.4})`;
+    c.lineWidth = 1.6;
+    c.beginPath(); c.arc(0, 0, r * 0.72, Math.PI * 1.12, Math.PI * 1.46); c.stroke();
+
+    // clapper (舌) and its paper strip (短冊)
+    const cl = r * 1.25;
+    const cxp = Math.sin(rel) * cl, cyp = Math.cos(rel) * cl;
+    c.strokeStyle = `rgba(226,242,255,${0.34 + lit * 0.4})`;
+    c.lineWidth = 1;
+    c.beginPath(); c.moveTo(0, -r * 0.15); c.lineTo(cxp, cyp); c.stroke();
+    c.fillStyle = `hsla(${ch.hue},95%,${80 + lit * 15}%,${0.72 + lit * 0.28})`;
+    c.beginPath(); c.arc(cxp, cyp, r * 0.2, 0, Math.PI * 2); c.fill();
+
+    c.save();
+    c.translate(cxp, cyp);
+    c.rotate(rel * 0.55 + Math.sin(now * 0.004 + ch.ph) * 0.14 + ch.omega * 0.06);
+    const pw = r * 0.52, ph2 = r * 2.0;
+    const pg = c.createLinearGradient(0, 0, 0, ph2);
+    pg.addColorStop(0, `rgba(255,255,255,${0.42 + lit * 0.3})`);
+    pg.addColorStop(1, `hsla(${ch.hue},80%,84%,0.06)`);
+    c.fillStyle = pg;
+    c.beginPath();
+    c.moveTo(-pw * 0.5, 0); c.lineTo(pw * 0.5, 0);
+    c.lineTo(pw * 0.42, ph2); c.lineTo(-pw * 0.42, ph2);
+    c.closePath(); c.fill();
+    c.restore();
+
+    c.restore();
+  }
+
+  function drawGustStreak(now){
+    if (gustFx <= 0.01) return;
+    const c = ctx;
+    const ang = Math.atan2(gustDy, gustDx);
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.translate(gustX, gustY);
+    c.rotate(ang);
+    const len = Math.min(W, H) * (0.4 + 0.6 * (1 - gustFx));
+    const g = c.createLinearGradient(-len, 0, len, 0);
+    g.addColorStop(0,   'hsla(196,100%,80%,0)');
+    g.addColorStop(0.5, `hsla(196,100%,86%,${gustFx * 0.5})`);
+    g.addColorStop(1,   'hsla(196,100%,80%,0)');
+    c.fillStyle = g;
+    c.fillRect(-len, -Math.max(6, len * 0.05), len * 2, Math.max(12, len * 0.1));
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  EVENTS — gusts and swirls
+  // ---------------------------------------------------------------------------
+  let lastGust = -9999, lastSwirl = -9999;
+  let gustFx = 0, gustX = 0, gustY = 0, gustDx = 1, gustDy = 0;
+  let gustGlow = 0, swirlLabelUntil = 0;
+  let spin = 0, prevSpinAng = 0, haveSpinAng = false;
+
+  function triggerGust(now){
+    lastGust = now;
+    gustFx = 1; gustGlow = 1;
+    gustX = W / 2; gustY = H * 0.45;
+    const m = Math.hypot(meanDirX, meanDirY) || 1;
+    gustDx = meanDirX / m; gustDy = meanDirY / m;
+    if (audioReady) whoosh(actx.currentTime, Math.min(1, 0.5 + speedNorm * 0.6));
+
+    // a handful of chimes are shoved bodily by the gust — they ring as a chord
+    const picked = {};
+    const take = Math.min(3, chimes.length);
+    for (let k = 0; k < take; k++){
+      let idx = (Math.random() * chimes.length) | 0;
+      for (let guard = 0; guard < chimes.length && picked[idx]; guard++){
+        idx = (idx + 1) % chimes.length;
+      }
+      picked[idx] = true;
+      const ch = chimes[idx];
+      if (!ch) continue;
+      ch.phiVel += (gustDx >= 0 ? 1 : -1) * (2.6 + Math.random() * 1.6);
+      ch.omega  += (gustDx >= 0 ? 1 : -1) * (0.7 + Math.random() * 0.5);
+    }
+    for (let i = 0; i < 18; i++){
+      const p = petals[(Math.random() * petals.length) | 0];
+      if (!p) continue;
+      p.vx += gustDx * (5 + Math.random() * 6);
+      p.vy += gustDy * (5 + Math.random() * 6) - 1.4;
+    }
+  }
+
+  function triggerSwirl(now, sign){
+    lastSwirl = now;
+    const x = (motionCX / (FLOW_W - 1)) * W;
+    const y = (motionCY / (FLOW_H - 1)) * H;
+    vortices.push({
+      x, y,
+      r: Math.min(W, H) * 0.30,
+      sign,
+      strength: Math.min(1, 0.55 + speedNorm * 0.45),
+      life: 1
+    });
+    if (vortices.length > 2) vortices.shift();
+    swirlLabelUntil = now + 1600;
+    if (audioReady) swirlArpeggio(actx.currentTime, (x / W) * 2 - 1);
+    spawnWave(x, y, 330, 0.7, 20);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let lastFrameT = 0, hudTick = 0, calmSince = 0;
+  const DIRS = ['右', '右上', '上', '左上', '左', '左下', '下', '右下'];
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const now = performance.now();
+    let dt = (now - lastFrameT) / 1000;
+    if (!isFinite(dt) || dt <= 0) dt = 1 / 60;
+    if (dt > 0.05) dt = 0.05;
+    lastFrameT = now;
+    if (W < 2 || H < 2) return; // a zero-sized viewport would poison every sample
+
+    if (W !== layoutW || H !== layoutH || chimes.length !== desiredChimeCount()) layout();
+
+    ctx.clearRect(0, 0, W, H);
+    drawVideoBase();
+
+    // fade the glow layer -> trailing afterglow
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.20)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    computeFlow();
+    updateWind();
+
+    // ---- gust ----
+    if (speedNorm > 0.85 && now - lastGust > 1400) triggerGust(now);
+    gustFx *= 0.92; gustGlow *= 0.90;
+    gustFlash.style.background = `rgba(159,232,255,${(gustGlow * 0.14).toFixed(3)})`;
+
+    // ---- swirl: not the curl of the field (a passing edge shears too), but a
+    //      mean wind direction that keeps turning the same way — a drawn circle
+    const mmag = Math.hypot(meanDirX, meanDirY);
+    if (mmag > 0.02){
+      const ang = Math.atan2(meanDirY, meanDirX);
+      if (haveSpinAng){
+        let d = ang - prevSpinAng;
+        while (d >  Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        if (d < 0.9 && d > -0.9) spin += d;   // ignore flips — those are reversals
+      }
+      prevSpinAng = ang; haveSpinAng = true;
+    } else {
+      haveSpinAng = false;
+    }
+    spin *= 0.995;
+    if ((spin > 5.2 || spin < -5.2) && speedNorm > 0.25 && now - lastSwirl > 2800){
+      triggerSwirl(now, spin > 0 ? 1 : -1);
+      spin = 0;
+    }
+
+    updateChimes(dt, now);
+
+    updateDrawTracers();
+    updateDrawVortices(now);
+    updateDrawPetals(now);
+    updateDrawWaves();
+
+    // composite the glow layer over the scene
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    drawGustStreak(now);
+    for (const ch of chimes) drawChime(ch, now);
+
+    // ---- audio follow ----
+    if (audioReady){
+      const t = actx.currentTime;
+      windFilter.frequency.setTargetAtTime(280 + speedNorm * 1500, t, 0.18);
+      windGain.gain.setTargetAtTime(0.012 + speedNorm * 0.20, t, 0.12);
+      if (windPan){
+        const m = Math.hypot(meanDirX, meanDirY);
+        const p = m > 1e-4 ? Math.max(-1, Math.min(1, (meanDirX / m) * Math.min(1, m * 8) * 0.8)) : 0;
+        windPan.pan.setTargetAtTime(p, t, 0.2);
+      }
+      droneGain.gain.setTargetAtTime(0.10 - speedNorm * 0.075, t, 0.5);
+    }
+
+    // ---- HUD ----
+    hudTick++;
+    if (hudTick % 3 === 0){
+      const pct = Math.round(speedNorm * 100);
+      windValEl.textContent = pct;
+      windMeter.style.width = pct + '%';
+      const m = Math.hypot(meanDirX, meanDirY);
+      if (m > 0.006){
+        const deg = Math.atan2(meanDirY, meanDirX) * 180 / Math.PI;
+        dirArrow.style.transform = `rotate(${deg.toFixed(1)}deg)`;
+        const a = Math.atan2(-meanDirY, meanDirX);
+        const idx = Math.round(((a + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8;
+        dirLabEl.textContent = DIRS[idx] + 'へ流れる';
+      } else {
+        dirLabEl.textContent = '—';
+      }
+      ringValEl.textContent = ringCount;
+      noteLabEl.textContent = lastNoteText === '—' ? '—' : '♪ ' + lastNoteText;
+      for (let i = 0; i < chimes.length && i < cDotsEl.children.length; i++){
+        cDotsEl.children[i].classList.toggle('on', chimes[i].lit > 0.18);
+      }
+
+      if (speedNorm < 0.06){
+        if (!calmSince) calmSince = now;
+      } else {
+        calmSince = 0;
+      }
+      if (now < swirlLabelUntil){
+        stateDot.textContent = '🌀 つむじ風';
+        stateDot.className = 'swirl';
+      } else if (speedNorm > 0.85){
+        stateDot.textContent = '突風 ・ GUST';
+        stateDot.className = 'gust';
+      } else if (speedNorm > 0.40){
+        stateDot.textContent = '風 ・ WIND';
+        stateDot.className = 'breeze';
+      } else if (speedNorm > 0.07){
+        stateDot.textContent = 'そよ風 ・ BREEZE';
+        stateDot.className = 'breeze';
+      } else {
+        stateDot.textContent = (calmSince && now - calmSince > 2500) ? '凪 ・ 手をはらってください' : '凪 ・ CALM';
+        stateDot.className = 'silent';
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        await startStream();
+        resetFlow();
+        layout();
+        booted = true;
+        lastFrameT = performance.now();
+        requestAnimationFrame(frame);
+      } else {
+        if (actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      streakBtn.classList.toggle('active', streaksOn);
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
