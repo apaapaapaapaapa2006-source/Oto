@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#03060c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="そっと手を開いて待つと蛍が寄ってきて、手のひらの脈動に同調して一緒に光りだす。光った瞬間に静かに手を閉じて捕まえる、静けさが武器の60秒カメラゲーム - HOTARU">
+<title>HOTARU ─ 静けさで捕まえる蛍</title>
+<style>
+  :root{
+    --void:#03060c; --haze:#0a1a18; --ghost:#eef7f0;
+    --fire:#b7ff6a; --warm:#ffe08a; --cool:#6cf0ff; --violet:#a98bff; --warn:#ff5470;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #calmFlash{ position:fixed; inset:0; z-index:6; pointer-events:none; background:rgba(183,255,106,0.0); }
+
+  /* ---- Start / result overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 42%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .7s ease, visibility .7s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(44px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:14%; background:radial-gradient(circle,var(--fire),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:32%; background:radial-gradient(circle,var(--cool),transparent 70%); animation-delay:-6s; }
+  .orb.o3{ width:32vmin; height:32vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--warm),transparent 70%); animation-delay:-10s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(5vmin,-4vmin) scale(1.14); } }
+
+  #eyebrow{ color:rgba(238,247,240,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.2rem; font-weight:800; letter-spacing:0.16em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,#b7ff6a,#ffe08a,#6cf0ff,#a98bff,#b7ff6a);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,247,240,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:1.7rem;
+    position:relative; white-space:pre-line; }
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:#04140a; background:linear-gradient(90deg,var(--fire),var(--warm)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(183,255,106,0.42);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 3.4s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 20px rgba(183,255,106,0.35); }
+    50%{ box-shadow:0 0 46px rgba(255,224,138,0.55); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #startBtn:disabled{ opacity:.6; cursor:default; animation:none; }
+  #hint{ position:relative; margin-top:2rem; max-width:23rem; color:rgba(238,247,240,0.5); font-size:0.76rem;
+    line-height:1.95; letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--fire); font-weight:700; }
+  #hint em{ color:var(--warn); font-style:normal; font-weight:700; }
+  #hint i{ color:var(--warm); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn);
+    font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+  #resultBox{ display:none; position:relative; margin-bottom:1.5rem; }
+  #resultBox .rlab{ font-size:0.62rem; letter-spacing:0.3em; color:rgba(238,247,240,0.45); }
+  #resultBox .rscore{ font-size:2.6rem; font-weight:800; color:var(--warm); line-height:1.3; font-variant-numeric:tabular-nums; }
+  #resultBox .rgrade{ font-size:0.95rem; font-weight:800; letter-spacing:0.2em; color:var(--fire); margin-bottom:.35rem; }
+  #resultBox .rsub{ font-size:0.76rem; color:rgba(238,247,240,0.6); letter-spacing:0.05em; line-height:1.8; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{ position:fixed; z-index:12; left:0; right:0; top:0;
+    display:flex; align-items:flex-start; justify-content:space-between; padding:1.1rem 1rem 0;
+    pointer-events:none; opacity:0; transition:opacity .6s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(4,12,10,0.46); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(183,255,106,0.18); border-radius:16px; padding:0.62rem 0.9rem;
+    color:var(--ghost); min-width:132px; }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,247,240,0.5); margin-bottom:0.25rem; }
+  .panel .val{ font-size:1.55rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--warm); }
+  .panel .subLab{ font-size:0.62rem; letter-spacing:0.1em; color:rgba(238,247,240,0.55); margin-top:0.32rem; }
+  .panel[data-side="r"]{ text-align:right; min-width:112px; }
+  .panel[data-side="r"] .val{ color:var(--cool); }
+  .panel[data-side="r"] .val.low{ color:var(--warn); }
+  .meterRow{ display:flex; align-items:center; gap:.4rem; margin-top:0.4rem; }
+  .meterRow span{ font-size:0.54rem; letter-spacing:0.14em; color:rgba(238,247,240,0.45); min-width:2.2rem; }
+  .meter{ flex:1; height:3px; border-radius:2px; background:rgba(238,247,240,0.1); overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%; border-radius:2px; transition:width .14s linear; }
+  #calmBar{ background:linear-gradient(90deg,#6cf0ff,#b7ff6a); }
+  #syncBar{ background:linear-gradient(90deg,#a98bff,#ffe08a); }
+
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:1.4rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #centerHud.show{ opacity:1; }
+  #stateDot{ font-size:0.66rem; letter-spacing:0.16em; color:rgba(238,247,240,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(183,255,106,0.18);
+    background:rgba(4,12,10,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .22s ease, border-color .22s ease, box-shadow .22s ease; white-space:nowrap; }
+  #stateDot.calmState{ color:var(--fire); border-color:rgba(183,255,106,0.5); box-shadow:0 0 18px rgba(183,255,106,0.25); }
+  #stateDot.syncState{ color:var(--warm); border-color:rgba(255,224,138,0.55); box-shadow:0 0 20px rgba(255,224,138,0.3); }
+  #stateDot.warnState{ color:var(--warn); border-color:rgba(255,84,112,0.5); box-shadow:0 0 18px rgba(255,84,112,0.25); }
+  #stateDot.silent{ color:rgba(160,170,175,0.85); border-color:rgba(140,150,160,0.3); box-shadow:none; }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(4,12,10,0.5); border:1px solid rgba(183,255,106,0.2);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease; }
+  .btn:active{ transform:scale(0.94); }
+  #brand{ position:fixed; z-index:12; left:0; bottom:0; padding:0 0 1.2rem 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.3em; color:rgba(238,247,240,0.8); }
+  #brand .b2{ font-size:0.55rem; letter-spacing:0.2em; color:rgba(238,247,240,0.38); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="calmFlash"></div>
+
+  <div id="brand"><div class="b1">HOTARU</div><div class="b2">蛍狩り / 静けさで捕まえる</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">SCORE</div>
+      <div class="val" id="scoreEl">0</div>
+      <div class="subLab">COMBO <span id="comboEl">0</span></div>
+      <div class="meterRow"><span>静けさ</span><div class="meter"><b id="calmBar"></b></div></div>
+      <div class="meterRow"><span>同調</span><div class="meter"><b id="syncBar"></b></div></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">TIME</div>
+      <div class="val" id="timeEl">60</div>
+      <div class="subLab">虫籠 <span id="catchEl">0</span> 匹</div>
+    </div>
+  </div>
+
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA GAME</div>
+    <div id="resultBox">
+      <div class="rlab">夜が明ける</div>
+      <div class="rscore" id="finalScore">0</div>
+      <div class="rgrade" id="finalGrade"></div>
+      <div class="rsub" id="finalSub"></div>
+    </div>
+    <div id="title">HOTARU</div>
+    <div id="sub">息をひそめて、蛍を手のひらに</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・カメラの前で<b>そっと手を開く</b>と、手のひらに淡い光の輪が<b>脈打ちます</b><br>
+      ・静かに待つと蛍がその光に寄ってきて、やがて<i>同じリズムで明滅</i>しはじめます<br>
+      ・蛍が<b>光った瞬間</b>に、ゆっくり<b>手を閉じる</b>と捕まえられます<br>
+      ・<em>急に動かすと蛍は驚いて散ります</em>。コンボも途切れるので、あくまで静かに<br>
+      ・群れ全体が<i>同調</i>した瞬間に捕まえると<i>得点が倍</i>に。制限時間は<b>60秒</b>
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas     = document.getElementById('stage');
+  const ctx        = canvas.getContext('2d');
+  const video      = document.getElementById('video');
+  const overlay    = document.getElementById('overlay');
+  const startBtn   = document.getElementById('startBtn');
+  const errorMsg   = document.getElementById('errorMsg');
+  const hud        = document.getElementById('hud');
+  const topbar     = document.getElementById('topbar');
+  const brand      = document.getElementById('brand');
+  const centerHud  = document.getElementById('centerHud');
+  const stateDot   = document.getElementById('stateDot');
+  const flipBtn    = document.getElementById('flipBtn');
+  const scoreEl    = document.getElementById('scoreEl');
+  const comboEl    = document.getElementById('comboEl');
+  const timeEl     = document.getElementById('timeEl');
+  const catchEl    = document.getElementById('catchEl');
+  const calmBar    = document.getElementById('calmBar');
+  const syncBar    = document.getElementById('syncBar');
+  const resultBox  = document.getElementById('resultBox');
+  const finalScore = document.getElementById('finalScore');
+  const finalGrade = document.getElementById('finalGrade');
+  const finalSub   = document.getElementById('finalSub');
+  const eyebrow    = document.getElementById('eyebrow');
+  const titleEl    = document.getElementById('title');
+  const subEl      = document.getElementById('sub');
+  const hintEl     = document.getElementById('hint');
+  const calmFlashEl= document.getElementById('calmFlash');
+
+  // glow layer (additive trails)
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const dist  = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  // ---------------------------------------------------------------------------
+  //  SIZE  (all gameplay distances scale with the short edge)
+  // ---------------------------------------------------------------------------
+  let W = 0, H = 0, DPR = 1, S = 400;
+  let CATCH_R = 80, ATTRACT_R = 200, SCARE_R = 160;
+  let SCARE_SPEED = 700, GRAB_SPEED = 380, CALM_REF = 640, MATCH_R = 200;
+  let WANDER_A = 34, BUOY_A = 8, ATTRACT_A = 68, REPEL_A = 480, MAX_SPEED = 64;
+  let cageX = 200, cageY = 400, cageR = 34;
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    S = Math.min(W, H);
+    CATCH_R     = Math.max(66,  S * 0.16);
+    ATTRACT_R   = Math.max(150, S * 0.44);
+    SCARE_R     = Math.max(120, S * 0.34);
+    SCARE_SPEED = Math.max(520, S * 1.70);
+    GRAB_SPEED  = Math.max(300, S * 0.95);
+    CALM_REF    = Math.max(430, S * 1.50);
+    MATCH_R     = Math.max(120, S * 0.40);
+    WANDER_A    = S * 0.085;
+    BUOY_A      = S * 0.022;
+    ATTRACT_A   = S * 0.300;
+    REPEL_A     = S * 1.30;
+    MAX_SPEED   = S * 0.165;
+    cageR = Math.max(30, S * 0.070);
+    cageX = W / 2;
+    cageY = H - Math.max(112, S * 0.24);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  //  GAME CONSTANTS
+  // ---------------------------------------------------------------------------
+  const ROUND_MS   = 60000;
+  const TARGET_FLIES = 15;
+  const FLASH_MIN  = 0.40;          // a firefly is catchable only while it glows
+  const PALM_OMEGA = TAU / 1.35;    // the pulse of your palm — the swarm's metronome
+  const PALM_K     = 4.5;           // how strongly a calm palm entrains nearby fireflies
+  const SYNC_BONUS_R = 0.70;
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, sfxBus = null, padBus = null;
+  let convolver = null, revGain = null, delay = null, fbGain = null, wetGain = null;
+  let chordGain = null, chordTrem = null;
+  let audioReady = false;
+  const noiseBuf = { buf: null };
+
+  // yo-scale (Japanese pentatonic) over D — used for both the swarm chord and the plucks
+  const BASE = 293.66; // D4
+  const YO = [0, 2, 5, 7, 9, 12, 14, 17, 19, 21, 24, 26, 29];
+  const CHORD = [146.83, 220.00, 293.66, 329.63, 440.00, 587.33];
+  const ratio = (semi) => Math.pow(2, semi / 12);
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 22; comp.ratio.value = 3.2;
+    comp.attack.value = 0.005;  comp.release.value = 0.28;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(3.2, 2.2);
+    revGain = actx.createGain(); revGain.gain.value = 0.34;
+
+    delay = actx.createDelay(1.2); delay.delayTime.value = 0.42;
+    fbGain = actx.createGain(); fbGain.gain.value = 0.30;
+    wetGain = actx.createGain(); wetGain.gain.value = 0.18;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    padBus = actx.createGain(); padBus.gain.value = 0.62;
+
+    sfxBus.connect(master); sfxBus.connect(convolver); sfxBus.connect(delay);
+    padBus.connect(master); padBus.connect(convolver);
+    delay.connect(fbGain); fbGain.connect(delay); delay.connect(wetGain); wetGain.connect(master);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(1.2);
+
+    // --- night bed: two very low sines under a soft lowpass ---
+    const bedFilter = actx.createBiquadFilter();
+    bedFilter.type = 'lowpass'; bedFilter.frequency.value = 320; bedFilter.Q.value = 0.7;
+    const bedGain = actx.createGain(); bedGain.gain.value = 0.075;
+    bedFilter.connect(bedGain); bedGain.connect(padBus);
+    for (const f of [65.41, 98.00]){
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+      const g = actx.createGain(); g.gain.value = f < 80 ? 0.9 : 0.45;
+      o.connect(g); g.connect(bedFilter); o.start();
+    }
+
+    // --- swarm chord: gain follows the synchronisation of the fireflies ---
+    chordTrem = actx.createGain(); chordTrem.gain.value = 0.6;
+    chordGain = actx.createGain(); chordGain.gain.value = 0.0001;
+    chordGain.connect(chordTrem); chordTrem.connect(padBus);
+    CHORD.forEach((f, i) => {
+      const o = actx.createOscillator(); o.type = i < 2 ? 'sine' : 'triangle';
+      o.frequency.value = f; o.detune.value = (i % 2 ? 5 : -5);
+      const g = actx.createGain(); g.gain.value = 0.30 / (1 + i * 0.55);
+      o.connect(g); g.connect(chordGain); o.start();
+    });
+
+    audioReady = true;
+  }
+
+  function kotoPluck(t, freq, amp){
+    if (!audioReady) return;
+    for (const [r, a, dur] of [[1, 1.0, 1.5], [2.01, 0.34, 0.8], [3.02, 0.14, 0.45], [5.4, 0.06, 0.28]]){
+      const o = actx.createOscillator();
+      o.type = r === 1 ? 'triangle' : 'sine';
+      o.frequency.value = freq * r;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, amp * a), t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + dur + 0.08);
+    }
+  }
+
+  function shimmer(t, amt){
+    if (!audioReady) return;
+    const n = 3;
+    for (let i = 0; i < n; i++){
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.value = CHORD[(i + 2) % CHORD.length] * 2;
+      const g = actx.createGain();
+      const st = t + i * 0.035;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, 0.055 * amt), st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 1.1);
+      o.connect(g); g.connect(padBus);
+      o.start(st); o.stop(st + 1.2);
+    }
+  }
+
+  function shhh(t){
+    if (!audioReady || !noiseBuf.buf) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8;
+    bp.frequency.setValueAtTime(2600, t);
+    bp.frequency.exponentialRampToValueAtTime(520, t + 0.4);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    src.connect(bp); bp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t + 0.5);
+
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.3);
+    const og = actx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.10, t + 0.02);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+    o.connect(og); og.connect(sfxBus);
+    o.start(t); o.stop(t + 0.36);
+  }
+
+  function cricket(t){
+    if (!audioReady || !noiseBuf.buf) return;
+    const pan = actx.createStereoPanner ? actx.createStereoPanner() : null;
+    if (pan) { pan.pan.value = Math.random() * 1.6 - 0.8; pan.connect(padBus); }
+    for (let i = 0; i < 4; i++){
+      const st = t + i * 0.075;
+      const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+      src.playbackRate.value = 1.4;
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass';
+      bp.frequency.value = 4200 + Math.random() * 900; bp.Q.value = 22;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.035, st + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.05);
+      src.connect(bp); bp.connect(g);
+      g.connect(pan ? pan : padBus);
+      src.start(st); src.stop(st + 0.06);
+    }
+  }
+
+  function bellTone(t, freq, amp, dur){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+    const o2 = actx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * 2.76;
+    const g = actx.createGain(), g2 = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(amp, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g2.gain.setValueAtTime(0.0001, t);
+    g2.gain.exponentialRampToValueAtTime(amp * 0.22, t + 0.01);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.5);
+    o.connect(g); g.connect(sfxBus);
+    o2.connect(g2); g2.connect(sfxBus);
+    o.start(t); o.stop(t + dur + 0.05);
+    o2.start(t); o2.stop(t + dur * 0.5 + 0.05);
+  }
+
+  function tickWarn(t){ bellTone(t, 1174.66, 0.05, 0.18); }
+
+  function endChime(t){
+    if (!audioReady) return;
+    [0, 5, 9, 12, 17].forEach((semi, i) => {
+      kotoPluck(t + i * 0.16, BASE * ratio(semi) * 0.5, 0.20);
+    });
+    shimmer(t + 0.1, 1.0);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND ANALYSIS
+  // ---------------------------------------------------------------------------
+  const TIPS = [4, 8, 12, 16, 20];
+  const PALM_PTS = [0, 5, 9, 13, 17];
+
+  function analyzeHand(lm){
+    const wrist = lm[0];
+    const palmScale = dist(lm[0], lm[9]) || 1e-4;
+    let sum = 0;
+    for (const i of TIPS) sum += dist(lm[i], wrist) / palmScale;
+    const openRaw = sum / TIPS.length;                       // ~0.75 fist .. ~2.4 spread
+    const openness = clamp((openRaw - 0.78) / 1.30, 0, 1);
+    let cx = 0, cy = 0;
+    for (const i of PALM_PTS){ cx += lm[i].x; cy += lm[i].y; }
+    return { x: cx / PALM_PTS.length, y: cy / PALM_PTS.length, openness, lm };
+  }
+
+  const RESULT = { hands: [], t: 0 };
+  let hands = null;
+
+  function initHands(){
+    hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
+    hands.onResults(onHandResults);
+  }
+  function onHandResults(results){
+    const out = [];
+    const lms = (results && results.multiHandLandmarks) ? results.multiHandLandmarks : [];
+    for (let i = 0; i < lms.length; i++){
+      const lm = lms[i];
+      if (!lm || lm.length < 21) continue;
+      out.push(analyzeHand(lm));
+    }
+    RESULT.hands = out;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+  async function startCameraLoop(){
+    if (mpCamera){ mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running && hands) await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    tracks.length = 0;
+    try { await startStream(); } catch(e){ /* keep the previous stream */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  // ---------------------------------------------------------------------------
+  //  HAND TRACKS (stable across frames, so open→close is a real gesture)
+  // ---------------------------------------------------------------------------
+  const tracks = [];
+
+  function updateTracks(handsArr, now, dt){
+    const pts = [];
+    for (const h of handsArr) pts.push({ x: px(h), y: py(h), openness: h.openness, lm: h.lm });
+
+    const used = new Array(tracks.length).fill(false);
+    const assigned = new Array(pts.length).fill(-1);
+    for (let i = 0; i < pts.length; i++){
+      let best = -1, bd = MATCH_R;
+      for (let j = 0; j < tracks.length; j++){
+        if (used[j]) continue;
+        const d = Math.hypot(pts[i].x - tracks[j].x, pts[i].y - tracks[j].y);
+        if (d < bd){ bd = d; best = j; }
+      }
+      if (best >= 0){ used[best] = true; assigned[i] = best; }
+    }
+
+    for (let i = 0; i < pts.length; i++){
+      const p = pts[i];
+      const idx = assigned[i];
+      if (idx >= 0 && tracks[idx]){
+        const tr = tracks[idx];
+        const d = Math.hypot(p.x - tr.x, p.y - tr.y);
+        // deadzone: landmark jitter must not read as "you moved"
+        const inst = dt > 0 ? Math.max(0, d / dt - S * 0.25) : 0;
+        tr.speed = tr.speed * 0.6 + Math.min(inst, S * 8) * 0.4;
+        tr.x = p.x; tr.y = p.y;
+        tr.open = tr.open * 0.45 + p.openness * 0.55;
+        tr.lm = p.lm;
+        tr.lastSeen = now;
+      } else {
+        tracks.push({
+          x: p.x, y: p.y, open: p.openness, speed: 0,
+          armed: false, lastSeen: now, lastScare: 0, lastGrab: 0, lm: p.lm
+        });
+        used.push(true);
+      }
+    }
+
+    for (let j = tracks.length - 1; j >= 0; j--){
+      if (now - tracks[j].lastSeen > 500) tracks.splice(j, 1);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  FIREFLIES
+  // ---------------------------------------------------------------------------
+  const flies = [];
+  let syncR = 0, meanPhase = 0, globalGlow = 0, prevGlobalGlow = 0;
+  let palmPhase = 0, palmGlow = 0;
+  let calm = 1;
+
+  function spawnFirefly(now, edge){
+    let x, y;
+    const m = 24;
+    const side = edge === undefined ? (Math.random() * 4) | 0 : edge;
+    if (side === 0){ x = -m; y = Math.random() * H * 0.85; }
+    else if (side === 1){ x = W + m; y = Math.random() * H * 0.85; }
+    else if (side === 2){ x = Math.random() * W; y = -m; }
+    else { x = Math.random() * W; y = H * 0.88 + Math.random() * 40; }
+    flies.push({
+      x, y,
+      vx: (W / 2 - x) * 0.02 * Math.random(),
+      vy: (H / 2 - y) * 0.02 * Math.random(),
+      wa: Math.random() * TAU,
+      phase: Math.random() * TAU,
+      omega: TAU / (0.9 + Math.random() * 1.3),
+      startle: 0,
+      glow: 0, litAt: 0,
+      born: now,
+      hue: 78 + Math.random() * 24,
+      size: 2.2 + Math.random() * 1.5,
+      state: 'free',
+      orbA: 0, orbR: 0, orbS: 0
+    });
+  }
+
+  function seedFireflies(now){
+    flies.length = 0;
+    for (let i = 0; i < TARGET_FLIES; i++){
+      flies.push({
+        x: W * (0.12 + Math.random() * 0.76),
+        y: H * (0.16 + Math.random() * 0.62),
+        vx: 0, vy: 0,
+        wa: Math.random() * TAU,
+        phase: Math.random() * TAU,
+        omega: TAU / (0.9 + Math.random() * 1.3),
+        startle: 0, glow: 0, litAt: 0, born: now - 1000,
+        hue: 78 + Math.random() * 24,
+        size: 2.2 + Math.random() * 1.5,
+        state: 'free', orbA: 0, orbR: 0, orbS: 0
+      });
+    }
+  }
+
+  function freeCount(){
+    let n = 0;
+    for (const f of flies) if (f.state === 'free') n++;
+    return n;
+  }
+
+  function updateFireflies(dt, now, active){
+    // --- Kuramoto order parameter over the free swarm ---
+    let sx = 0, sy = 0, n = 0;
+    for (const f of flies){
+      if (f.state !== 'free') continue;
+      sx += Math.cos(f.phase); sy += Math.sin(f.phase); n++;
+    }
+    const R = n ? Math.hypot(sx, sy) / n : 0;
+    meanPhase = n ? Math.atan2(sy, sx) : 0;
+    syncR += (R - syncR) * Math.min(1, dt * 3.2);
+
+    prevGlobalGlow = globalGlow;
+    globalGlow = Math.pow(0.5 + 0.5 * Math.sin(meanPhase), 3.2);
+
+    const K = (0.15 + calm * 0.85) * R;  // deliberately below the critical coupling:
+                                         // the swarm cannot lock on its own — only your palm conducts it
+    const skittish = active ? 1 + roundProgress() * 0.5 : 1;
+
+    for (let i = flies.length - 1; i >= 0; i--){
+      const f = flies[i];
+
+      if (f.state === 'cage'){
+        f.orbA += f.orbS * dt;
+        f.phase += f.omega * 0.6 * dt;
+        if (f.phase > TAU) f.phase -= TAU;
+        f.glow = 0.35 + 0.45 * Math.pow(0.5 + 0.5 * Math.sin(f.phase), 2);
+        f.x = cageX + Math.cos(f.orbA) * f.orbR;
+        f.y = cageY + Math.sin(f.orbA) * f.orbR * 0.75;
+        continue;
+      }
+
+      if (f.state === 'flying'){
+        // sailing home to the lantern
+        const dx = cageX - f.x, dy = cageY - f.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const sp = S * 1.5;
+        f.x += (dx / d) * sp * dt;
+        f.y += (dy / d) * sp * dt;
+        f.phase += f.omega * 2 * dt;
+        if (f.phase > TAU) f.phase -= TAU;
+        f.glow = 1;
+        if (d < Math.max(10, cageR * 0.5)){
+          f.state = 'cage';
+          f.orbA = Math.random() * TAU;
+          f.orbR = cageR * (0.18 + Math.random() * 0.55);
+          f.orbS = (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 1.1);
+        }
+        continue;
+      }
+
+      // ---- free ----
+      f.startle *= Math.exp(-dt * 1.25);
+
+      // phase: own rhythm + swarm mean field + your palm's pulse
+      let dPhase = f.omega + K * Math.sin(meanPhase - f.phase);
+      let ax = Math.cos(f.wa) * WANDER_A;
+      let ay = Math.sin(f.wa) * WANDER_A - BUOY_A;
+      f.wa += (Math.random() - 0.5) * 3.4 * dt;
+
+      for (const tr of tracks){
+        const dx = tr.x - f.x, dy = tr.y - f.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const scaring = tr.speed > SCARE_SPEED * 0.62;
+        if (scaring && d < SCARE_R * skittish){
+          const w = 1 - d / (SCARE_R * skittish);
+          ax -= (dx / d) * REPEL_A * w;
+          ay -= (dy / d) * REPEL_A * w;
+          f.startle = Math.min(1, f.startle + w * dt * 3.5);
+        } else if (!scaring && tr.open > 0.34 && d < ATTRACT_R){
+          const w = (1 - d / ATTRACT_R) * calm * (0.35 + tr.open * 0.65);
+          ax += (dx / d) * ATTRACT_A * w;
+          ay += (dy / d) * ATTRACT_A * w;
+          // a little swirl, so they circle the palm instead of colliding with it
+          ax += (-dy / d) * ATTRACT_A * w * 0.55;
+          ay += ( dx / d) * ATTRACT_A * w * 0.55;
+          // entrainment — the heart of the piece
+          dPhase += PALM_K * w * Math.sin(palmPhase - f.phase);
+        }
+      }
+
+      f.phase += dPhase * dt;
+      f.phase -= TAU * Math.floor(f.phase / TAU);
+      const raw = Math.pow(0.5 + 0.5 * Math.sin(f.phase), 3.2);
+      f.glow = raw * (1 - f.startle * 0.72);
+      if (f.glow >= FLASH_MIN) f.litAt = now;
+
+      f.vx += ax * dt; f.vy += ay * dt;
+      const damp = Math.exp(-dt * (1.5 + f.startle * 1.0));
+      f.vx *= damp; f.vy *= damp;
+      const sp = Math.hypot(f.vx, f.vy);
+      const maxSp = MAX_SPEED * (1 + f.startle * 4.2);
+      if (sp > maxSp){ f.vx = f.vx / sp * maxSp; f.vy = f.vy / sp * maxSp; }
+      f.x += f.vx * dt; f.y += f.vy * dt;
+
+      // soft walls
+      const m = 18;
+      if (f.x < m){ f.vx += (m - f.x) * 3 * dt; }
+      if (f.x > W - m){ f.vx -= (f.x - (W - m)) * 3 * dt; }
+      if (f.y < m){ f.vy += (m - f.y) * 3 * dt; }
+      const floor = H * 0.94;
+      if (f.y > floor){ f.vy -= (f.y - floor) * 3 * dt; }
+
+      if (f.x < -140 || f.x > W + 140 || f.y < -140 || f.y > H + 140){
+        flies.splice(i, 1);
+      }
+    }
+
+    // keep the meadow populated
+    if (active && freeCount() < TARGET_FLIES && Math.random() < dt * 2.2){
+      spawnFirefly(now);
+    }
+  }
+
+  function drawFireflies(now){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const f of flies){
+      const fade = clamp((now - f.born) / 900, 0, 1);
+      const g = f.glow;
+      const rad = f.size * (2.6 + g * 5.4);
+      const a = (0.10 + g * 0.9) * fade;
+      const hue = f.startle > 0.35 ? 168 : f.hue;
+      const grad = c.createRadialGradient(f.x, f.y, 0, f.x, f.y, rad * 2.6);
+      grad.addColorStop(0,   `hsla(${hue},100%,${68 + g * 24}%,${a})`);
+      grad.addColorStop(0.35,`hsla(${hue},100%,60%,${a * 0.34})`);
+      grad.addColorStop(1,   `hsla(${hue},100%,55%,0)`);
+      c.fillStyle = grad;
+      c.beginPath(); c.arc(f.x, f.y, rad * 2.6, 0, TAU); c.fill();
+      c.fillStyle = `hsla(${hue},100%,${84 + g * 14}%,${(0.25 + g * 0.75) * fade})`;
+      c.beginPath(); c.arc(f.x, f.y, f.size * (0.6 + g * 0.6), 0, TAU); c.fill();
+    }
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  EFFECTS
+  // ---------------------------------------------------------------------------
+  const rings = [];    // expanding circles: grab / scare / sync pulse
+  const sparks = [];
+  const popups = [];
+
+  function spawnRing(x, y, hue, r0, grow, alpha, width){
+    rings.push({ x, y, hue, r: r0, grow, a: alpha, w: width });
+  }
+  function spawnSparks(x, y, hue, n, power){
+    for (let i = 0; i < n; i++){
+      const a = Math.random() * TAU, s = (0.4 + Math.random()) * power;
+      sparks.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.4, life: 1, hue, r: 1 + Math.random() * 2 });
+    }
+  }
+  function spawnPopup(x, y, text, color, size){
+    popups.push({ x, y, text, color, size: size || 20, life: 1, vy: -0.55 });
+  }
+
+  function updateDrawRings(dt){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i = rings.length - 1; i >= 0; i--){
+      const r = rings[i];
+      r.r += r.grow * dt;
+      r.a *= Math.exp(-dt * 2.4);
+      if (r.a < 0.015){ rings.splice(i, 1); continue; }
+      c.strokeStyle = `hsla(${r.hue},100%,72%,${r.a})`;
+      c.lineWidth = r.w;
+      c.beginPath(); c.arc(r.x, r.y, r.r, 0, TAU); c.stroke();
+    }
+    c.restore();
+  }
+  function updateDrawSparks(dt){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i = sparks.length - 1; i >= 0; i--){
+      const p = sparks[i];
+      p.x += p.vx; p.y += p.vy; p.vy -= 0.02; p.vx *= 0.97; p.vy *= 0.97;
+      p.life -= dt * 1.5;
+      if (p.life <= 0){ sparks.splice(i, 1); continue; }
+      c.fillStyle = `hsla(${p.hue},100%,75%,${p.life})`;
+      c.beginPath(); c.arc(p.x, p.y, p.r * p.life, 0, TAU); c.fill();
+    }
+    c.restore();
+  }
+  function updateDrawPopups(dt){
+    for (let i = popups.length - 1; i >= 0; i--){
+      const p = popups[i];
+      p.y += p.vy; p.life -= dt * 1.1;
+      if (p.life <= 0){ popups.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = clamp(p.life, 0, 1);
+      ctx.fillStyle = p.color;
+      ctx.font = `800 ${p.size}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 12; ctx.shadowColor = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  SCENERY
+  // ---------------------------------------------------------------------------
+  const stars = Array.from({ length: 70 }, () => ({
+    x: Math.random(), y: Math.random() * 0.7,
+    r: 0.4 + Math.random() * 1.1, ph: Math.random() * TAU, sp: 0.4 + Math.random() * 1.2
+  }));
+  const mists = Array.from({ length: 5 }, (_, i) => ({
+    x: Math.random(), y: 0.45 + Math.random() * 0.5, r: 0.3 + Math.random() * 0.28,
+    sx: (Math.random() - 0.5) * 0.00004, hue: 150 + Math.random() * 70, ph: Math.random() * TAU
+  }));
+  const blades = Array.from({ length: 46 }, () => ({
+    x: Math.random(), h: 0.07 + Math.random() * 0.13, lean: (Math.random() - 0.5) * 0.9,
+    ph: Math.random() * TAU, w: 1.4 + Math.random() * 2.6
+  }));
+
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(2,6,10,0.52)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(26,62,68,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W / 2, H * 0.44, S * 0.16, W / 2, H * 0.5, Math.max(W, H) * 0.76);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(1,3,6,0.9)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawMist(t){
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (const b of mists){
+      b.x += b.sx;
+      if (b.x < -0.4) b.x = 1.4;
+      if (b.x >  1.4) b.x = -0.4;
+      const cx = b.x * W, cy = b.y * H, rr = b.r * Math.max(W, H);
+      const puls = 0.5 + 0.5 * Math.sin(t * 0.0004 + b.ph);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rr);
+      g.addColorStop(0, `hsla(${b.hue},55%,55%,${0.03 + puls * 0.035})`);
+      g.addColorStop(1, 'hsla(0,0%,0%,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawStars(t){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const s of stars){
+      const tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.001 * s.sp + s.ph));
+      c.fillStyle = `hsla(190,60%,88%,${0.16 * tw})`;
+      c.beginPath(); c.arc(s.x * W, s.y * H, s.r, 0, TAU); c.fill();
+    }
+    c.restore();
+  }
+
+  function drawGrass(t){
+    ctx.save();
+    for (const b of blades){
+      const x = b.x * W, h = b.h * H;
+      const sway = Math.sin(t * 0.0009 + b.ph) * (12 + h * 0.06);
+      const g = ctx.createLinearGradient(x, H, x, H - h);
+      g.addColorStop(0, 'rgba(1,6,5,0.96)');
+      g.addColorStop(1, 'rgba(6,26,20,0.55)');
+      ctx.strokeStyle = g;
+      ctx.lineWidth = b.w; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x, H + 4);
+      ctx.quadraticCurveTo(x + b.lean * h * 0.3, H - h * 0.55, x + b.lean * h * 0.8 + sway, H - h);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  PALMS & LANTERN
+  // ---------------------------------------------------------------------------
+  function drawPalms(){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const tr of tracks){
+      const scared = tr.speed > SCARE_SPEED * 0.62;
+      const open = clamp(tr.open, 0, 1);
+      const hue = scared ? 350 : (open > 0.34 ? 82 : 44);
+      const pulse = scared ? 0.35 : (0.25 + palmGlow * 0.75) * (0.35 + open * 0.65) * (0.35 + calm * 0.65);
+      const rad = CATCH_R * (0.55 + open * 0.45);
+
+      const g = c.createRadialGradient(tr.x, tr.y, 0, tr.x, tr.y, rad * 1.25);
+      g.addColorStop(0, `hsla(${hue},100%,80%,${0.16 + pulse * 0.34})`);
+      g.addColorStop(0.6, `hsla(${hue},100%,62%,${0.05 + pulse * 0.12})`);
+      g.addColorStop(1, `hsla(${hue},100%,55%,0)`);
+      c.fillStyle = g;
+      c.beginPath(); c.arc(tr.x, tr.y, rad * 1.25, 0, TAU); c.fill();
+
+      c.strokeStyle = `hsla(${hue},100%,74%,${0.20 + pulse * 0.6})`;
+      c.lineWidth = 1.6 + pulse * 2.2;
+      c.beginPath(); c.arc(tr.x, tr.y, rad * (0.72 + pulse * 0.2), 0, TAU); c.stroke();
+
+      if (!scared && open > 0.34){
+        c.strokeStyle = `hsla(${hue},100%,80%,${0.10 + palmGlow * 0.18})`;
+        c.lineWidth = 1;
+        c.beginPath(); c.arc(tr.x, tr.y, CATCH_R, 0, TAU); c.stroke();
+      }
+      // fingertips as small embers
+      const lm = tr.lm;
+      if (lm && lm.length >= 21){
+        for (const i of TIPS){
+          const p = lm[i];
+          if (!p) continue;
+          const fxp = px(p), fyp = py(p);
+          c.fillStyle = `hsla(${hue},100%,86%,${0.12 + pulse * 0.4})`;
+          c.beginPath(); c.arc(fxp, fyp, 2 + pulse * 2.2, 0, TAU); c.fill();
+        }
+      }
+    }
+    c.restore();
+  }
+
+  function drawLantern(t){
+    const c = fctx;
+    const warmth = clamp(caught / 12, 0, 1);
+    const breathe = 0.5 + 0.5 * Math.sin(t * 0.0011);
+    c.save(); c.globalCompositeOperation = 'lighter';
+
+    const g = c.createRadialGradient(cageX, cageY, 0, cageX, cageY, cageR * 3.4);
+    g.addColorStop(0, `hsla(44,100%,76%,${0.04 + warmth * (0.20 + breathe * 0.09)})`);
+    g.addColorStop(1, 'hsla(44,100%,60%,0)');
+    c.fillStyle = g;
+    c.beginPath(); c.arc(cageX, cageY, cageR * 3.4, 0, TAU); c.fill();
+
+    // woven bamboo cage — vertical ribs seen edge-on, plus horizontal hoops
+    c.strokeStyle = `hsla(40,70%,72%,${0.24 + warmth * 0.38})`;
+    c.lineWidth = 1.2;
+    for (let i = 1; i <= 4; i++){
+      const rx = cageR * (i / 5);
+      c.beginPath(); c.ellipse(cageX, cageY, rx, cageR, 0, 0, TAU); c.stroke();
+    }
+    for (let i = -2; i <= 2; i++){
+      const k = i / 3;
+      const rx = cageR * Math.sqrt(Math.max(0.04, 1 - k * k));
+      c.beginPath(); c.ellipse(cageX, cageY + k * cageR, rx, cageR * 0.13, 0, 0, TAU); c.stroke();
+    }
+    c.strokeStyle = `hsla(40,75%,82%,${0.34 + warmth * 0.5})`;
+    c.lineWidth = 2;
+    c.beginPath(); c.arc(cageX, cageY, cageR, 0, TAU); c.stroke();
+    // hanging cord
+    c.strokeStyle = 'hsla(40,60%,70%,0.22)';
+    c.lineWidth = 1;
+    c.beginPath(); c.moveTo(cageX, cageY - cageR); c.lineTo(cageX, cageY - cageR - 20); c.stroke();
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GAME STATE
+  // ---------------------------------------------------------------------------
+  let state = 'idle';               // idle | countdown | playing | over
+  let score = 0, combo = 0, maxCombo = 0, caught = 0, scared = 0, syncCatches = 0;
+  let roundStart = 0, timeLeft = ROUND_MS, countdownStart = 0;
+  let lastTickSecond = -1, lastCountIdx = -1;
+  let shake = 0, calmFlash = 0, lastShimmerAt = 0, nextCricketAt = 0;
+
+  function roundProgress(){
+    if (state !== 'playing') return 0;
+    return clamp((ROUND_MS - timeLeft) / ROUND_MS, 0, 1);
+  }
+
+  function resetGame(now){
+    score = 0; combo = 0; maxCombo = 0; caught = 0; scared = 0; syncCatches = 0;
+    timeLeft = ROUND_MS;
+    rings.length = 0; sparks.length = 0; popups.length = 0;
+    tracks.length = 0;
+    seedFireflies(now);
+    scoreEl.textContent = '0';
+    comboEl.textContent = '0';
+    catchEl.textContent = '0';
+    timeEl.textContent = String(Math.ceil(ROUND_MS / 1000));
+    timeEl.classList.remove('low');
+    lastTickSecond = Math.ceil(ROUND_MS / 1000);
+    lastCountIdx = -1;
+  }
+
+  const COUNTDOWN_LABELS = ['3', '2', '1', 'そっと…'];
+  const COUNTDOWN_STEP = 700;
+
+  function startGame(){
+    resetGame(performance.now());
+    state = 'countdown';
+    countdownStart = performance.now();
+  }
+
+  function grade(){
+    if (caught >= 24) return '蛍火の主';
+    if (caught >= 18) return '闇夜の名人';
+    if (caught >= 12) return '静かな手';
+    if (caught >= 6)  return '見習い';
+    return '修行中';
+  }
+
+  function endGame(){
+    if (state !== 'playing') return;
+    state = 'over';
+    if (audioReady) endChime(actx.currentTime);
+    finalScore.textContent = String(score);
+    finalGrade.textContent = grade();
+    finalSub.textContent =
+      `捕まえた蛍 ${caught}匹 ・ 最大コンボ ${maxCombo}\n同調中の捕獲 ${syncCatches}回 ・ 驚かせた ${scared}回`;
+    resultBox.style.display = 'block';
+    eyebrow.style.display = 'none';
+    titleEl.textContent = 'あかりが灯った';
+    subEl.textContent = '虫籠の光を、夜に返そう';
+    hintEl.style.display = 'none';
+    startBtn.textContent = 'もう一度';
+    overlay.classList.remove('hidden');
+  }
+
+  function registerCatch(f, tr, now){
+    f.state = 'flying';
+    caught++;
+    combo++;
+    maxCombo = Math.max(maxCombo, combo);
+    const inSync = syncR >= SYNC_BONUS_R;
+    if (inSync) syncCatches++;
+    const mult = (0.6 + calm * 1.4) * (inSync ? 2 : 1);
+    const pts = Math.round((100 + combo * 10) * mult);
+    score += pts;
+
+    const label = inSync ? '同調！' : (calm > 0.82 ? 'しずか' : 'そっと');
+    spawnPopup(f.x, f.y - 14, '+' + pts, inSync ? '#ffe08a' : '#b7ff6a', inSync ? 24 : 20);
+    spawnPopup(f.x, f.y + 10, label, inSync ? '#ffe08a' : 'rgba(238,247,240,0.75)', 13);
+    spawnRing(tr.x, tr.y, inSync ? 46 : 82, CATCH_R * 0.5, S * 0.9, 0.75, 2);
+    spawnSparks(f.x, f.y, f.hue, inSync ? 26 : 16, 2.2);
+    calmFlash = Math.max(calmFlash, inSync ? 0.5 : 0.28);
+
+    if (audioReady){
+      const idx = Math.min(YO.length - 1, (combo - 1) % 8 + (inSync ? 4 : 0));
+      kotoPluck(actx.currentTime, BASE * ratio(YO[idx]), 0.24);
+      if (inSync) shimmer(actx.currentTime + 0.04, 1.0);
+    }
+    scoreEl.textContent = String(score);
+    comboEl.textContent = String(combo);
+    catchEl.textContent = String(caught);
+
+    // keep the lantern from filling up with sprites forever
+    let cagedCount = 0;
+    for (const other of flies) if (other.state === 'cage') cagedCount++;
+    if (cagedCount > 26){
+      for (let i = 0; i < flies.length; i++){
+        if (flies[i].state === 'cage'){ flies.splice(i, 1); break; }
+      }
+    }
+  }
+
+  function registerScare(tr, now, n){
+    scared++;
+    combo = 0;
+    comboEl.textContent = '0';
+    tr.lastScare = now;
+    spawnRing(tr.x, tr.y, 186, SCARE_R * 0.25, S * 1.6, 0.5, 2);
+    spawnPopup(tr.x, tr.y - 20, '散った…', '#ff5470', 16);
+    shake = Math.min(7, 3 + n);
+    if (audioReady) shhh(actx.currentTime);
+  }
+
+  function handleGestures(now){
+    if (state !== 'playing') return;
+
+    for (const tr of tracks){
+      // --- scare: a fast hand near the swarm ---
+      if (tr.speed > SCARE_SPEED && now - tr.lastScare > 900){
+        let near = 0;
+        for (const f of flies){
+          if (f.state !== 'free') continue;
+          if (Math.hypot(f.x - tr.x, f.y - tr.y) < SCARE_R) near++;
+        }
+        if (near > 0) registerScare(tr, now, near);
+      }
+
+      // --- close gesture: armed when the hand is open, fires when it shuts ---
+      if (tr.open > 0.5) tr.armed = true;
+      if (tr.armed && tr.open < 0.27){
+        tr.armed = false;
+        if (now - tr.lastGrab < 260) continue;
+        tr.lastGrab = now;
+
+        if (tr.speed > GRAB_SPEED){
+          spawnRing(tr.x, tr.y, 350, CATCH_R * 0.4, S * 1.1, 0.4, 1.6);
+          continue;
+        }
+        spawnRing(tr.x, tr.y, 52, CATCH_R * 0.35, S * 0.7, 0.45, 1.6);
+
+        let best = null, bestD = CATCH_R, dark = null, darkD = CATCH_R;
+        for (const f of flies){
+          if (f.state !== 'free') continue;
+          const d = Math.hypot(f.x - tr.x, f.y - tr.y);
+          if (d >= CATCH_R) continue;
+          // a short grace window after a flash, so a slightly late hand still counts
+          const lit = f.glow >= FLASH_MIN || (now - (f.litAt || 0)) < 200;
+          if (lit && d < bestD){ bestD = d; best = f; }
+          else if (!lit && d < darkD){ darkD = d; dark = f; }
+        }
+        if (best){
+          registerCatch(best, tr, now);
+        } else if (dark){
+          spawnPopup(tr.x, tr.y - 18, 'まだ光ってない', 'rgba(200,220,210,0.7)', 13);
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  COUNTDOWN
+  // ---------------------------------------------------------------------------
+  function drawCountdown(label, q){
+    const scale = 1 + (1 - Math.min(1, q / 0.32)) * 0.5;
+    const alpha = q > 0.72 ? 1 - (q - 0.72) / 0.28 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(W / 2, H * 0.42);
+    ctx.scale(scale, scale);
+    ctx.font = '800 76px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 30; ctx.shadowColor = 'rgba(183,255,106,0.85)';
+    ctx.fillStyle = '#dfffb0';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let lastT = performance.now();
+  let lastAudioUpd = 0;
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const now = performance.now();
+    let dt = (now - lastT) / 1000;
+    lastT = now;
+    if (!(dt > 0)) dt = 1 / 60;
+    dt = Math.min(dt, 0.05);
+
+    const fresh = (now - RESULT.t) < 400;
+    const handsArr = fresh ? RESULT.hands : [];
+    updateTracks(handsArr, now, dt);
+
+    // --- calm: falls fast when you rush, returns slowly ---
+    let maxSpeed = 0, maxOpen = 0;
+    for (const tr of tracks){
+      if (tr.speed > maxSpeed) maxSpeed = tr.speed;
+      if (tr.open > maxOpen) maxOpen = tr.open;
+    }
+    const targetCalm = 1 - clamp(maxSpeed / CALM_REF, 0, 1);
+    const calmK = 1 - Math.exp(-dt * (targetCalm < calm ? 22 : 0.8)); // drops at once, returns over ~1.2s
+    calm += (targetCalm - calm) * calmK;
+    calm = clamp(calm, 0, 1);
+
+    palmPhase += PALM_OMEGA * dt;
+    if (palmPhase > TAU) palmPhase -= TAU;
+    palmGlow = Math.pow(0.5 + 0.5 * Math.sin(palmPhase), 3.0);
+
+    const active = (state === 'playing');
+    updateFireflies(dt, now, active);
+    handleGestures(now);
+
+    // ---- state machine ----
+    if (state === 'countdown'){
+      const el = now - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx >= COUNTDOWN_LABELS.length){
+        state = 'playing';
+        roundStart = now;
+        timeLeft = ROUND_MS;
+      } else if (idx !== lastCountIdx){
+        lastCountIdx = idx;
+        if (audioReady) bellTone(actx.currentTime, idx < 3 ? 587.33 : 880, 0.10, idx < 3 ? 0.35 : 0.9);
+      }
+    }
+    if (state === 'playing'){
+      timeLeft = Math.max(0, ROUND_MS - (now - roundStart));
+      const sec = Math.ceil(timeLeft / 1000);
+      if (sec !== lastTickSecond){
+        lastTickSecond = sec;
+        timeEl.textContent = String(sec);
+        timeEl.classList.toggle('low', sec <= 10);
+        if (sec <= 10 && sec > 0 && audioReady) tickWarn(actx.currentTime);
+      }
+      if (timeLeft <= 0) endGame();
+    }
+
+    // ---- audio follow ----
+    if (audioReady && now - lastAudioUpd > 90){
+      lastAudioUpd = now;
+      const t = actx.currentTime;
+      const target = (state === 'playing' || state === 'countdown')
+        ? 0.0001 + Math.pow(syncR, 1.6) * 0.16 * (0.35 + calm * 0.65)
+        : 0.0001 + Math.pow(syncR, 1.6) * 0.05;
+      chordGain.gain.setTargetAtTime(Math.max(0.0001, target), t, 0.35);
+      chordTrem.gain.setTargetAtTime(0.45 + globalGlow * 0.55, t, 0.08);
+      if (now > nextCricketAt){
+        nextCricketAt = now + 2200 + Math.random() * 3800;
+        cricket(t + Math.random() * 0.2);
+      }
+    }
+    // a bell wash whenever the whole meadow flashes together
+    if (audioReady && syncR > 0.55 && globalGlow > 0.72 && prevGlobalGlow <= 0.72 && now - lastShimmerAt > 500){
+      lastShimmerAt = now;
+      shimmer(actx.currentTime, clamp(syncR, 0, 1));
+      spawnRing(W / 2, H * 0.5, 66, S * 0.15, S * 0.9, 0.16 * syncR, 1.4);
+    }
+
+    // ---- render ----
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+      shake *= 0.86;
+    }
+    drawVideoBase();
+    drawMist(now);
+
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.16)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    drawStars(now);
+    drawPalms();
+    drawFireflies(now);
+    updateDrawRings(dt);
+    updateDrawSparks(dt);
+    if (state !== 'idle') drawLantern(now);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    drawGrass(now);
+    updateDrawPopups(dt);
+
+    if (state === 'countdown'){
+      const el = now - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx < COUNTDOWN_LABELS.length){
+        drawCountdown(COUNTDOWN_LABELS[idx], (el % COUNTDOWN_STEP) / COUNTDOWN_STEP);
+      }
+    }
+    ctx.restore(); // shake
+
+    // ---- HUD ----
+    calmFlash *= 0.9;
+    calmFlashEl.style.background = `rgba(183,255,106,${(calmFlash * 0.16).toFixed(3)})`;
+    calmBar.style.width = Math.round(calm * 100) + '%';
+    syncBar.style.width = Math.round(clamp(syncR, 0, 1) * 100) + '%';
+
+    if (state === 'playing'){
+      if (!tracks.length){
+        stateDot.textContent = '手をカメラに映してください';
+        stateDot.className = 'silent';
+      } else if (calm < 0.45){
+        stateDot.textContent = '⚠ 動きが速い — 蛍が逃げる';
+        stateDot.className = 'warnState';
+      } else if (syncR >= SYNC_BONUS_R){
+        stateDot.textContent = `✦ 同調中 — いま捕まえれば倍点`;
+        stateDot.className = 'syncState';
+      } else if (maxOpen < 0.34){
+        stateDot.textContent = '手を開いて待つと蛍が寄ってくる';
+        stateDot.className = 'silent';
+      } else if (combo >= 5){
+        stateDot.textContent = `🍃 COMBO ${combo}`;
+        stateDot.className = 'calmState';
+      } else {
+        stateDot.textContent = '光った瞬間に、そっと手を閉じる';
+        stateDot.className = 'calmState';
+      }
+    } else if (state === 'countdown'){
+      stateDot.textContent = '手を開いて待つ…';
+      stateDot.className = 'calmState';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+          throw new Error('手検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+        }
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        if (!hands) initHands();
+        await startStream();
+        await startCameraLoop();
+        running = true;
+        booted = true;
+        lastT = performance.now();
+        requestAnimationFrame(frame);
+      } else {
+        if (actx && actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      resultBox.style.display = 'none';
+      eyebrow.style.display = 'block';
+      titleEl.textContent = 'HOTARU';
+      subEl.textContent = '息をひそめて、蛍を手のひらに';
+      hintEl.style.display = 'block';
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+      startGame();
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
