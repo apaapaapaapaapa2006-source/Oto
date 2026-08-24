@@ -558,7 +558,7 @@
       } else {
         tracks.push({
           x: p.x, y: p.y, open: p.openness, speed: 0,
-          armed: false, lastSeen: now, lastScare: 0, lastGrab: 0, lm: p.lm
+          armed: false, lastSeen: now, lastGrab: 0, lm: p.lm
         });
         used.push(true);
       }
@@ -994,7 +994,7 @@
   let score = 0, combo = 0, maxCombo = 0, caught = 0, scared = 0, syncCatches = 0;
   let roundStart = 0, timeLeft = ROUND_MS, countdownStart = 0;
   let lastTickSecond = -1, lastCountIdx = -1;
-  let shake = 0, calmFlash = 0, lastShimmerAt = 0, nextCricketAt = 0;
+  let shake = 0, calmFlash = 0, lastShimmerAt = 0, nextCricketAt = 0, lastScareAt = 0;
 
   function roundProgress(){
     if (state !== 'playing') return 0;
@@ -1005,6 +1005,7 @@
     score = 0; combo = 0; maxCombo = 0; caught = 0; scared = 0; syncCatches = 0;
     timeLeft = ROUND_MS;
     rings.length = 0; sparks.length = 0; popups.length = 0;
+    lastScareAt = 0; lastShimmerAt = 0;
     tracks.length = 0;
     seedFireflies(now);
     scoreEl.textContent = '0';
@@ -1091,7 +1092,7 @@
     scared++;
     combo = 0;
     comboEl.textContent = '0';
-    tr.lastScare = now;
+    lastScareAt = now;
     spawnRing(tr.x, tr.y, 186, SCARE_R * 0.25, S * 1.6, 0.5, 2);
     spawnPopup(tr.x, tr.y - 20, '散った…', '#ff5470', 16);
     shake = Math.min(7, 3 + n);
@@ -1103,7 +1104,7 @@
 
     for (const tr of tracks){
       // --- scare: a fast hand near the swarm ---
-      if (tr.speed > SCARE_SPEED && now - tr.lastScare > 900){
+      if (tr.speed > SCARE_SPEED && now - lastScareAt > 900){
         let near = 0;
         for (const f of flies){
           if (f.state !== 'free') continue;
