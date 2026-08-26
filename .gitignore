@@ -1,0 +1,3 @@
+scripts/debug-artifacts/
+posts/.*.content.json
+__pycache__/
