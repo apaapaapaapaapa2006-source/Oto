@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#06040c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="両手の指先から降りた四本の糸に光の人形が宿る楽器。傀儡の足が舞台を打つたびに琴と太鼓が鳴り、リズムが続くと囃子が重なる - KUGUTSU">
+<title>KUGUTSU ─ 光の傀儡</title>
+<style>
+  :root{
+    --void:#06040c; --haze:#1b1026; --ghost:#f6ecdd;
+    --gold:#ffd27a; --ember:#ff9a4d; --vermilion:#ff5e57; --violet:#8a6cff; --silk:#ffeccf;
+    --warn:#ff5e57;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Mincho ProN','Yu Mincho','Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #grain{ position:fixed; inset:0; z-index:6; pointer-events:none; mix-blend-mode:screen; opacity:.28;
+    background:repeating-linear-gradient(115deg, rgba(255,210,122,0.05) 0px, rgba(255,210,122,0.05) 1px, transparent 2px, transparent 5px); }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 42%, var(--haze) 0%, var(--void) 76%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(46px); opacity:.36; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--gold),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--violet),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:28%; bottom:6%; background:radial-gradient(circle,var(--vermilion),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.14); } }
+
+  #eyebrow{ color:rgba(246,236,221,0.42); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.16em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--gold),var(--ember),var(--vermilion),var(--violet),var(--gold));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(246,236,221,0.55); font-size:0.82rem; letter-spacing:0.14em; margin-bottom:1.8rem; position:relative; }
+  #startBtn{
+    position:relative;
+    padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.24em; font-family:inherit; font-weight:700;
+    color:#1a1006; background:linear-gradient(90deg,var(--gold),var(--ember)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(255,180,90,0.45);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 3.4s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(255,180,90,0.4); }
+    50%{ box-shadow:0 0 46px rgba(255,210,122,0.7); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{
+    position:relative; margin-top:2.2rem; max-width:23.5rem; color:rgba(246,236,221,0.52);
+    font-size:0.76rem; line-height:1.95; letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--gold); font-weight:700; }
+  #hint i{ color:var(--violet); font-style:normal; font-weight:700; }
+  #hint em{ color:var(--vermilion); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn);
+    font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(12,7,20,0.44); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(255,210,122,0.18); border-radius:14px; padding:0.65rem 0.9rem;
+    color:var(--ghost); min-width:116px;
+  }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(246,236,221,0.5); margin-bottom:0.3rem; }
+  .panel .val{ font-size:1.6rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--gold); }
+  .panel .val small{ font-size:0.66rem; font-weight:600; color:rgba(246,236,221,0.5); margin-left:.15rem; }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .val{ color:var(--violet); }
+  .meter{ height:3px; border-radius:2px; background:rgba(246,236,221,0.12); margin-top:0.45rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%; border-radius:2px;
+    background:linear-gradient(90deg,var(--ember),var(--gold)); transition:width .1s linear; }
+  .panel[data-side="r"] .meter b{ background:linear-gradient(90deg,var(--violet),var(--silk)); }
+  .sub2{ font-size:0.6rem; letter-spacing:0.1em; margin-top:0.4rem; color:rgba(246,236,221,0.55); min-height:0.85em; }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.5rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.66rem; letter-spacing:0.18em; color:rgba(246,236,221,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(255,210,122,0.18);
+    background:rgba(12,7,20,0.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .25s ease, border-color .25s ease, box-shadow .25s ease; white-space:nowrap;
+  }
+  #stateDot.live{ color:var(--gold); border-color:rgba(255,210,122,0.5); box-shadow:0 0 18px rgba(255,210,122,0.25); }
+  #stateDot.mai{ color:var(--vermilion); border-color:rgba(255,94,87,0.55); box-shadow:0 0 22px rgba(255,94,87,0.3); }
+  #stateDot.silent{ color:rgba(180,170,190,0.75); border-color:rgba(150,140,170,0.3); box-shadow:none; }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(12,7,20,0.5); border:1px solid rgba(255,210,122,0.2);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(255,210,122,0.16); border-color:rgba(255,210,122,0.5); color:var(--gold); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(246,236,221,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.24em; color:rgba(246,236,221,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="grain"></div>
+
+  <div id="brand"><div class="b1">KUGUTSU</div><div class="b2">光の傀儡 / 糸であやつる</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="lampBtn">灯 ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">ITO / 糸の張り</div>
+      <div class="val"><span id="tensionVal">0</span><small>%</small></div>
+      <div class="meter"><b id="tensionMeter"></b></div>
+      <div class="sub2" id="tensionSub"></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">CHOUSHI / 調子</div>
+      <div class="val"><span id="grooveVal">0</span><small>%</small></div>
+      <div class="meter"><b id="grooveMeter"></b></div>
+      <div class="sub2" id="grooveSub"></div>
+    </div>
+  </div>
+
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA INSTRUMENT</div>
+    <div id="title">KUGUTSU</div>
+    <div id="sub">光の傀儡 — 糸であやつる人形の楽器</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・カメラに<b>両手</b>をかざすと、その二点を結ぶ線が<b>手板（ていた）</b>になり、光の<b>傀儡（くぐつ）</b>が糸で吊り下がります<br>
+      ・<b>手のひら</b>から頭と両肩の糸、<b>人差し指の先</b>から腕の糸が降りています<br>
+      ・両手を<b>下げる</b>と傀儡は<b>舞台に降り</b>、足が床を打つたびに<b>琴と太鼓</b>が鳴ります<br>
+      ・<i>左右の手を交互に上下</i>させると手板が傾いて体が揺れ、足が<i>交互に</i>舞台を打ちます — これが歩みです<br>
+      ・音の高さは<b>足が着いた位置</b>で決まります。舞台の左が低く、右が高い<br>
+      ・<i>指をつまむ</i>と糸を<i>巻き取り</i>、傀儡がふわりと跳ねます<br>
+      ・糸が張るほど<b>絹の弦</b>がうなり、大きく揺らせば<b>鈴</b>がこぼれます<br>
+      ・足音が一定の間で続くと<em>調子</em>が満ち、囃子が重なって<em>舞</em>になります<br>
+      ・<b>手を離す</b>と糸は解け、傀儡は舞台に伏せます
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas    = document.getElementById('stage');
+  const ctx       = canvas.getContext('2d');
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const startBtn  = document.getElementById('startBtn');
+  const errorMsg  = document.getElementById('errorMsg');
+  const hud       = document.getElementById('hud');
+  const topbar    = document.getElementById('topbar');
+  const brand     = document.getElementById('brand');
+  const centerHud = document.getElementById('centerHud');
+  const stateDot  = document.getElementById('stateDot');
+  const flipBtn   = document.getElementById('flipBtn');
+  const lampBtn   = document.getElementById('lampBtn');
+  const tensionVal   = document.getElementById('tensionVal');
+  const tensionMeter = document.getElementById('tensionMeter');
+  const tensionSub   = document.getElementById('tensionSub');
+  const grooveVal    = document.getElementById('grooveVal');
+  const grooveMeter  = document.getElementById('grooveMeter');
+  const grooveSub    = document.getElementById('grooveSub');
+
+  // additive glow layer (trails) — composited over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  let ptsReady = false;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (ptsReady) rebuildPuppet();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  //  The player never touches the sound directly — the puppet does.
+  //  foot strike  -> taiko + koto (pitch from where on the stage it landed)
+  //  string load  -> bowed silk drone (gain/brightness from tension)
+  //  limb swing   -> suzu bells
+  //  groove       -> a shou-like hayashi pad swells underneath
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null;
+  let convolver = null, revGain = null;
+  let sfxBus = null, padBus = null;
+  let delay = null, fbGain = null, wetGain = null;
+  let bowA = null, bowB = null, bowSub = null, bowFilter = null, bowGain = null;
+  let padFilter = null, padGain = null;
+  const padOscs = [];
+  let noiseBuf = null;
+  let audioReady = false;
+
+  const BASE = 146.83;              // D3
+  const YO   = [0, 2, 5, 7, 9];     // 陽音階 (yo scale)
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  function scaleSemi(step){
+    const oct = Math.floor(step / 5);
+    const idx = ((step % 5) + 5) % 5;
+    return YO[idx] + 12 * oct;
+  }
+  function scaleFreq(step){ return BASE * Math.pow(2, scaleSemi(step) / 12); }
+  function scaleName(step){
+    const midi = 50 + scaleSemi(step); // D3 = MIDI 50
+    return NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+  }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -17; comp.knee.value = 20; comp.ratio.value = 3.2;
+    comp.attack.value = 0.004;  comp.release.value = 0.24;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(3.0, 2.5);
+    revGain = actx.createGain(); revGain.gain.value = 0.34;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    padBus = actx.createGain(); padBus.gain.value = 0.55;
+
+    delay = actx.createDelay(1.2); delay.delayTime.value = 0.42;
+    fbGain = actx.createGain(); fbGain.gain.value = 0.3;
+    wetGain = actx.createGain(); wetGain.gain.value = 0.22;
+    sfxBus.connect(delay); delay.connect(fbGain); fbGain.connect(delay);
+    delay.connect(wetGain); wetGain.connect(master);
+
+    sfxBus.connect(master); sfxBus.connect(convolver);
+    padBus.connect(master); padBus.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf = makeNoiseBuffer(1.0);
+
+    // --- bowed silk strings: the four threads themselves, singing under load ---
+    bowFilter = actx.createBiquadFilter();
+    bowFilter.type = 'lowpass'; bowFilter.frequency.value = 420; bowFilter.Q.value = 5;
+    bowGain = actx.createGain(); bowGain.gain.value = 0.0;
+
+    bowA = actx.createOscillator(); bowA.type = 'sawtooth'; bowA.frequency.value = BASE;
+    bowB = actx.createOscillator(); bowB.type = 'sawtooth'; bowB.frequency.value = BASE; bowB.detune.value = 11;
+    bowSub = actx.createOscillator(); bowSub.type = 'sine'; bowSub.frequency.value = BASE / 2;
+    const bgA = actx.createGain(); bgA.gain.value = 0.42;
+    const bgB = actx.createGain(); bgB.gain.value = 0.30;
+    const bgS = actx.createGain(); bgS.gain.value = 0.34;
+    bowA.connect(bgA); bowB.connect(bgB); bowSub.connect(bgS);
+    bgA.connect(bowFilter); bgB.connect(bowFilter); bgS.connect(bowFilter);
+    bowFilter.connect(bowGain); bowGain.connect(padBus);
+
+    // --- hayashi pad: swells in as 調子 (groove) builds ---
+    padFilter = actx.createBiquadFilter();
+    padFilter.type = 'lowpass'; padFilter.frequency.value = 900; padFilter.Q.value = 0.9;
+    padGain = actx.createGain(); padGain.gain.value = 0.0;
+    const padSpec = [[BASE / 2, 0.4, 'triangle'], [BASE * 0.75, 0.26, 'triangle'], [BASE, 0.2, 'sine'], [BASE * 1.5, 0.14, 'sine']];
+    for (let i = 0; i < padSpec.length; i++){
+      const o = actx.createOscillator();
+      o.type = padSpec[i][2];
+      o.frequency.value = padSpec[i][0];
+      o.detune.value = (i - 1.5) * 5;
+      const g = actx.createGain(); g.gain.value = padSpec[i][1];
+      o.connect(g); g.connect(padFilter);
+      padOscs.push(o);
+    }
+    padFilter.connect(padGain); padGain.connect(padBus);
+
+    bowA.start(); bowB.start(); bowSub.start();
+    for (const o of padOscs) o.start();
+
+    audioReady = true;
+  }
+
+  function taiko(t, amp){
+    if (!audioReady) return;
+    const a = clamp(amp, 0.05, 1);
+    const o = actx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(126, t);
+    o.frequency.exponentialRampToValueAtTime(46, t + 0.13);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0004, a * 0.85), t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.44);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.48);
+
+    const s = actx.createBufferSource(); s.buffer = noiseBuf;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2400, t);
+    lp.frequency.exponentialRampToValueAtTime(320, t + 0.1);
+    const g2 = actx.createGain();
+    g2.gain.setValueAtTime(Math.max(0.0004, a * 0.3), t);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    s.connect(lp); lp.connect(g2); g2.connect(sfxBus);
+    s.start(t); s.stop(t + 0.18);
+  }
+
+  function koto(t, freq, amp){
+    if (!audioReady) return;
+    const a = clamp(amp, 0.05, 1);
+    const parts = [[1, 1.0, 1.7], [2.01, 0.36, 0.95], [3.02, 0.16, 0.55], [4.96, 0.07, 0.32]];
+    for (const p of parts){
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = freq * p[0];
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, a * 0.3 * p[1]), t + 0.009);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + p[2]);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + p[2] + 0.06);
+    }
+    const s = actx.createBufferSource(); s.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.value = clamp(freq * 3.4, 80, 12000); bp.Q.value = 1.3;
+    const g2 = actx.createGain();
+    g2.gain.setValueAtTime(Math.max(0.0004, a * 0.34), t);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    s.connect(bp); bp.connect(g2); g2.connect(sfxBus);
+    s.start(t); s.stop(t + 0.13);
+  }
+
+  function suzu(t, freq, amp){
+    if (!audioReady) return;
+    const a = clamp(amp, 0.05, 1);
+    const parts = [[1, 1.0], [2.74, 0.45], [5.31, 0.2]];
+    for (const p of parts){
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.value = clamp(freq * p[0], 40, 16000);
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0003, a * 0.16 * p[1]), t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55 + p[1] * 0.5);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + 1.2);
+    }
+  }
+
+  // 拍子木 — the puppet's own hands slapping the boards
+  function hyoshigi(t, amp){
+    if (!audioReady) return;
+    const a = clamp(amp, 0.05, 1);
+    const s = actx.createBufferSource(); s.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.value = 1900; bp.Q.value = 2.2;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(Math.max(0.0004, a * 0.4), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    s.connect(bp); bp.connect(g); g.connect(sfxBus);
+    s.start(t); s.stop(t + 0.1);
+  }
+
+  function wakeChime(t){
+    if (!audioReady) return;
+    const steps = [0, 2, 4, 6];
+    for (let i = 0; i < steps.length; i++){
+      const st = t + i * 0.1;
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = scaleFreq(steps[i] + 5);
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.13, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.75);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.8);
+    }
+  }
+
+  function releaseSound(t){
+    if (!audioReady) return;
+    taiko(t, 0.5);
+    const o = actx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(190, t);
+    o.frequency.exponentialRampToValueAtTime(58, t + 0.7);
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.14, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    o.connect(lp); lp.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.85);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  PUPPET — verlet ragdoll on max-length strings
+  // ---------------------------------------------------------------------------
+  const HEAD = 0, CHEST = 1, HIP = 2,
+        LSH = 3, LEL = 4, LHA = 5,
+        RSH = 6, REL = 7, RHA = 8,
+        LHP = 9, LKN = 10, LFT = 11,
+        RHP = 12, RKN = 13, RFT = 14;
+  const NPTS = 15;
+
+  // [a, b, restFactor(unit U), stiffness]
+  const BONES = [
+    [HEAD, CHEST, 0.95, 1.0],
+    [CHEST, HIP,  1.50, 1.0],
+    [CHEST, LSH,  0.78, 1.0], [CHEST, RSH, 0.78, 1.0],
+    [LSH,  RSH,   1.50, 1.0],
+    [LSH,  LEL,   1.00, 1.0], [LEL, LHA, 0.95, 1.0],
+    [RSH,  REL,   1.00, 1.0], [REL, RHA, 0.95, 1.0],
+    [HIP,  LHP,   0.50, 1.0], [HIP, RHP, 0.50, 1.0], [LHP, RHP, 0.98, 1.0],
+    [LHP,  LKN,   1.15, 1.0], [LKN, LFT, 1.10, 1.0],
+    [RHP,  RKN,   1.15, 1.0], [RKN, RFT, 1.10, 1.0],
+    // torso braces — keep the body from folding in on itself
+    [HEAD, LSH,   1.23, 0.55], [HEAD, RSH, 1.23, 0.55],
+    [LSH,  LHP,   1.53, 0.7],  [RSH,  RHP, 1.53, 0.7],
+    [LSH,  RHP,   1.97, 0.5],  [RSH,  LHP, 1.97, 0.5],
+    // knee springs — a soft push back toward a straight leg (max reach is 2.25U).
+    // Without these the legs just fold silently under the body; with them the
+    // puppet stands, takes its own weight, and bounces when you work the bar.
+    [LHP,  LFT,   2.12, 0.3],  [RHP,  RFT, 2.12, 0.3]
+  ];
+  const VISIBLE_BONES = [
+    [HEAD, CHEST, 'spine'], [CHEST, HIP, 'spine'],
+    [CHEST, LSH, 'spine'],  [CHEST, RSH, 'spine'],
+    [LSH, LEL, 'arm'], [LEL, LHA, 'arm'],
+    [RSH, REL, 'arm'], [REL, RHA, 'arm'],
+    [HIP, LHP, 'spine'], [HIP, RHP, 'spine'],
+    [LHP, LKN, 'leg'], [LKN, LFT, 'leg'],
+    [RHP, RKN, 'leg'], [RKN, RFT, 'leg']
+  ];
+  const LIMB_HUE = { spine: 40, arm: 262, leg: 18 };
+
+  const pts = [];
+  for (let i = 0; i < NPTS; i++){
+    pts.push({ x: 0, y: 0, px: 0, py: 0, vy0: 0, grounded: false });
+  }
+  const rest = new Array(BONES.length).fill(0);
+
+  let U = 40, floorY = 0, GRAV = 0, VMAX = 0;
+  let HEAD_MAX = 0, ARM_MAX = 0;
+
+  function rebuildPuppet(){
+    // The stage is vertical, so the puppet is sized off the height (width only
+    // guards very narrow windows). Puppet height (4.7U) + string length is what
+    // decides where your hands have to be for the feet to just reach the boards:
+    // 0.86 - 0.24 - 0.16 => hands rest around 0.46H, i.e. comfortable chest height.
+    U = Math.max(14, Math.min(H * 0.051, W * 0.11));
+    floorY = H * 0.86;
+    GRAV = (H * 1.7) * SUB_DT * SUB_DT;
+    VMAX = H * 0.05;
+    HEAD_MAX = H * 0.16;
+    ARM_MAX  = H * 0.24;
+    for (let i = 0; i < BONES.length; i++) rest[i] = BONES[i][2] * U;
+    resetPuppet();
+    ptsReady = true;
+  }
+
+  function place(i, x, y){ pts[i].x = x; pts[i].y = y; pts[i].px = x; pts[i].py = y; pts[i].grounded = false; pts[i].vy0 = 0; }
+
+  function resetPuppet(){
+    const cx = W * 0.5;
+    const chestY = floorY - 3.75 * U;
+    place(CHEST, cx, chestY);
+    place(HEAD,  cx, chestY - 0.95 * U);
+    place(LSH,   cx - 0.78 * U, chestY);
+    place(RSH,   cx + 0.78 * U, chestY);
+    place(LEL,   cx - 0.88 * U, chestY + 1.0 * U);
+    place(LHA,   cx - 0.94 * U, chestY + 1.95 * U);
+    place(REL,   cx + 0.88 * U, chestY + 1.0 * U);
+    place(RHA,   cx + 0.94 * U, chestY + 1.95 * U);
+    place(HIP,   cx, chestY + 1.5 * U);
+    place(LHP,   cx - 0.5 * U, chestY + 1.5 * U);
+    place(RHP,   cx + 0.5 * U, chestY + 1.5 * U);
+    place(LKN,   cx - 0.5 * U, chestY + 2.65 * U);
+    place(RKN,   cx + 0.5 * U, chestY + 2.65 * U);
+    place(LFT,   cx - 0.5 * U, chestY + 3.75 * U);
+    place(RFT,   cx + 0.5 * U, chestY + 3.75 * U);
+  }
+
+  // --- string anchors driven by the hands -------------------------------------
+  function makeAnchor(){ return { x: 0, y: 0, tx: 0, ty: 0, pinch: 0, active: false }; }
+  const anchorL = makeAnchor(), anchorR = makeAnchor();
+
+  const SUB_DT = 1 / 120;
+  const ITER = 8;
+  let tensionAccum = 0, tension = 0;
+
+  function solveBone(bi){
+    const b = BONES[bi];
+    const a = pts[b[0]], c = pts[b[1]];
+    const dx = c.x - a.x, dy = c.y - a.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 1e-6) return;
+    const k = ((d - rest[bi]) / d) * 0.5 * b[3];
+    const ox = dx * k, oy = dy * k;
+    a.x += ox; a.y += oy;
+    c.x -= ox; c.y -= oy;
+  }
+
+  function solveString(st, measure){
+    const p = pts[st.i];
+    const dx = p.x - st.ax, dy = p.y - st.ay;
+    const d = Math.hypot(dx, dy);
+    if (d <= st.max || d < 1e-6) return;
+    const excess = d - st.max;
+    if (measure) tensionAccum += excess;
+    const k = (excess / d) * st.k;
+    p.x -= dx * k; p.y -= dy * k;
+  }
+
+  // Your two hands ARE the control bar (手板): its centre carries the head, and
+  // a shoulder-width copy of it, tilted exactly as your hands are tilted, carries
+  // the shoulders. Deriving both shoulder anchors from one bar keeps the string
+  // set always satisfiable — anchoring both hands straight to the head instead
+  // becomes contradictory the moment your hands are farther apart than the
+  // strings are long, and the solver tears the puppet apart.
+  function controlBar(){
+    const a = anchorL.active, b = anchorR.active;
+    if (!a && !b) return null;
+    if (a && b){
+      const cx = (anchorL.x + anchorR.x) / 2, cy = (anchorL.y + anchorR.y) / 2;
+      const dx = anchorR.x - anchorL.x, dy = anchorR.y - anchorL.y;
+      let ang = (Math.hypot(dx, dy) < 1e-3) ? 0 : Math.atan2(dy, dx);
+      if (ang >  Math.PI / 2) ang -= Math.PI;      // hands crossed over: unfold
+      if (ang < -Math.PI / 2) ang += Math.PI;
+      ang = clamp(ang, -1.05, 1.05);               // cap the tilt at ~60°
+      return { cx, cy, ux: Math.cos(ang), uy: Math.sin(ang), both: true,
+               pinch: (anchorL.pinch + anchorR.pinch) / 2 };
+    }
+    const s = a ? anchorL : anchorR;
+    return { cx: s.x, cy: s.y, ux: 1, uy: 0, both: false, pinch: s.pinch };
+  }
+
+  function activeStrings(){
+    const out = [];
+    if (!strung) return out;
+    const bar = controlBar();
+    if (!bar) return out;
+    const reel = 1 - 0.4 * bar.pinch;             // pinching winds the silk in
+    out.push({ ax: bar.cx, ay: bar.cy, i: HEAD, max: HEAD_MAX * reel, k: 0.9 });
+    if (bar.both){
+      const hx = bar.ux * 0.75 * U, hy = bar.uy * 0.75 * U;
+      out.push({ ax: bar.cx - hx, ay: bar.cy - hy, i: LSH, max: HEAD_MAX * 1.14 * reel, k: 0.5 });
+      out.push({ ax: bar.cx + hx, ay: bar.cy + hy, i: RSH, max: HEAD_MAX * 1.14 * reel, k: 0.5 });
+    }
+    if (anchorL.active)
+      out.push({ ax: anchorL.tx, ay: anchorL.ty, i: LHA, max: ARM_MAX * (1 - 0.3 * anchorL.pinch), k: 0.5 });
+    if (anchorR.active)
+      out.push({ ax: anchorR.tx, ay: anchorR.ty, i: RHA, max: ARM_MAX * (1 - 0.3 * anchorR.pinch), k: 0.5 });
+    return out;
+  }
+
+  function stepPhysics(strings){
+    // integrate
+    for (let i = 0; i < NPTS; i++){
+      const p = pts[i];
+      let vx = (p.x - p.px) * 0.997;
+      let vy = (p.y - p.py) * 0.997 + GRAV;
+      if (vx > VMAX) vx = VMAX; else if (vx < -VMAX) vx = -VMAX;
+      if (vy > VMAX) vy = VMAX; else if (vy < -VMAX) vy = -VMAX;
+      p.px = p.x; p.py = p.y;
+      p.x += vx; p.y += vy;
+      p.vy0 = vy;
+    }
+    // solve
+    for (let it = 0; it < ITER; it++){
+      for (let b = 0; b < BONES.length; b++) solveBone(b);
+      for (let s = 0; s < strings.length; s++) solveString(strings[s], it === 0);
+      for (let i = 0; i < NPTS; i++){
+        const p = pts[i];
+        if (p.y > floorY) p.y = floorY;
+        if (p.x < -W * 0.5) p.x = -W * 0.5;
+        else if (p.x > W * 1.5) p.x = W * 1.5;
+        if (p.y < -H * 0.5) p.y = -H * 0.5;
+      }
+    }
+    // ground response: horizontal friction + a small bounce on the boards
+    for (let i = 0; i < NPTS; i++){
+      const p = pts[i];
+      if (p.y >= floorY - 0.5){
+        p.px = p.x - (p.x - p.px) * 0.68;
+        const vy = p.y - p.py;
+        if (vy > 0) p.py = p.y + vy * 0.22; // reflect only the downward component
+      }
+    }
+    // backstop: if the solver is ever driven unstable, re-hang a fresh puppet
+    // rather than leaving a torn one on stage
+    const spine = Math.hypot(pts[CHEST].x - pts[HIP].x, pts[CHEST].y - pts[HIP].y);
+    if (!isFinite(pts[HEAD].x) || !isFinite(pts[HEAD].y) || spine > rest[1] * 2.5){
+      resetPuppet();
+      return;
+    }
+    detectContacts();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CONTACT DETECTION -> the puppet plays the instrument
+  // ---------------------------------------------------------------------------
+  const STAGE_L = 0.12, STAGE_R = 0.88;
+  let footfalls = 0, groove = 0, lastStepT = 0, lastNoteName = '';
+  const bellCool = { 5: 0, 8: 0, 0: 0 }; // LHA, RHA, HEAD
+  const dust = [], rings = [], popups = [];
+
+  function stageStep(x){
+    const xn = clamp((x / W - STAGE_L) / (STAGE_R - STAGE_L), 0, 1);
+    return Math.round(xn * 9);
+  }
+
+  function onContact(idx, x, y, impact){
+    const now = performance.now();
+    const amp = clamp(impact / (H * 0.012), 0.12, 1);
+    const isFoot = (idx === LFT || idx === RFT);
+    if (isFoot){
+      const step = stageStep(x);
+      const f = scaleFreq(step);
+      lastNoteName = scaleName(step);
+      if (audioReady){
+        const t = actx.currentTime;
+        taiko(t, amp * 0.9);
+        koto(t + 0.008, f, amp);
+      }
+      footfalls++;
+      const dtms = now - lastStepT;
+      if (lastStepT > 0 && dtms > 150){
+        if (dtms < 1600) groove = Math.min(1, groove + 0.16);
+        else groove = Math.max(0, groove - 0.16);
+      }
+      if (lastStepT === 0 || dtms > 150) lastStepT = now;
+      rings.push({ x, y, r: U * 0.4, a: 0.85 * amp + 0.15, hue: 40, w: 2.4 });
+      popups.push({ x, y: y - U * 0.5, text: lastNoteName, life: 1, vy: -0.55, color: 'rgba(255,210,122,' });
+      for (let i = 0; i < 10 + Math.round(amp * 14); i++) spawnDust(x, y, amp);
+    } else {
+      if (audioReady) hyoshigi(actx.currentTime, amp * 0.8);
+      rings.push({ x, y, r: U * 0.25, a: 0.5 * amp + 0.1, hue: 262, w: 1.6 });
+      for (let i = 0; i < 6; i++) spawnDust(x, y, amp * 0.6);
+    }
+  }
+
+  function detectContacts(){
+    const watch = [LFT, RFT, LHA, RHA];
+    for (let k = 0; k < watch.length; k++){
+      const idx = watch[k];
+      const p = pts[idx];
+      if (p.y >= floorY - 1.2){
+        if (!p.grounded){
+          p.grounded = true;
+          if (p.vy0 > H * 0.0016) onContact(idx, p.x, floorY, p.vy0);
+        }
+      } else if (p.y < floorY - U * 0.18){
+        p.grounded = false;
+      }
+    }
+  }
+
+  function detectSwings(t){
+    const watch = [LHA, RHA, HEAD];
+    for (let k = 0; k < watch.length; k++){
+      const idx = watch[k];
+      const p = pts[idx];
+      const sp = Math.hypot(p.x - p.px, p.y - p.py);
+      if (sp > H * 0.0055 && t - (bellCool[idx] || 0) > 220){
+        bellCool[idx] = t;
+        const step = 8 + Math.floor(Math.random() * 6);
+        if (audioReady) suzu(actx.currentTime, scaleFreq(step), clamp(sp / (H * 0.02), 0.15, 1));
+        rings.push({ x: p.x, y: p.y, r: U * 0.18, a: 0.4, hue: 48, w: 1.2 });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  PARTICLES
+  // ---------------------------------------------------------------------------
+  const MAX_DUST = 220;
+  function spawnDust(x, y, boost){
+    if (dust.length >= MAX_DUST) return;
+    const a = -Math.PI * 0.5 + (Math.random() - 0.5) * 2.4;
+    const s = (0.4 + Math.random() * 2.2) * (0.5 + boost);
+    dust.push({
+      x: x + (Math.random() - 0.5) * U * 0.7, y,
+      vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.8,
+      life: 1, decay: 0.014 + Math.random() * 0.022,
+      r: 0.8 + Math.random() * 2.2, hue: 34 + Math.random() * 22
+    });
+  }
+  function updateDrawDust(){
+    for (let i = dust.length - 1; i >= 0; i--){
+      const p = dust[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.vx *= 0.985; p.life -= p.decay;
+      if (p.life <= 0 || p.y > floorY + U * 0.4){ dust.splice(i, 1); continue; }
+      fctx.fillStyle = 'hsla(' + p.hue + ',100%,' + (62 + p.life * 22) + '%,' + (p.life * 0.75) + ')';
+      fctx.beginPath(); fctx.arc(p.x, p.y, p.r * p.life + 0.4, 0, Math.PI * 2); fctx.fill();
+    }
+  }
+  function updateDrawRings(){
+    for (let i = rings.length - 1; i >= 0; i--){
+      const r = rings[i];
+      r.r += Math.max(1.6, U * 0.16); r.a *= 0.9;
+      if (r.a < 0.02){ rings.splice(i, 1); continue; }
+      fctx.strokeStyle = 'hsla(' + r.hue + ',100%,72%,' + r.a + ')';
+      fctx.lineWidth = r.w;
+      fctx.beginPath();
+      fctx.ellipse(r.x, r.y, r.r, r.r * 0.34, 0, 0, Math.PI * 2);
+      fctx.stroke();
+    }
+  }
+
+  const motes = [];
+  function seedMotes(){
+    motes.length = 0;
+    for (let i = 0; i < 34; i++){
+      motes.push({ x: Math.random(), y: Math.random(), s: 0.00006 + Math.random() * 0.00016,
+        r: 0.6 + Math.random() * 1.8, ph: Math.random() * Math.PI * 2 });
+    }
+  }
+  seedMotes();
+  function updateDrawMotes(t){
+    for (const m of motes){
+      m.y -= m.s * (1 + groove * 1.6);
+      if (m.y < -0.05){ m.y = 1.05; m.x = Math.random(); }
+      const x = m.x * W + Math.sin(t * 0.0006 + m.ph) * U * 0.5;
+      const y = m.y * H;
+      const tw = 0.35 + 0.4 * Math.sin(t * 0.003 + m.ph);
+      fctx.fillStyle = 'hsla(42,100%,76%,' + (0.16 + tw * 0.24 + groove * 0.16) + ')';
+      fctx.beginPath(); fctx.arc(x, y, m.r, 0, Math.PI * 2); fctx.fill();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND TRACKING
+  // ---------------------------------------------------------------------------
+  const RESULT = { hands: [], t: 0 };
+
+  let hands = null;
+  function initHands(){
+    hands = new Hands({ locateFile: (f) => 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' + f });
+    hands.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
+    hands.onResults(onHandResults);
+  }
+
+  function onHandResults(results){
+    const out = [];
+    const lms = (results && results.multiHandLandmarks) ? results.multiHandLandmarks : [];
+    for (let i = 0; i < lms.length; i++){
+      const lm = lms[i];
+      if (!lm || lm.length < 21) continue;
+      const palmLen = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y) || 1e-4;
+      const pinchRaw = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) / palmLen;
+      const pinch = clamp((0.95 - pinchRaw) / 0.6, 0, 1);
+      out.push({ lm, pinch });
+    }
+    RESULT.hands = out;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function startCameraLoop(){
+    if (mpCamera){ if (mpCamera.stop) mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running && hands) await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    anchorL.active = false; anchorR.active = false;
+    try { await startStream(); } catch(e){ /* keep previous stream */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let lampOn = true;
+  lampBtn.addEventListener('click', () => {
+    lampOn = !lampOn;
+    lampBtn.textContent = lampOn ? '灯 ON' : '灯 OFF';
+    lampBtn.classList.toggle('active', lampOn);
+  });
+
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  // ---------------------------------------------------------------------------
+  //  ANCHORS
+  // ---------------------------------------------------------------------------
+  function setAnchor(a, src){
+    if (!src){ a.active = false; return; }
+    if (!a.active){ a.x = src.x; a.y = src.y; a.tx = src.tx; a.ty = src.ty; a.pinch = src.pinch; }
+    else {
+      a.x += (src.x - a.x) * 0.4;   a.y += (src.y - a.y) * 0.4;
+      a.tx += (src.tx - a.tx) * 0.4; a.ty += (src.ty - a.ty) * 0.4;
+      a.pinch += (src.pinch - a.pinch) * 0.25;
+    }
+    a.active = true;
+  }
+
+  function updateAnchors(handsArr){
+    const arr = [];
+    for (let i = 0; i < handsArr.length; i++){
+      const h = handsArr[i];
+      arr.push({ x: px(h.lm[9]), y: py(h.lm[9]), tx: px(h.lm[8]), ty: py(h.lm[8]), pinch: h.pinch });
+    }
+    arr.sort((a, b) => a.x - b.x);
+    let l = null, r = null;
+    if (arr.length >= 2){ l = arr[0]; r = arr[arr.length - 1]; }
+    else if (arr.length === 1){
+      if (arr[0].x < W * 0.5) l = arr[0]; else r = arr[0];
+    }
+    setAnchor(anchorL, l);
+    setAnchor(anchorR, r);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(6,4,12,0.56)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(58,36,74,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W / 2, H * 0.5, Math.min(W, H) * 0.16, W / 2, H * 0.52, Math.max(W, H) * 0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(4,2,8,0.88)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawStage(t){
+    // footlight pool
+    if (lampOn){
+      const g = ctx.createRadialGradient(W / 2, floorY, U * 0.4, W / 2, floorY, Math.max(W, H) * 0.55);
+      const pulse = 0.1 + groove * 0.14 + Math.sin(t * 0.0011) * 0.02;
+      g.addColorStop(0, 'rgba(255,190,110,' + (0.16 + pulse) + ')');
+      g.addColorStop(0.45, 'rgba(180,110,190,' + (0.05 + pulse * 0.3) + ')');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = g;
+      ctx.fillRect(0, floorY - Math.max(W, H) * 0.55, W, Math.max(W, H) * 1.1);
+      ctx.restore();
+    }
+  }
+
+  function drawApron(){
+    const gg = ctx.createLinearGradient(0, floorY, 0, H);
+    gg.addColorStop(0, 'rgba(6,4,12,0.3)');
+    gg.addColorStop(1, 'rgba(6,4,12,0.98)');
+    ctx.fillStyle = gg;
+    ctx.fillRect(0, floorY, W, H - floorY);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const lg = ctx.createLinearGradient(0, 0, W, 0);
+    lg.addColorStop(0, 'rgba(255,210,122,0)');
+    lg.addColorStop(0.5, 'rgba(255,210,122,' + (0.32 + groove * 0.3) + ')');
+    lg.addColorStop(1, 'rgba(255,210,122,0)');
+    ctx.strokeStyle = lg; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(0, floorY); ctx.lineTo(W, floorY); ctx.stroke();
+    ctx.restore();
+  }
+
+  function torsoFrame(){
+    const c = pts[CHEST], h = pts[HIP];
+    let ux = c.x - h.x, uy = c.y - h.y;
+    const d = Math.hypot(ux, uy);
+    if (d < 1e-4){ ux = 0; uy = -1; } else { ux /= d; uy /= d; }
+    // right-hand perpendicular
+    return { ux, uy, rx: -uy, ry: ux };
+  }
+
+  function drawRobe(c){
+    const f = torsoFrame();
+    const skirt = 1.35 * U, flare = 0.42 * U;
+    const lsh = pts[LSH], rsh = pts[RSH], lhp = pts[LHP], rhp = pts[RHP];
+    const lHem = { x: lhp.x - f.ux * skirt - f.rx * flare, y: lhp.y - f.uy * skirt - f.ry * flare };
+    const rHem = { x: rhp.x - f.ux * skirt + f.rx * flare, y: rhp.y - f.uy * skirt + f.ry * flare };
+    const midHem = { x: (lHem.x + rHem.x) / 2 - f.ux * U * 0.18, y: (lHem.y + rHem.y) / 2 - f.uy * U * 0.18 };
+
+    c.save();
+    c.beginPath();
+    c.moveTo(lsh.x, lsh.y);
+    c.lineTo(rsh.x, rsh.y);
+    c.lineTo(rhp.x, rhp.y);
+    c.lineTo(rHem.x, rHem.y);
+    c.quadraticCurveTo(midHem.x, midHem.y, lHem.x, lHem.y);
+    c.lineTo(lhp.x, lhp.y);
+    c.closePath();
+    const g = c.createLinearGradient(pts[CHEST].x, pts[CHEST].y, midHem.x, midHem.y);
+    g.addColorStop(0, 'rgba(52,28,84,0.78)');
+    g.addColorStop(0.55, 'rgba(96,40,74,0.7)');
+    g.addColorStop(1, 'rgba(150,74,40,0.62)');
+    c.fillStyle = g;
+    c.fill();
+    c.strokeStyle = 'rgba(255,210,122,0.5)';
+    c.lineWidth = 1.4;
+    c.stroke();
+    // obi
+    c.beginPath();
+    c.moveTo(lhp.x - f.rx * U * 0.06, lhp.y - f.ry * U * 0.06);
+    c.lineTo(rhp.x + f.rx * U * 0.06, rhp.y + f.ry * U * 0.06);
+    c.strokeStyle = 'rgba(255,120,90,0.6)';
+    c.lineWidth = Math.max(2, U * 0.16);
+    c.stroke();
+    c.restore();
+  }
+
+  function drawMask(c){
+    const hd = pts[HEAD], ch = pts[CHEST];
+    const ang = Math.atan2(hd.y - ch.y, hd.x - ch.x) + Math.PI / 2;
+    const r = U * 0.46;
+    c.save();
+    c.translate(hd.x, hd.y);
+    c.rotate(ang);
+    c.beginPath();
+    c.ellipse(0, 0, r * 0.78, r, 0, 0, Math.PI * 2);
+    const g = c.createLinearGradient(0, -r, 0, r);
+    g.addColorStop(0, 'rgba(255,238,214,0.94)');
+    g.addColorStop(1, 'rgba(226,190,158,0.86)');
+    c.fillStyle = g; c.fill();
+    c.strokeStyle = 'rgba(255,210,122,0.85)'; c.lineWidth = 1.3; c.stroke();
+    // eye slits
+    c.fillStyle = 'rgba(24,10,20,0.9)';
+    c.beginPath(); c.ellipse(-r * 0.32, -r * 0.12, r * 0.17, r * 0.08, -0.24, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.ellipse( r * 0.32, -r * 0.12, r * 0.17, r * 0.08,  0.24, 0, Math.PI * 2); c.fill();
+    // mouth
+    c.strokeStyle = 'rgba(180,44,50,0.8)'; c.lineWidth = Math.max(1, r * 0.09);
+    c.beginPath(); c.moveTo(-r * 0.16, r * 0.42); c.lineTo(r * 0.16, r * 0.42); c.stroke();
+    c.restore();
+  }
+
+  function drawSkeleton(c, alphaMul){
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < VISIBLE_BONES.length; i++){
+      const b = VISIBLE_BONES[i];
+      const a = pts[b[0]], d = pts[b[1]];
+      const hue = LIMB_HUE[b[2]];
+      c.shadowBlur = 14; c.shadowColor = 'hsla(' + hue + ',100%,62%,0.85)';
+      c.strokeStyle = 'hsla(' + hue + ',100%,' + (68 + groove * 12) + '%,' + (0.82 * alphaMul) + ')';
+      c.lineWidth = Math.max(1.6, U * (b[2] === 'spine' ? 0.14 : 0.1));
+      c.lineCap = 'round';
+      c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(d.x, d.y); c.stroke();
+    }
+    c.shadowBlur = 0;
+    // joint orbs
+    const joints = [CHEST, HIP, LSH, RSH, LEL, REL, LHA, RHA, LHP, RHP, LKN, RKN, LFT, RFT];
+    for (let i = 0; i < joints.length; i++){
+      const p = pts[joints[i]];
+      const rr = U * 0.13;
+      const g = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 2.6);
+      g.addColorStop(0, 'hsla(44,100%,86%,' + (0.85 * alphaMul) + ')');
+      g.addColorStop(1, 'hsla(30,100%,60%,0)');
+      c.fillStyle = g;
+      c.beginPath(); c.arc(p.x, p.y, rr * 2.6, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  }
+
+  function drawStrings(c, strings, t){
+    if (!strings.length) return;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < strings.length; i++){
+      const s = strings[i];
+      const p = pts[s.i];
+      const d = Math.hypot(p.x - s.ax, p.y - s.ay);
+      const taut = clamp(d / Math.max(1e-3, s.max), 0, 1.2);
+      const slack = Math.max(0, s.max - d);
+      const sag = Math.min(s.max * 0.4, slack * 0.55);
+      const mx = (s.ax + p.x) / 2 + Math.sin(t * 0.004 + i * 1.7) * (1 - taut) * U * 0.3;
+      const my = (s.ay + p.y) / 2 + sag;
+      const a = 0.28 + taut * 0.55;
+      c.shadowBlur = 10 + taut * 12;
+      c.shadowColor = 'rgba(255,236,207,0.8)';
+      c.strokeStyle = 'hsla(44,90%,' + (78 + taut * 14) + '%,' + a + ')';
+      c.lineWidth = Math.max(0.9, U * 0.035 * (0.7 + taut * 0.7));
+      c.beginPath();
+      c.moveTo(s.ax, s.ay);
+      c.quadraticCurveTo(mx, my, p.x, p.y);
+      c.stroke();
+    }
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  // the 手板 (control bar) your hands form, drawn so the mechanic is legible
+  function drawAnchors(c, bar){
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+
+    if (bar && bar.both){
+      c.strokeStyle = 'hsla(40,100%,82%,' + (0.42 + bar.pinch * 0.4) + ')';
+      c.lineWidth = Math.max(2, U * 0.1);
+      c.lineCap = 'round';
+      c.shadowBlur = 18; c.shadowColor = 'rgba(255,200,110,0.85)';
+      c.beginPath();
+      c.moveTo(anchorL.x, anchorL.y);
+      c.lineTo(anchorR.x, anchorR.y);
+      c.stroke();
+      c.shadowBlur = 0;
+      // where the shoulder threads actually hang from
+      const hx = bar.ux * 0.75 * U, hy = bar.uy * 0.75 * U;
+      for (const s of [{ x: bar.cx - hx, y: bar.cy - hy }, { x: bar.cx + hx, y: bar.cy + hy }]){
+        c.fillStyle = 'hsla(44,100%,86%,0.8)';
+        c.beginPath(); c.arc(s.x, s.y, Math.max(1.5, U * 0.06), 0, Math.PI * 2); c.fill();
+      }
+    }
+
+    const list = [anchorL, anchorR];
+    for (let i = 0; i < list.length; i++){
+      const a = list[i];
+      if (!a.active) continue;
+      for (const pt of [{ x: a.x, y: a.y, s: 1 }, { x: a.tx, y: a.ty, s: 0.72 }]){
+        const rr = U * 0.13 * pt.s;
+        const g = c.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, rr * 2.8);
+        g.addColorStop(0, 'hsla(46,100%,88%,' + (0.75 + a.pinch * 0.25) + ')');
+        g.addColorStop(1, 'hsla(36,100%,62%,0)');
+        c.fillStyle = g;
+        c.beginPath(); c.arc(pt.x, pt.y, rr * 2.8, 0, Math.PI * 2); c.fill();
+      }
+    }
+    c.restore();
+  }
+
+  function updateDrawPopups(){
+    for (let i = popups.length - 1; i >= 0; i--){
+      const p = popups[i];
+      p.y += p.vy; p.life -= 0.016;
+      if (p.life <= 0){ popups.splice(i, 1); continue; }
+      ctx.save();
+      ctx.font = '700 ' + Math.max(11, Math.round(U * 0.34)) + 'px "Hiragino Kaku Gothic ProN", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = p.color + Math.max(0, p.life * 0.9) + ')';
+      ctx.shadowBlur = 12; ctx.shadowColor = 'rgba(255,190,90,0.8)';
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  SOUND MAPPING (continuous layers)
+  // ---------------------------------------------------------------------------
+  function applyContinuousSound(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const hd = pts[HEAD];
+    const heightN = clamp((floorY - hd.y) / Math.max(1, floorY * 0.55), 0, 1);
+    const step = Math.round(heightN * 7);
+    const f = scaleFreq(step);
+
+    bowA.frequency.setTargetAtTime(f, t, 0.12);
+    bowB.frequency.setTargetAtTime(f, t, 0.12);
+    bowSub.frequency.setTargetAtTime(f / 2, t, 0.12);
+    bowFilter.frequency.setTargetAtTime(280 + tension * 2600 + heightN * 500, t, 0.09);
+    bowGain.gain.setTargetAtTime(strung ? (0.015 + tension * 0.22) : 0.0, t, 0.14);
+
+    padGain.gain.setTargetAtTime(strung ? groove * 0.32 : 0.0, t, 0.5);
+    padFilter.frequency.setTargetAtTime(520 + groove * 1500, t, 0.4);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let strung = false, lastHandsT = 0, physAccum = 0, lastT = performance.now();
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+    let dt = (t - lastT) / 1000;
+    lastT = t;
+    if (!(dt > 0)) dt = 0.016;
+    if (dt > 0.1) dt = 0.1;
+
+    const fresh = (t - RESULT.t) < 400;
+    const handsArr = fresh ? RESULT.hands : [];
+    updateAnchors(handsArr);
+
+    const anyHand = anchorL.active || anchorR.active;
+    if (anyHand) lastHandsT = t;
+    if (anyHand && !strung){
+      strung = true;
+      if (audioReady) wakeChime(actx.currentTime);
+      rings.push({ x: pts[HEAD].x, y: pts[HEAD].y, r: U * 0.3, a: 0.9, hue: 44, w: 2 });
+    } else if (!anyHand && strung && (t - lastHandsT) > 700){
+      strung = false;
+      if (audioReady) releaseSound(actx.currentTime);
+    }
+
+    // --- physics ---
+    const strings = activeStrings();
+    tensionAccum = 0;
+    physAccum += dt;
+    let steps = 0;
+    while (physAccum >= SUB_DT && steps < 5){
+      stepPhysics(strings);
+      physAccum -= SUB_DT;
+      steps++;
+    }
+    if (physAccum > SUB_DT * 5) physAccum = 0;
+    if (steps > 0){
+      // tension = how taut the silk sits (a hanging puppet hums) + how hard it was
+      // just yanked (a jerk makes it cry out)
+      let tautMax = 0;
+      for (let s = 0; s < strings.length; s++){
+        const st = strings[s], p = pts[st.i];
+        const d = Math.hypot(p.x - st.ax, p.y - st.ay);
+        const r = d / Math.max(1e-3, st.max);
+        if (r > tautMax) tautMax = r;
+      }
+      const tautN = clamp((tautMax - 0.86) / 0.14, 0, 1);
+      const impulseN = clamp((tensionAccum / steps) / (H * 0.004), 0, 1);
+      const raw = strings.length ? clamp(tautN * 0.6 + impulseN * 0.5, 0, 1) : 0;
+      tension += (raw - tension) * 0.22;
+      detectSwings(t);
+    }
+    groove = Math.max(0, groove - dt * 0.06);
+
+    // --- draw ---
+    ctx.clearRect(0, 0, W, H);
+    drawVideoBase();
+    drawStage(t);
+
+    // reflection on the boards
+    ctx.save();
+    ctx.translate(0, floorY * 2);
+    ctx.scale(1, -1);
+    ctx.globalAlpha = 0.26;
+    drawRobe(ctx);
+    drawSkeleton(ctx, 0.7);
+    ctx.restore();
+
+    drawApron();
+    drawRobe(ctx);
+    drawMask(ctx);
+
+    // glow layer with afterglow trails
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.26)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    fctx.save();
+    fctx.globalCompositeOperation = 'lighter';
+    updateDrawMotes(t);
+    updateDrawDust();
+    updateDrawRings();
+    fctx.restore();
+
+    drawSkeleton(fctx, 1);
+    drawStrings(fctx, strings, t);
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    drawAnchors(ctx, controlBar());
+    updateDrawPopups();
+
+    applyContinuousSound();
+
+    // --- HUD ---
+    const tPct = Math.round(tension * 100);
+    tensionVal.textContent = tPct;
+    tensionMeter.style.width = tPct + '%';
+    tensionSub.textContent = strung
+      ? (anchorL.active && anchorR.active ? '四本の糸' : '一本の糸で吊られている')
+      : '糸は解けている';
+
+    const gPct = Math.round(groove * 100);
+    grooveVal.textContent = gPct;
+    grooveMeter.style.width = gPct + '%';
+    grooveSub.textContent = '足音 ' + footfalls + (lastNoteName ? ' ・ ' + lastNoteName : '');
+
+    if (!anyHand){
+      stateDot.textContent = strung ? '糸がゆるんでいます' : 'カメラに両手をかざしてください';
+      stateDot.className = 'silent';
+    } else if (tension < 0.06){
+      stateDot.textContent = '糸がたるんでいます ・ 手を上げて';
+      stateDot.className = 'silent';
+    } else if (groove > 0.6){
+      stateDot.textContent = '🌸 舞 ・ 調子 ' + gPct + '%';
+      stateDot.className = 'mai';
+    } else {
+      stateDot.textContent = '傀儡が糸に宿っています';
+      stateDot.className = 'live';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  rebuildPuppet();
+
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+        throw new Error('手検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+      }
+      buildAudio();
+      if (actx.state === 'suspended') await actx.resume();
+      if (!hands) initHands();
+      await startStream();
+      await startCameraLoop();
+      running = true;
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      lampBtn.classList.add('active');
+      lastT = performance.now();
+      requestAnimationFrame(frame);
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
