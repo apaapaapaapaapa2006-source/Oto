@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07050a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="宙に浮かぶ器のかけらを親指と人差し指でつまみ、指をひねって角度を合わせ、元の器へ継ぎ直す金継ぎゲーム。ぴたりと嵌ると金の継ぎ目が走り、器が鳴る - KINTSUGI">
+<title>KINTSUGI ─ 金継ぎ</title>
+<style>
+  :root{
+    --void:#07050a; --haze:#1d1116; --ghost:#f4efe6;
+    --gold:#ffd479; --ember:#ff9a4d; --clay:#c9704f; --jade:#7fe3c4; --warn:#ff5470;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Mincho ProN','Yu Mincho','Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #goldFlash{ position:fixed; inset:0; z-index:7; pointer-events:none; background:rgba(255,212,121,0.0); }
+
+  /* ---- Start overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .8s ease, visibility .8s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(46px); opacity:.34; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:7%;  top:12%; background:radial-gradient(circle,#ffd479,transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:32%; background:radial-gradient(circle,#c9704f,transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:28%; bottom:6%; background:radial-gradient(circle,#7fe3c4,transparent 70%); animation-delay:-9s; }
+  @keyframes drift{
+    from{ transform:translate(0,0) scale(1); }
+    to{ transform:translate(6vmin,-4vmin) scale(1.14); }
+  }
+  #eyebrow{ color:rgba(244,239,230,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.14em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,#ffd479,#ff9a4d,#c9704f,#7fe3c4,#ffd479);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(244,239,230,0.55); font-size:0.82rem; letter-spacing:0.12em; margin-bottom:1.7rem; position:relative; white-space:pre-line; }
+  #startBtn{
+    position:relative;
+    padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.22em; font-family:inherit; font-weight:700;
+    color:#1a1008; background:linear-gradient(90deg,#ffd479,#ff9a4d); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(255,180,90,0.45);
+    transition:transform .18s ease, box-shadow .18s ease;
+    animation:breathe 3.4s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(255,180,90,0.4); }
+    50%{ box-shadow:0 0 46px rgba(255,212,121,0.62); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{
+    position:relative;
+    margin-top:2.1rem; max-width:23rem; color:rgba(244,239,230,0.5); font-size:0.76rem; line-height:1.95;
+    letter-spacing:0.02em; text-align:left;
+  }
+  #hint b{ color:var(--gold); font-weight:700; }
+  #hint em{ color:var(--jade); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+  #resultBox{ display:none; position:relative; margin-bottom:1.5rem; }
+  #resultBox .rlab{ font-size:0.62rem; letter-spacing:0.3em; color:rgba(244,239,230,0.45); }
+  #resultBox .rscore{ font-size:2.6rem; font-weight:800; color:var(--gold); line-height:1.3; font-variant-numeric:tabular-nums; }
+  #resultBox .rsub{ font-size:0.78rem; color:rgba(244,239,230,0.6); letter-spacing:0.05em; }
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed; z-index:12; left:0; right:0; bottom:0;
+    display:flex; align-items:flex-end; justify-content:space-between; padding:0 1rem 1.1rem;
+    pointer-events:none; opacity:0; transition:opacity .6s ease;
+  }
+  #hud.show{ opacity:1; }
+  .panel{
+    background:rgba(16,10,10,0.45); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(255,212,121,0.18); border-radius:14px; padding:0.65rem 0.9rem;
+    color:var(--ghost); min-width:112px;
+  }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(244,239,230,0.5); margin-bottom:0.28rem; }
+  .panel .val{ font-size:1.6rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--gold); }
+  .panel .sub2{ font-size:0.62rem; letter-spacing:0.08em; color:rgba(244,239,230,0.55); margin-top:0.38rem; }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .val{ color:var(--jade); }
+  .panel[data-side="r"] .val.low{ color:var(--warn); }
+
+  #centerHud{
+    position:fixed; z-index:12; left:50%; bottom:1.6rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; max-width:52vw;
+  }
+  #centerHud.show{ opacity:1; }
+  #stateDot{
+    font-size:0.66rem; letter-spacing:0.14em; color:rgba(244,239,230,0.6); font-weight:700;
+    padding:0.4rem 1rem; border-radius:100px; border:1px solid rgba(255,212,121,0.18);
+    background:rgba(16,10,10,0.45); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .2s ease, border-color .2s ease, box-shadow .2s ease; white-space:nowrap;
+  }
+  #stateDot.warm{ color:var(--gold); border-color:rgba(255,212,121,0.55); box-shadow:0 0 18px rgba(255,212,121,0.28); }
+  #stateDot.fit{ color:var(--jade); border-color:rgba(127,227,196,0.55); box-shadow:0 0 18px rgba(127,227,196,0.3); }
+  #stateDot.silent{ color:rgba(190,180,170,0.75); border-color:rgba(190,180,170,0.25); box-shadow:none; }
+
+  /* ---- top controls ---- */
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{
+    pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(16,10,10,0.5); border:1px solid rgba(255,212,121,0.2);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease;
+  }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(255,212,121,0.15); border-color:rgba(255,212,121,0.5); color:var(--gold); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.34em; color:rgba(244,239,230,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.24em; color:rgba(244,239,230,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="goldFlash"></div>
+
+  <div id="brand"><div class="b1">KINTSUGI</div><div class="b2">金継ぎ / 指でつなぐ</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="guideBtn">案内 ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">SCORE</div>
+      <div class="val" id="scoreEl">0</div>
+      <div class="sub2">継いだ破片 <span id="shardEl">0</span></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">TIME</div>
+      <div class="val" id="timeEl">90</div>
+      <div class="sub2">器 <span id="bowlEl">1</span> ・ 残り <span id="leftEl">0</span></div>
+    </div>
+  </div>
+
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA GAME</div>
+    <div id="resultBox">
+      <div class="rlab">TIME UP</div>
+      <div class="rscore" id="finalScore">0</div>
+      <div class="rsub" id="finalSub"></div>
+    </div>
+    <div id="title">KINTSUGI</div>
+    <div id="sub">割れた器を、指先で継ぎ直す</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・宙に漂う<b>器のかけら</b>を、<b>親指と人差し指でつまむ</b><br>
+      ・つまんだまま<b>指をひねると、かけらも回る</b>。位置だけでなく<b>角度</b>も合わせる<br>
+      ・元の場所にぴたりと重なると<em>ひとりでに吸い付いて</em>、金の継ぎ目が走る<br>
+      ・近づくほど<b>導きの音</b>が高く澄む。遠いと低くにごる<br>
+      ・器がひとつ甦るたび<b>+8秒</b>。90秒で何客つなげるか
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const guideBtn = document.getElementById('guideBtn');
+  const scoreEl  = document.getElementById('scoreEl');
+  const shardEl  = document.getElementById('shardEl');
+  const timeEl   = document.getElementById('timeEl');
+  const bowlEl   = document.getElementById('bowlEl');
+  const leftEl   = document.getElementById('leftEl');
+  const resultBox= document.getElementById('resultBox');
+  const finalScore = document.getElementById('finalScore');
+  const finalSub = document.getElementById('finalSub');
+  const eyebrow  = document.getElementById('eyebrow');
+  const titleEl  = document.getElementById('title');
+  const subEl    = document.getElementById('sub');
+  const hintEl   = document.getElementById('hint');
+  const goldFlashEl = document.getElementById('goldFlash');
+
+  // glow layer — additive gold, drawn over the darkened video
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    clampShards();
+  }
+  window.addEventListener('resize', resize);
+
+  // geometry of the bowl in screen space — everything shard-side is stored in
+  // units of R so a resize never invalidates a puzzle in progress.
+  function bowlR(){ return Math.min(W, H) * 0.23; }
+  function bowlCX(){ return W * 0.5; }
+  function bowlCY(){ return H * 0.5; }
+
+  // ---------------------------------------------------------------------------
+  //  ROUND CONSTANTS
+  // ---------------------------------------------------------------------------
+  const ROUND_MS   = 90000;
+  const BOWL_BONUS_MS = 8000;
+  const FIRST_SHARDS = 4, MAX_SHARDS = 9;
+  const PINCH_ON = 0.55, PINCH_OFF = 0.78;   // normalized thumb-index distance
+  const ANG_TOL  = 0.40;                     // rad — release-to-place tolerance
+  const SNAP_POS = 0.42, SNAP_ANG = 0.42;    // fraction of tolerance for magnetic auto-snap
+  function posTol(){ return Math.max(34, bowlR() * 0.30); }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, sfxBus = null, padBus = null;
+  let convolver = null, revGain = null;
+  let guideOsc = null, guideGain = null, guideFilter = null;
+  let audioReady = false;
+  const noiseBuf = { buf: null };
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random()*2-1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -17; comp.knee.value = 22; comp.ratio.value = 3.2;
+    comp.attack.value = 0.005;  comp.release.value = 0.3;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(3.4, 2.2);
+    revGain = actx.createGain(); revGain.gain.value = 0.34;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    padBus = actx.createGain(); padBus.gain.value = 0.5;
+
+    sfxBus.connect(master); sfxBus.connect(convolver);
+    padBus.connect(master); padBus.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(1.0);
+
+    // still workshop air: a low lacquer drone with a slow breathing filter
+    const droneA = actx.createOscillator(); droneA.type = 'sine';     droneA.frequency.value = 73.42;  // D2
+    const droneB = actx.createOscillator(); droneB.type = 'triangle'; droneB.frequency.value = 110.0;  // A2
+    droneB.detune.value = -6;
+    const droneFilter = actx.createBiquadFilter();
+    droneFilter.type = 'lowpass'; droneFilter.frequency.value = 340; droneFilter.Q.value = 1.4;
+    const droneGain = actx.createGain(); droneGain.gain.value = 0.075;
+    const breath = actx.createOscillator(); breath.type = 'sine'; breath.frequency.value = 0.06;
+    const breathAmt = actx.createGain(); breathAmt.gain.value = 130;
+    breath.connect(breathAmt); breathAmt.connect(droneFilter.frequency);
+    droneA.connect(droneFilter); droneB.connect(droneFilter);
+    droneFilter.connect(droneGain); droneGain.connect(padBus);
+    droneA.start(); droneB.start(); breath.start();
+
+    // "hot / cold" guide tone — sings while a shard nears its home
+    guideOsc = actx.createOscillator(); guideOsc.type = 'triangle'; guideOsc.frequency.value = 240;
+    guideFilter = actx.createBiquadFilter();
+    guideFilter.type = 'lowpass'; guideFilter.frequency.value = 1400; guideFilter.Q.value = 3;
+    guideGain = actx.createGain(); guideGain.gain.value = 0.0001;
+    guideOsc.connect(guideFilter); guideFilter.connect(guideGain); guideGain.connect(padBus);
+    guideOsc.start();
+
+    audioReady = true;
+  }
+
+  function setGuideTone(q){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const qq = Math.max(0, Math.min(1, q));
+    guideOsc.frequency.setTargetAtTime(200 + qq*qq*760, t, 0.06);
+    guideFilter.frequency.setTargetAtTime(600 + qq*3200, t, 0.08);
+    guideGain.gain.setTargetAtTime(0.0001 + qq*qq*0.075, t, 0.07);
+  }
+
+  // dry ceramic tick when a shard is caught
+  function tickSound(t){
+    if (!audioReady || !noiseBuf.buf) return;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 5;
+    bp.frequency.setValueAtTime(2600, t);
+    bp.frequency.exponentialRampToValueAtTime(900, t + 0.08);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.26, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    src.connect(bp); bp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t + 0.12);
+  }
+
+  // soft dull knock when a shard is let go without fitting
+  function dropSound(t){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(190, t);
+    o.frequency.exponentialRampToValueAtTime(96, t + 0.14);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.1, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.2);
+  }
+
+  // struck rin-bowl: inharmonic partials, long shimmering tail
+  function bellSound(t, freq, amp){
+    if (!audioReady) return;
+    const partials = [[1, 1.0, 3.6], [2.02, 0.42, 2.1], [2.76, 0.26, 1.5], [5.4, 0.1, 0.9]];
+    for (const [ratio, a, dur] of partials){
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.value = freq * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, a * amp), t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+    // gold dust: a breath of filtered noise riding the strike
+    if (noiseBuf.buf){
+      const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+      const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3200;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.07 * amp * 3, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      src.connect(hp); hp.connect(g); g.connect(sfxBus);
+      src.start(t); src.stop(t + 0.55);
+    }
+  }
+
+  function completeSound(t){
+    if (!audioReady) return;
+    const root = 196.0; // G3
+    [0, 5, 7, 12, 17].forEach((semi, i) => {
+      bellSound(t + i*0.16, root * Math.pow(2, semi/12), 0.2);
+    });
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = 65.41; // C2 gong
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.3, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 3.3);
+  }
+
+  function tickWarn(t){
+    if (!audioReady) return;
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = 1046.5;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.12);
+  }
+
+  function endSound(t){
+    if (!audioReady) return;
+    [0, -5, -12].forEach((semi, i) => {
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = 196 * Math.pow(2, semi/12);
+      const g = actx.createGain();
+      const st = t + i*0.24;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.18, st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 1.4);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 1.45);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  //  POLYGON GEOMETRY (unit space: 1 == bowl radius R)
+  // ---------------------------------------------------------------------------
+  function polyArea(p){
+    let a = 0;
+    for (let i = 0; i < p.length; i++){
+      const q = p[(i+1) % p.length];
+      a += p[i].x * q.y - q.x * p[i].y;
+    }
+    return Math.abs(a / 2);
+  }
+  function polyCentroid(p){
+    let a = 0, cx = 0, cy = 0;
+    for (let i = 0; i < p.length; i++){
+      const A = p[i], B = p[(i+1) % p.length];
+      const f = A.x*B.y - B.x*A.y;
+      a += f; cx += (A.x + B.x) * f; cy += (A.y + B.y) * f;
+    }
+    a *= 0.5;
+    if (Math.abs(a) < 1e-9){
+      let sx = 0, sy = 0;
+      for (const q of p){ sx += q.x; sy += q.y; }
+      return { x: sx / p.length, y: sy / p.length };
+    }
+    return { x: cx / (6*a), y: cy / (6*a) };
+  }
+  // keep the half-plane { (p - P) · n >= 0 }
+  function clipHalf(poly, px, py, nx, ny){
+    const out = [];
+    const N = poly.length;
+    for (let i = 0; i < N; i++){
+      const A = poly[i], B = poly[(i+1) % N];
+      const da = (A.x - px)*nx + (A.y - py)*ny;
+      const db = (B.x - px)*nx + (B.y - py)*ny;
+      if (da >= 0) out.push({ x: A.x, y: A.y });
+      if ((da > 0 && db < 0) || (da < 0 && db > 0)){
+        const t = da / (da - db);
+        out.push({ x: A.x + (B.x - A.x)*t, y: A.y + (B.y - A.y)*t });
+      }
+    }
+    return out;
+  }
+  function segDist(px, py, ax, ay, bx, by){
+    const dx = bx - ax, dy = by - ay;
+    const l2 = dx*dx + dy*dy;
+    if (l2 < 1e-12) return Math.hypot(px - ax, py - ay);
+    let t = ((px - ax)*dx + (py - ay)*dy) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + dx*t), py - (ay + dy*t));
+  }
+  function distToPoly(pt, poly){
+    let best = Infinity;
+    for (let i = 0; i < poly.length; i++){
+      const A = poly[i], B = poly[(i+1) % poly.length];
+      const d = segDist(pt.x, pt.y, A.x, A.y, B.x, B.y);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+  function angNorm(a){
+    while (a >  Math.PI) a -= Math.PI*2;
+    while (a < -Math.PI) a += Math.PI*2;
+    return a;
+  }
+
+  // a chawan silhouette: a rim chord on top, a half-ellipse belly below (convex,
+  // so every straight cut yields two well-formed pieces)
+  const RIM_Y = -0.44, BELLY = 0.98;
+  function bowlPolygon(){
+    const pts = [], STEPS = 34;
+    for (let i = 0; i <= STEPS; i++){
+      const a = (i / STEPS) * Math.PI;
+      pts.push({ x: Math.cos(a), y: RIM_Y + Math.sin(a) * BELLY });
+    }
+    return pts;
+  }
+
+  function cutPolygon(poly){
+    const c = polyCentroid(poly);
+    const A = polyArea(poly);
+    const reach = Math.sqrt(Math.max(A, 1e-6)) * 0.34;
+    for (let attempt = 0; attempt < 20; attempt++){
+      const ang = Math.random() * Math.PI;
+      const nx = Math.cos(ang), ny = Math.sin(ang);
+      const px = c.x + (Math.random() - 0.5) * reach;
+      const py = c.y + (Math.random() - 0.5) * reach;
+      const a = clipHalf(poly, px, py,  nx,  ny);
+      const b = clipHalf(poly, px, py, -nx, -ny);
+      if (a.length >= 3 && b.length >= 3){
+        const aa = polyArea(a), ab = polyArea(b);
+        if (aa > A * 0.2 && ab > A * 0.2) return [a, b];
+      }
+    }
+    return null;
+  }
+
+  function buildPieces(n){
+    let pieces = [bowlPolygon()];
+    let guard = 0;
+    while (pieces.length < n && guard++ < 60){
+      pieces.sort((p, q) => polyArea(q) - polyArea(p));
+      const cut = cutPolygon(pieces[0]);
+      if (!cut) break;
+      pieces.splice(0, 1, cut[0], cut[1]);
+    }
+    return pieces;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND TRACKING
+  // ---------------------------------------------------------------------------
+  const RESULT = { hands: [], t: 0 };
+
+  let hands = null;
+  function initHands(){
+    hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands:2, modelComplexity:0, minDetectionConfidence:0.6, minTrackingConfidence:0.5 });
+    hands.onResults(onHandResults);
+  }
+  function onHandResults(results){
+    const out = [];
+    const lms = (results && results.multiHandLandmarks) ? results.multiHandLandmarks : [];
+    for (let i = 0; i < lms.length; i++){
+      const lm = lms[i];
+      if (!lm || lm.length < 21) continue;
+      const thumb = lm[4], index = lm[8], wrist = lm[0], mid = lm[9];
+      if (!thumb || !index || !wrist || !mid) continue;
+      const palm = Math.hypot(wrist.x - mid.x, wrist.y - mid.y) || 1e-4;
+      const pinchNorm = Math.hypot(thumb.x - index.x, thumb.y - index.y) / palm;
+      out.push({
+        tx: thumb.x, ty: thumb.y,
+        ix: index.x, iy: index.y,
+        cx: mid.x,   cy: mid.y,
+        pinchNorm
+      });
+    }
+    RESULT.hands = out;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+  async function startCameraLoop(){
+    if (mpCamera){ if (mpCamera.stop) mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running && hands) await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    try { await startStream(); } catch(e){ /* keep previous stream */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let guideOn = true;
+  guideBtn.addEventListener('click', () => {
+    guideOn = !guideOn;
+    guideBtn.textContent = guideOn ? '案内 ON' : '案内 OFF';
+    guideBtn.classList.toggle('active', guideOn);
+  });
+
+  function sx(nx){ return mirror ? (1 - nx) * W : nx * W; }
+  function sy(ny){ return ny * H; }
+
+  // ---------------------------------------------------------------------------
+  //  GAME STATE
+  // ---------------------------------------------------------------------------
+  let state = 'idle';            // idle | countdown | playing | over
+  let score = 0, shardsJoined = 0, bowlsDone = 0, bowlIndex = 0;
+  let accSum = 0, accN = 0;
+  let roundStart = 0, extraMs = 0, timeLeft = ROUND_MS, lastTickSecond = -1;
+  let countdownStart = 0;
+  let shards = [];               // every piece of the current bowl
+  let bowlOutline = bowlPolygon();
+  let bowlDone = false, nextBowlAt = 0, bowlFlash = 0;
+  let shake = 0, goldGlow = 0;
+  const sparks = [], ripples = [], popups = [];
+
+  // two persistent hand slots, matched to detections by proximity each frame
+  const slots = [
+    { pos:null, prev:null, vx:0, vy:0, pinching:false, hold:null, lastAng:0 },
+    { pos:null, prev:null, vx:0, vy:0, pinching:false, hold:null, lastAng:0 }
+  ];
+
+  function clampShards(){
+    const R = bowlR();
+    for (const s of shards){
+      if (s.placed) continue;
+      const m = 30 + s.r * R;
+      s.x = Math.max(m, Math.min(W - m, s.x));
+      s.y = Math.max(80 + s.r*R*0.4, Math.min(H - 130 - s.r*R*0.4, s.y));
+    }
+  }
+
+  function spawnShardPosition(R, i, n){
+    const a = (i / n) * Math.PI*2 + Math.random()*0.7;
+    const rad = R * (1.65 + Math.random()*0.75);
+    const mx = 34 + R*0.35;
+    return {
+      x: Math.max(mx, Math.min(W - mx, bowlCX() + Math.cos(a) * rad)),
+      y: Math.max(90,  Math.min(H - 140, bowlCY() + Math.sin(a) * rad * 0.8))
+    };
+  }
+
+  function newBowl(){
+    bowlIndex++;
+    const want = Math.min(MAX_SHARDS, FIRST_SHARDS + bowlIndex - 1);
+    const pieces = buildPieces(want);
+    const R = bowlR();
+    shards = pieces.map((poly, i) => {
+      const c = polyCentroid(poly);
+      const pts = poly.map(v => ({ x: v.x - c.x, y: v.y - c.y }));
+      const edges = pts.map((v, k) => {
+        const w = pts[(k+1) % pts.length];
+        const mid = { x: (v.x + w.x)/2 + c.x, y: (v.y + w.y)/2 + c.y };
+        return {
+          interior: distToPoly(mid, bowlOutline) > 0.035,
+          wob: (Math.random() - 0.5) * 0.05
+        };
+      });
+      let rr = 0;
+      for (const v of pts) rr = Math.max(rr, Math.hypot(v.x, v.y));
+      const p = spawnShardPosition(R, i, pieces.length);
+      // every piece starts visibly turned — never inside the snap window, never
+      // beyond a comfortable wrist twist
+      let off = (Math.random() * 1.7 - 0.85);
+      if (Math.abs(off) < 0.3) off += (off >= 0 ? 0.3 : -0.3);
+      return {
+        pts, edges, cx: c.x, cy: c.y, r: rr, idx: i,
+        x: p.x, y: p.y, vx: (Math.random()-0.5)*0.28, vy: (Math.random()-0.5)*0.22,
+        rot: off, vrot: (Math.random()-0.5)*0.004,
+        placed: false, held: false, placedAt: 0
+      };
+    });
+    bowlDone = false;
+    for (const s of slots) s.hold = null;
+    updateHud();
+  }
+
+  function updateHud(){
+    scoreEl.textContent = score;
+    shardEl.textContent = shardsJoined;
+    bowlEl.textContent = bowlIndex;
+    leftEl.textContent = shards.filter(s => !s.placed).length;
+  }
+
+  function spawnPopup(x, y, text, color){
+    popups.push({ x, y, text, color, life: 1, vy: -0.7 });
+  }
+  function spawnSparks(x, y, n, spread){
+    for (let i = 0; i < n; i++){
+      const a = Math.random()*Math.PI*2, sp = 0.6 + Math.random()*spread;
+      sparks.push({
+        x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 0.3,
+        life: 1, decay: 0.012 + Math.random()*0.022,
+        r: 1 + Math.random()*2.1, hue: 38 + Math.random()*22
+      });
+    }
+  }
+  function spawnRipple(x, y){ ripples.push({ x, y, r: 6, a: 0.85 }); }
+
+  // ---------------------------------------------------------------------------
+  //  FITTING
+  // ---------------------------------------------------------------------------
+  function fitOf(s){
+    const R = bowlR();
+    const hx = bowlCX() + s.cx * R, hy = bowlCY() + s.cy * R;
+    const pErr = Math.hypot(s.x - hx, s.y - hy);
+    const aErr = Math.abs(angNorm(s.rot));
+    const tol = posTol();
+    const q = Math.max(0, 1 - pErr/tol) * Math.max(0, 1 - aErr/ANG_TOL);
+    return { pErr, aErr, q, hx, hy, tol };
+  }
+
+  function placeShard(s, f){
+    if (s.placed) return;
+    s.placed = true; s.held = false; s.placedAt = performance.now();
+    s.x = f.hx; s.y = f.hy; s.rot = 0; s.vx = 0; s.vy = 0; s.vrot = 0;
+    for (const sl of slots){ if (sl.hold === s) sl.hold = null; }
+
+    const acc = Math.max(0, Math.min(1, f.q));
+    accSum += acc; accN++;
+    shardsJoined++;
+    const pts = 100 + Math.round(acc * 150);
+    score += pts;
+    spawnPopup(f.hx, f.hy - bowlR()*0.2, '+' + pts, '#ffd479');
+    spawnSparks(f.hx, f.hy, 26, 3.4);
+    spawnRipple(f.hx, f.hy);
+    goldGlow = Math.max(goldGlow, 0.55);
+    shake = 3;
+
+    // each shard of a bowl rings one step higher — completing a bowl is a phrase
+    const placedN = shards.filter(x => x.placed).length;
+    const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19];
+    const semi = SCALE[Math.min(SCALE.length - 1, placedN - 1)];
+    if (audioReady) bellSound(actx.currentTime, 293.66 * Math.pow(2, semi/12), 0.26);
+
+    updateHud();
+    if (shards.every(x => x.placed)) completeBowl();
+  }
+
+  function completeBowl(){
+    if (bowlDone) return;
+    bowlDone = true;
+    bowlsDone++;
+    const bonus = 300 + shards.length * 120;
+    score += bonus;
+    extraMs += BOWL_BONUS_MS;
+    bowlFlash = 1; goldGlow = 1;
+    shake = 6;
+    nextBowlAt = performance.now() + 1900;
+    spawnPopup(bowlCX(), bowlCY() - bowlR()*0.9, '器 甦る +' + bonus, '#7fe3c4');
+    spawnPopup(bowlCX(), bowlCY() - bowlR()*0.55, '+8秒', '#ffd479');
+    const R = bowlR();
+    for (const s of shards){
+      spawnSparks(bowlCX() + s.cx*R, bowlCY() + s.cy*R, 22, 4.2);
+    }
+    if (audioReady) completeSound(actx.currentTime);
+    updateHud();
+  }
+
+  function resetGame(){
+    score = 0; shardsJoined = 0; bowlsDone = 0; bowlIndex = 0;
+    accSum = 0; accN = 0; extraMs = 0;
+    sparks.length = 0; ripples.length = 0; popups.length = 0;
+    bowlFlash = 0; goldGlow = 0; shake = 0;
+    timeLeft = ROUND_MS;
+    lastTickSecond = Math.ceil(ROUND_MS/1000);
+    timeEl.textContent = lastTickSecond;
+    timeEl.classList.remove('low');
+    for (const s of slots){ s.pos = null; s.prev = null; s.pinching = false; s.hold = null; }
+    newBowl();
+  }
+
+  const COUNTDOWN_LABELS = ['3','2','1','はじめ'];
+  const COUNTDOWN_STEP = 620;
+  function startGame(){
+    resetGame();
+    state = 'countdown';
+    countdownStart = performance.now();
+  }
+
+  function endGame(){
+    if (state !== 'playing') return;
+    state = 'over';
+    setGuideTone(0);
+    if (audioReady) endSound(actx.currentTime);
+    const acc = accN ? Math.round((accSum/accN) * 100) : 0;
+    finalScore.textContent = score;
+    finalSub.textContent = `甦った器 ${bowlsDone} 客 ・ 継いだ破片 ${shardsJoined} ・ 継ぎの精度 ${acc}%`;
+    resultBox.style.display = 'block';
+    eyebrow.style.display = 'none';
+    titleEl.textContent = 'TIME UP';
+    subEl.textContent = '';
+    hintEl.style.display = 'none';
+    startBtn.textContent = 'もう一度';
+    overlay.classList.remove('hidden');
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — video base
+  // ---------------------------------------------------------------------------
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(7,5,10,0.56)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(58,36,30,0.62)';   // warm lacquer-room tint
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.48, Math.min(W,H)*0.16, W/2, H*0.52, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(4,2,6,0.88)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — bowl, shards, seams
+  // ---------------------------------------------------------------------------
+  function pathShard(c, s, R){
+    c.beginPath();
+    for (let i = 0; i < s.pts.length; i++){
+      const p = s.pts[i];
+      if (i === 0) c.moveTo(p.x*R, p.y*R); else c.lineTo(p.x*R, p.y*R);
+    }
+    c.closePath();
+  }
+
+  function drawBowlGuide(t){
+    const R = bowlR(), cx = bowlCX(), cy = bowlCY();
+    ctx.save();
+    ctx.translate(cx, cy);
+    // ghost of the whole vessel
+    ctx.beginPath();
+    for (let i = 0; i < bowlOutline.length; i++){
+      const p = bowlOutline[i];
+      if (i === 0) ctx.moveTo(p.x*R, p.y*R); else ctx.lineTo(p.x*R, p.y*R);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(12,8,10,0.42)';
+    ctx.fill();
+    ctx.setLineDash([6, 8]);
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(255,212,121,0.28)';
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // the rim, seen slightly from above
+    ctx.beginPath();
+    ctx.ellipse(0, RIM_Y*R, R, R*0.15, 0, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,212,121,0.18)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawGhostTargets(t){
+    if (!guideOn) return;
+    const R = bowlR(), cx = bowlCX(), cy = bowlCY();
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const s of shards){
+      if (s.placed) continue;
+      const lit = s.held;
+      c.save();
+      c.translate(cx + s.cx*R, cy + s.cy*R);
+      pathShard(c, s, R);
+      if (lit){
+        const pulse = 0.5 + 0.5*Math.sin(t*0.006);
+        c.strokeStyle = `hsla(43,100%,72%,${0.35 + pulse*0.35})`;
+        c.lineWidth = 2;
+        c.shadowBlur = 16; c.shadowColor = 'rgba(255,212,121,0.7)';
+      } else {
+        c.strokeStyle = 'hsla(43,80%,66%,0.13)';
+        c.lineWidth = 1;
+        c.shadowBlur = 0;
+      }
+      c.stroke();
+      c.shadowBlur = 0;
+      c.restore();
+    }
+    c.restore();
+  }
+
+  function drawPlacedShards(t){
+    const R = bowlR(), cx = bowlCX(), cy = bowlCY();
+    for (const s of shards){
+      if (!s.placed) continue;
+      const age = Math.min(1, (t - s.placedAt) / 420);
+      ctx.save();
+      ctx.translate(cx + s.cx*R, cy + s.cy*R);
+      pathShard(ctx, s, R);
+      const g = ctx.createLinearGradient(0, -s.r*R, 0, s.r*R);
+      g.addColorStop(0, 'rgba(74,60,58,0.82)');
+      g.addColorStop(1, 'rgba(22,16,20,0.9)');
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(226,214,196,${0.1 + 0.12*age})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+    // gold lacquer seams — only where the break was, never on the outer rim
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const s of shards){
+      if (!s.placed) continue;
+      const age = Math.min(1, (t - s.placedAt) / 620);
+      c.save();
+      c.translate(cx + s.cx*R, cy + s.cy*R);
+      for (let i = 0; i < s.pts.length; i++){
+        const e = s.edges[i];
+        if (!e || !e.interior) continue;
+        const A = s.pts[i], B = s.pts[(i+1) % s.pts.length];
+        const mx = (A.x + B.x)/2, my = (A.y + B.y)/2;
+        const dx = B.x - A.x, dy = B.y - A.y;
+        const len = Math.hypot(dx, dy) || 1e-4;
+        const qx = mx - dy/len * e.wob, qy = my + dx/len * e.wob;
+        c.beginPath();
+        c.moveTo(A.x*R, A.y*R);
+        c.quadraticCurveTo(qx*R, qy*R, B.x*R, B.y*R);
+        c.shadowBlur = 14 + bowlFlash*22; c.shadowColor = 'rgba(255,190,90,0.85)';
+        c.strokeStyle = `hsla(41,100%,${64 + bowlFlash*24}%,${0.5 + 0.4*age})`;
+        c.lineWidth = (2.6 + bowlFlash*2.2) * age;
+        c.lineCap = 'round';
+        c.stroke();
+        // molten highlight running down the middle of the seam
+        c.strokeStyle = `hsla(48,100%,86%,${0.35*age})`;
+        c.lineWidth = 1 * age;
+        c.stroke();
+      }
+      c.shadowBlur = 0;
+      c.restore();
+    }
+    c.restore();
+  }
+
+  function drawFloatingShards(t){
+    const R = bowlR();
+    for (const s of shards){
+      if (s.placed) continue;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(s.rot);
+      pathShard(ctx, s, R);
+      const g = ctx.createLinearGradient(0, -s.r*R, 0, s.r*R);
+      g.addColorStop(0, s.held ? 'rgba(92,74,64,0.88)' : 'rgba(58,50,54,0.8)');
+      g.addColorStop(1, 'rgba(18,14,18,0.88)');
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.strokeStyle = s.held ? 'rgba(255,212,121,0.85)' : 'rgba(196,206,214,0.4)';
+      ctx.lineWidth = s.held ? 2 : 1.1;
+      ctx.stroke();
+      ctx.restore();
+    }
+    // held shards get an additive rim so they read as "in hand"
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const s of shards){
+      if (s.placed || !s.held) continue;
+      const f = fitOf(s);
+      c.save();
+      c.translate(s.x, s.y);
+      c.rotate(s.rot);
+      pathShard(c, s, R);
+      c.shadowBlur = 16; c.shadowColor = 'rgba(255,200,110,0.8)';
+      c.strokeStyle = `hsla(${43 + f.q*90},100%,${68 + f.q*16}%,${0.55 + f.q*0.4})`;
+      c.lineWidth = 2 + f.q*2;
+      c.stroke();
+      c.shadowBlur = 0;
+      c.restore();
+      // a thread of light toward where the piece belongs
+      if (f.pErr > 6){
+        const grad = c.createLinearGradient(s.x, s.y, f.hx, f.hy);
+        grad.addColorStop(0, `hsla(43,100%,75%,${0.1 + f.q*0.5})`);
+        grad.addColorStop(1, 'hsla(43,100%,75%,0)');
+        c.strokeStyle = grad;
+        c.lineWidth = 1 + f.q*2;
+        c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(f.hx, f.hy); c.stroke();
+      }
+    }
+    c.restore();
+  }
+
+  function drawHands(list){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (const h of list){
+      const tx = sx(h.tx), ty = sy(h.ty), ix = sx(h.ix), iy = sy(h.iy);
+      const on = h.pinchNorm < PINCH_OFF;
+      const hue = on ? 43 : 168;
+      c.strokeStyle = `hsla(${hue},100%,72%,${on ? 0.85 : 0.35})`;
+      c.lineWidth = on ? 2.4 : 1.2;
+      c.lineCap = 'round';
+      c.beginPath(); c.moveTo(tx, ty); c.lineTo(ix, iy); c.stroke();
+      for (const [x, y] of [[tx,ty],[ix,iy]]){
+        const rad = on ? 9 : 6;
+        const g = c.createRadialGradient(x, y, 0, x, y, rad*2.2);
+        g.addColorStop(0, `hsla(${hue},100%,86%,0.9)`);
+        g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
+        c.fillStyle = g;
+        c.beginPath(); c.arc(x, y, rad*2.2, 0, Math.PI*2); c.fill();
+      }
+    }
+    c.restore();
+  }
+
+  function updateDrawSparks(){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    for (let i = sparks.length - 1; i >= 0; i--){
+      const p = sparks[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.012; p.vx *= 0.985; p.vy *= 0.985;
+      p.life -= p.decay;
+      if (p.life <= 0){ sparks.splice(i, 1); continue; }
+      c.fillStyle = `hsla(${p.hue},100%,${62 + p.life*28}%,${p.life*0.9})`;
+      c.beginPath(); c.arc(p.x, p.y, p.r*p.life, 0, Math.PI*2); c.fill();
+    }
+    for (let i = ripples.length - 1; i >= 0; i--){
+      const r = ripples[i];
+      r.r += 4.6; r.a *= 0.93;
+      if (r.a < 0.02){ ripples.splice(i, 1); continue; }
+      c.strokeStyle = `hsla(43,100%,74%,${r.a})`;
+      c.lineWidth = 2;
+      c.beginPath(); c.arc(r.x, r.y, r.r, 0, Math.PI*2); c.stroke();
+    }
+    c.restore();
+  }
+
+  function updateDrawPopups(){
+    for (let i = popups.length - 1; i >= 0; i--){
+      const p = popups[i];
+      p.y += p.vy; p.life -= 0.014;
+      if (p.life <= 0){ popups.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life*1.4));
+      ctx.fillStyle = p.color;
+      ctx.font = '800 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 12; ctx.shadowColor = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+  }
+
+  function drawCountdown(label, q){
+    const scale = 1 + (1 - Math.min(1, q/0.3)) * 0.55;
+    const alpha = q > 0.75 ? 1 - (q - 0.75)/0.25 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(W/2, H*0.4);
+    ctx.scale(scale, scale);
+    ctx.font = '800 78px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 28; ctx.shadowColor = 'rgba(255,212,121,0.9)';
+    ctx.fillStyle = '#ffd479';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND SLOT MATCHING + GRAB LOGIC
+  // ---------------------------------------------------------------------------
+  function assignSlots(list){
+    const used = new Array(list.length).fill(false);
+    const assigned = [null, null];
+    const reach = Math.max(W, H) * 0.42;
+    for (let s = 0; s < 2; s++){
+      if (!slots[s].pos) continue;
+      let best = -1, bd = Infinity;
+      for (let i = 0; i < list.length; i++){
+        if (used[i]) continue;
+        const d = Math.hypot(list[i].px - slots[s].pos.x, list[i].py - slots[s].pos.y);
+        if (d < bd){ bd = d; best = i; }
+      }
+      if (best >= 0 && bd < reach){ assigned[s] = list[best]; used[best] = true; }
+    }
+    for (let s = 0; s < 2; s++){
+      if (assigned[s]) continue;
+      for (let i = 0; i < list.length; i++){
+        if (!used[i]){ assigned[s] = list[i]; used[i] = true; break; }
+      }
+    }
+    return assigned;
+  }
+
+  function tryGrab(slot, hx, hy){
+    const R = bowlR();
+    let best = null, bd = Infinity;
+    for (const s of shards){
+      if (s.placed || s.held) continue;
+      const d = Math.hypot(s.x - hx, s.y - hy);
+      const reach = Math.max(52, s.r * R * 1.05);
+      if (d < reach && d < bd){ bd = d; best = s; }
+    }
+    if (!best) return;
+    best.held = true;
+    slot.hold = best;
+    best.vx = 0; best.vy = 0; best.vrot = 0;
+    if (audioReady) tickSound(actx.currentTime);
+    spawnSparks(best.x, best.y, 6, 1.6);
+  }
+
+  function release(slot, throwIt){
+    const s = slot.hold;
+    slot.hold = null;
+    if (!s || s.placed) return;
+    s.held = false;
+    if (state !== 'playing') return;   // never score a piece outside the round
+    const f = fitOf(s);
+    if (f.pErr < f.tol && f.aErr < ANG_TOL){
+      placeShard(s, f);
+    } else {
+      if (throwIt){
+        s.vx = Math.max(-6, Math.min(6, slot.vx * 0.25));
+        s.vy = Math.max(-6, Math.min(6, slot.vy * 0.25));
+      }
+      if (audioReady) dropSound(actx.currentTime);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+    const R = bowlR();
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+      shake *= 0.86;
+    }
+    drawVideoBase();
+
+    // fade the glow layer -> lacquer afterglow
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.2)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    // ---- hands ----
+    const fresh = (t - RESULT.t) < 400;
+    const list = fresh ? RESULT.hands.map(h => {
+      const px = (sx(h.tx) + sx(h.ix)) / 2;
+      const py = (sy(h.ty) + sy(h.iy)) / 2;
+      return {
+        tx: h.tx, ty: h.ty, ix: h.ix, iy: h.iy, pinchNorm: h.pinchNorm,
+        px, py, ang: Math.atan2(sy(h.iy) - sy(h.ty), sx(h.ix) - sx(h.tx))
+      };
+    }) : [];
+    const assigned = assignSlots(list);
+
+    for (let i = 0; i < 2; i++){
+      const slot = slots[i];
+      const h = assigned[i];
+      if (!h){
+        if (slot.hold) release(slot, false);
+        slot.pos = null; slot.prev = null; slot.vx = 0; slot.vy = 0; slot.pinching = false;
+        continue;
+      }
+      slot.prev = slot.pos;
+      slot.pos = { x: h.px, y: h.py };
+      if (slot.prev){
+        slot.vx = slot.pos.x - slot.prev.x;
+        slot.vy = slot.pos.y - slot.prev.y;
+      } else { slot.vx = 0; slot.vy = 0; }
+
+      const wasPinching = slot.pinching;
+      if (!wasPinching && h.pinchNorm < PINCH_ON) slot.pinching = true;
+      else if (wasPinching && h.pinchNorm > PINCH_OFF) slot.pinching = false;
+
+      if (state === 'playing'){
+        if (slot.pinching && !wasPinching){
+          slot.lastAng = h.ang;
+          tryGrab(slot, h.px, h.py);
+        } else if (!slot.pinching && wasPinching && slot.hold){
+          release(slot, true);
+        }
+      } else if (slot.hold){
+        release(slot, false);
+      }
+
+      const s = slot.hold;
+      if (s && !s.placed){
+        s.x += (h.px - s.x) * 0.55;
+        s.y += (h.py - s.y) * 0.55;
+        s.rot += angNorm(h.ang - slot.lastAng);
+        // magnetic auto-snap once it is very nearly right
+        const f = fitOf(s);
+        if (f.pErr < f.tol * SNAP_POS && f.aErr < ANG_TOL * SNAP_ANG){
+          placeShard(s, f);
+        }
+      }
+      slot.lastAng = h.ang;
+    }
+
+    // ---- timers ----
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx < COUNTDOWN_LABELS.length){
+        drawCountdown(COUNTDOWN_LABELS[idx], (el % COUNTDOWN_STEP) / COUNTDOWN_STEP);
+      } else {
+        state = 'playing';
+        roundStart = t;
+        lastTickSecond = -1;
+      }
+    }
+
+    if (state === 'playing'){
+      const elapsed = t - roundStart;
+      timeLeft = Math.max(0, ROUND_MS + extraMs - elapsed);
+      const sec = Math.ceil(timeLeft / 1000);
+      if (sec !== lastTickSecond){
+        lastTickSecond = sec;
+        timeEl.textContent = sec;
+        timeEl.classList.toggle('low', sec <= 10);
+        if (sec <= 10 && sec > 0 && audioReady) tickWarn(actx.currentTime);
+      }
+      if (bowlDone && t >= nextBowlAt) newBowl();
+      if (timeLeft <= 0) endGame();
+    }
+
+    // ---- drifting pieces ----
+    for (const s of shards){
+      if (s.placed || s.held) continue;
+      s.x += s.vx; s.y += s.vy; s.rot += s.vrot;
+      s.vx *= 0.992; s.vy *= 0.992; s.vrot *= 0.99;
+      // a slow tide so nothing ever comes to a dead stop
+      s.vx += Math.sin(t*0.0004 + s.idx*1.7) * 0.006;
+      s.vy += Math.cos(t*0.00035 + s.idx*2.3) * 0.005;
+      const m = 26 + s.r * R;
+      const top = 80, bot = H - 130;
+      if (s.x < m){ s.x = m; s.vx = Math.abs(s.vx) * 0.7; }
+      if (s.x > W - m){ s.x = W - m; s.vx = -Math.abs(s.vx) * 0.7; }
+      if (s.y < top + s.r*R*0.3){ s.y = top + s.r*R*0.3; s.vy = Math.abs(s.vy) * 0.7; }
+      if (s.y > bot - s.r*R*0.3){ s.y = bot - s.r*R*0.3; s.vy = -Math.abs(s.vy) * 0.7; }
+      const sp = Math.hypot(s.vx, s.vy);
+      if (sp > 3.2){ s.vx = s.vx/sp*3.2; s.vy = s.vy/sp*3.2; }
+    }
+
+    // ---- guide tone from the best-fitting held shard ----
+    let bestQ = 0, holding = false;
+    for (const slot of slots){
+      if (slot.hold && !slot.hold.placed){
+        holding = true;
+        bestQ = Math.max(bestQ, fitOf(slot.hold).q);
+      }
+    }
+    setGuideTone(holding ? bestQ : 0);
+
+    // ---- draw ----
+    drawBowlGuide(t);
+    drawGhostTargets(t);
+    drawPlacedShards(t);
+    drawFloatingShards(t);
+    drawHands(list);
+    updateDrawSparks();
+
+    bowlFlash *= 0.965;
+    goldGlow *= 0.92;
+    goldFlashEl.style.background = `rgba(255,212,121,${(goldGlow*0.16).toFixed(3)})`;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    updateDrawPopups();
+    ctx.restore(); // shake
+
+    // ---- state line ----
+    if (state === 'playing'){
+      if (bowlDone){
+        stateDot.textContent = '✦ 器が甦った';
+        stateDot.className = 'fit';
+      } else if (holding){
+        if (bestQ > 0.7){ stateDot.textContent = 'あと少し ─ 指をひらく'; stateDot.className = 'fit'; }
+        else if (bestQ > 0.28){ stateDot.textContent = '近い ─ 角度を合わせて'; stateDot.className = 'warm'; }
+        else { stateDot.textContent = '器の跡へ運ぶ'; stateDot.className = ''; }
+      } else if (!list.length){
+        stateDot.textContent = '手をかざしてください';
+        stateDot.className = 'silent';
+      } else {
+        stateDot.textContent = 'かけらをつまむ';
+        stateDot.className = '';
+      }
+    } else if (state === 'countdown'){
+      stateDot.textContent = 'まもなく';
+      stateDot.className = 'warm';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+          throw new Error('手検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+        }
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        if (!hands) initHands();
+        await startStream();
+        await startCameraLoop();
+        running = true;
+        booted = true;
+        requestAnimationFrame(frame);
+      } else {
+        if (actx && actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      guideBtn.classList.toggle('active', guideOn);
+      resultBox.style.display = 'none';
+      eyebrow.style.display = 'block';
+      titleEl.textContent = 'KINTSUGI';
+      subEl.textContent = '割れた器を、指先で継ぎ直す';
+      hintEl.style.display = 'block';
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+      startGame();
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+
+  resize();
+})();
+</script>
+</body>
+</html>
