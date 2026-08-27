@@ -874,13 +874,15 @@
       c.save();
       c.translate(cx + s.cx*R, cy + s.cy*R);
       pathShard(c, s, R);
+      // NOTE: these outlines are static, and the glow layer only fades 20% a
+      // frame — so what lands on screen is ~5x the alpha written here.
       if (lit){
         const pulse = 0.5 + 0.5*Math.sin(t*0.006);
-        c.strokeStyle = `hsla(43,100%,72%,${0.35 + pulse*0.35})`;
+        c.strokeStyle = `hsla(43,100%,72%,${0.08 + pulse*0.08})`;
         c.lineWidth = 2;
-        c.shadowBlur = 16; c.shadowColor = 'rgba(255,212,121,0.7)';
+        c.shadowBlur = 10; c.shadowColor = 'rgba(255,212,121,0.5)';
       } else {
-        c.strokeStyle = 'hsla(43,80%,66%,0.13)';
+        c.strokeStyle = 'hsla(43,80%,66%,0.035)';
         c.lineWidth = 1;
         c.shadowBlur = 0;
       }
@@ -929,14 +931,16 @@
         c.beginPath();
         c.moveTo(A.x*R, A.y*R);
         c.quadraticCurveTo(qx*R, qy*R, B.x*R, B.y*R);
-        c.shadowBlur = 14 + bowlFlash*22; c.shadowColor = 'rgba(255,190,90,0.85)';
-        c.strokeStyle = `hsla(41,100%,${64 + bowlFlash*24}%,${0.5 + 0.4*age})`;
-        c.lineWidth = (2.6 + bowlFlash*2.2) * age;
+        // 0.2/frame accumulates to a saturated gold without clipping to white;
+        // the flash on completion deliberately pushes past that into a flare
+        c.shadowBlur = 10 + bowlFlash*20; c.shadowColor = 'rgba(255,190,90,0.5)';
+        c.strokeStyle = `hsla(41,100%,${64 + bowlFlash*24}%,${(0.06 + 0.14*age) * (1 + bowlFlash)})`;
+        c.lineWidth = Math.max(0.4, (2.6 + bowlFlash*2.2) * age);
         c.lineCap = 'round';
         c.stroke();
         // molten highlight running down the middle of the seam
-        c.strokeStyle = `hsla(48,100%,86%,${0.35*age})`;
-        c.lineWidth = 1 * age;
+        c.strokeStyle = `hsla(48,100%,86%,${0.04*age})`;
+        c.lineWidth = Math.max(0.4, 1 * age);
         c.stroke();
       }
       c.shadowBlur = 0;
@@ -974,8 +978,8 @@
       c.translate(s.x, s.y);
       c.rotate(s.rot);
       pathShard(c, s, R);
-      c.shadowBlur = 16; c.shadowColor = 'rgba(255,200,110,0.8)';
-      c.strokeStyle = `hsla(${43 + f.q*90},100%,${68 + f.q*16}%,${0.55 + f.q*0.4})`;
+      c.shadowBlur = 12; c.shadowColor = 'rgba(255,200,110,0.5)';
+      c.strokeStyle = `hsla(${43 + f.q*90},100%,${68 + f.q*16}%,${0.14 + f.q*0.1})`;
       c.lineWidth = 2 + f.q*2;
       c.stroke();
       c.shadowBlur = 0;
@@ -983,7 +987,7 @@
       // a thread of light toward where the piece belongs
       if (f.pErr > 6){
         const grad = c.createLinearGradient(s.x, s.y, f.hx, f.hy);
-        grad.addColorStop(0, `hsla(43,100%,75%,${0.1 + f.q*0.5})`);
+        grad.addColorStop(0, `hsla(43,100%,75%,${0.04 + f.q*0.16})`);
         grad.addColorStop(1, 'hsla(43,100%,75%,0)');
         c.strokeStyle = grad;
         c.lineWidth = 1 + f.q*2;
@@ -1001,14 +1005,14 @@
       const tx = sx(h.tx), ty = sy(h.ty), ix = sx(h.ix), iy = sy(h.iy);
       const on = h.pinchNorm < PINCH_OFF;
       const hue = on ? 43 : 168;
-      c.strokeStyle = `hsla(${hue},100%,72%,${on ? 0.85 : 0.35})`;
+      c.strokeStyle = `hsla(${hue},100%,72%,${on ? 0.3 : 0.12})`;
       c.lineWidth = on ? 2.4 : 1.2;
       c.lineCap = 'round';
       c.beginPath(); c.moveTo(tx, ty); c.lineTo(ix, iy); c.stroke();
       for (const [x, y] of [[tx,ty],[ix,iy]]){
         const rad = on ? 9 : 6;
         const g = c.createRadialGradient(x, y, 0, x, y, rad*2.2);
-        g.addColorStop(0, `hsla(${hue},100%,86%,0.9)`);
+        g.addColorStop(0, `hsla(${hue},100%,86%,0.32)`);
         g.addColorStop(1, `hsla(${hue},100%,60%,0)`);
         c.fillStyle = g;
         c.beginPath(); c.arc(x, y, rad*2.2, 0, Math.PI*2); c.fill();
