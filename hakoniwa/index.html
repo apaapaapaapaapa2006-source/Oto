@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04030b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="画面が奥深い箱庭を覗く窓になる。顔を左右上下に動かすと視差で奥行きがずれ、柱の陰に隠れた灯が姿を現す。覗きこんで灯を捕らえるカメラゲーム - HAKONIWA">
+<title>HAKONIWA ─ 覗きこむ箱庭</title>
+<style>
+  :root{
+    --void:#04030b; --haze:#100a22; --ghost:#eef2ff;
+    --amber:#ffcf6b; --rose:#ff7ab0; --cyan:#7de8ff; --violet:#9a7bff; --warn:#ff5470;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  /* glass pane over the "window" */
+  #glass{ position:fixed; inset:0; z-index:6; pointer-events:none; mix-blend-mode:screen; opacity:.5;
+    background:linear-gradient(128deg, rgba(190,215,255,0.055) 0%, rgba(190,215,255,0) 34%,
+      rgba(190,215,255,0) 66%, rgba(190,215,255,0.03) 100%); }
+  #flash{ position:fixed; inset:0; z-index:7; pointer-events:none; background:rgba(255,207,107,0.0); }
+
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .7s ease, visibility .7s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(46px); opacity:.34; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--amber),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--violet),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--cyan),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.14); } }
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.2rem; font-weight:800; letter-spacing:0.14em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--amber),var(--rose),var(--violet),var(--cyan),var(--amber));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:1.6rem;
+    position:relative; white-space:pre-line; }
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,var(--amber),var(--violet)); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(154,123,255,0.45);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(154,123,255,0.42); }
+    50%{ box-shadow:0 0 44px rgba(255,207,107,0.55); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{ position:relative; margin-top:2.1rem; max-width:23rem; color:rgba(238,242,255,0.5); font-size:0.76rem;
+    line-height:1.9; letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--amber); font-weight:700; }
+  #hint em{ color:var(--cyan); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn);
+    font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+  #resultBox{ display:none; position:relative; margin-bottom:1.5rem; }
+  #resultBox .rlab{ font-size:0.62rem; letter-spacing:0.3em; color:rgba(238,242,255,0.45); }
+  #resultBox .rscore{ font-size:2.6rem; font-weight:800; color:var(--amber); line-height:1.3; font-variant-numeric:tabular-nums; }
+  #resultBox .rsub{ font-size:0.76rem; color:rgba(238,242,255,0.6); letter-spacing:0.04em; line-height:1.8; }
+
+  /* ---- HUD ---- */
+  #hud{ position:fixed; z-index:12; left:0; right:0; top:0;
+    display:flex; align-items:flex-start; justify-content:space-between; padding:1.1rem 1rem 0;
+    pointer-events:none; opacity:0; transition:opacity .6s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(8,6,20,0.46); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(180,180,255,0.16); border-radius:14px; padding:0.6rem 0.9rem;
+    color:var(--ghost); min-width:112px; }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.25rem; }
+  .panel .val{ font-size:1.5rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--amber); }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .val{ color:var(--cyan); }
+  .panel[data-side="r"] .val.low{ color:var(--warn); }
+  .subLab{ font-size:0.62rem; letter-spacing:0.08em; color:rgba(238,242,255,0.5); margin-top:0.3rem; }
+  .meter{ height:3px; border-radius:2px; background:rgba(238,242,255,0.1); margin-top:0.4rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%; border-radius:2px;
+    background:linear-gradient(90deg,var(--cyan),var(--violet)); transition:width .1s linear; }
+  .mlab{ font-size:0.52rem; letter-spacing:0.14em; color:rgba(238,242,255,0.38); margin-top:0.3rem; }
+
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:1.4rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #centerHud.show{ opacity:1; }
+  #stateDot{ font-size:0.66rem; letter-spacing:0.16em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.1rem; border-radius:100px; border:1px solid rgba(180,180,255,0.16);
+    background:rgba(8,6,20,0.46); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .22s ease, border-color .22s ease, box-shadow .22s ease; white-space:nowrap; }
+  #stateDot.hot{ color:var(--amber); border-color:rgba(255,207,107,0.55); box-shadow:0 0 18px rgba(255,207,107,0.28); }
+  #stateDot.near{ color:var(--cyan); border-color:rgba(125,232,255,0.45); box-shadow:0 0 14px rgba(125,232,255,0.2); }
+  #stateDot.silent{ color:rgba(150,150,175,0.8); border-color:rgba(120,120,150,0.32); box-shadow:none; }
+
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 1rem 0; display:flex; gap:.5rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.66rem; letter-spacing:0.08em; font-weight:700;
+    color:var(--ghost); background:rgba(8,6,20,0.5); border:1px solid rgba(180,180,255,0.18);
+    border-radius:100px; padding:0.48rem 0.82rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease; white-space:nowrap; }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(125,232,255,0.14); border-color:rgba(125,232,255,0.5); color:var(--cyan); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.15rem 0 0 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; display:none; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.3em; color:rgba(238,242,255,0.85); }
+  #brand .b2{ font-size:0.56rem; letter-spacing:0.2em; color:rgba(238,242,255,0.4); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="glass"></div>
+  <div id="flash"></div>
+
+  <div id="brand"><div class="b1">HAKONIWA</div><div class="b2">覗きこむ箱庭</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="recenterBtn">中心リセット</button>
+    <button class="btn" id="guideBtn">ヒント ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">SCORE</div>
+      <div class="val" id="scoreEl">0</div>
+      <div class="subLab">COMBO <span id="comboEl">0</span></div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">TIME</div>
+      <div class="val" id="timeEl">70</div>
+      <div class="subLab">捕獲 <span id="capEl">0</span> ・ 逃走 <span id="fleeEl">0</span></div>
+      <div class="meter"><b id="leanXEl"></b></div>
+      <div class="meter"><b id="leanZEl"></b></div>
+      <div class="mlab" id="leanTxt">左右の傾き ／ 奥行き</div>
+    </div>
+  </div>
+
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA GAME</div>
+    <div id="resultBox">
+      <div class="rlab">TIME UP</div>
+      <div class="rscore" id="finalScore">0</div>
+      <div class="rsub" id="finalSub"></div>
+    </div>
+    <div id="title">HAKONIWA</div>
+    <div id="sub">画面は箱庭を覗く窓。顔を動かして、柱の陰をのぞきこめ</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・画面の奥に<b>光の柱が立ち並ぶ箱庭</b>があります。柱の陰には<b>灯（ともしび）</b>が隠れています<br>
+      ・<b>顔を左右・上下に動かす</b>と、窓の外を覗くように<em>視差</em>で奥行きがずれ、柱の陰から灯が現れます<br>
+      ・カメラに<b>近づくと視野が広がり</b>、離れると拡大されます。背の低い柱は<b>のけぞる／かがむ</b>のが近道<br>
+      ・灯が完全に見えた状態を<b>約1秒保つ</b>と捕獲。近づくほど灯の音が高く澄みます<br>
+      ・放置した灯は逃げてコンボが切れます。制限時間は<b>70秒</b>
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas     = document.getElementById('stage');
+  const ctx        = canvas.getContext('2d');
+  const video      = document.getElementById('video');
+  const overlay    = document.getElementById('overlay');
+  const startBtn   = document.getElementById('startBtn');
+  const errorMsg   = document.getElementById('errorMsg');
+  const hud        = document.getElementById('hud');
+  const topbar     = document.getElementById('topbar');
+  const brand      = document.getElementById('brand');
+  const centerHud  = document.getElementById('centerHud');
+  const stateDot   = document.getElementById('stateDot');
+  const flipBtn    = document.getElementById('flipBtn');
+  const recenterBtn= document.getElementById('recenterBtn');
+  const guideBtn   = document.getElementById('guideBtn');
+  const scoreEl    = document.getElementById('scoreEl');
+  const comboEl    = document.getElementById('comboEl');
+  const timeEl     = document.getElementById('timeEl');
+  const capEl      = document.getElementById('capEl');
+  const fleeEl     = document.getElementById('fleeEl');
+  const leanXEl    = document.getElementById('leanXEl');
+  const leanZEl    = document.getElementById('leanZEl');
+  const leanTxt    = document.getElementById('leanTxt');
+  const resultBox  = document.getElementById('resultBox');
+  const finalScore = document.getElementById('finalScore');
+  const finalSub   = document.getElementById('finalSub');
+  const eyebrow    = document.getElementById('eyebrow');
+  const titleEl    = document.getElementById('title');
+  const subEl      = document.getElementById('sub');
+  const hintEl     = document.getElementById('hint');
+  const flashEl    = document.getElementById('flash');
+
+  // additive glow layer
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1, S = 1, A = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    S = W / 2;          // world unit -> px (window half-width == 1)
+    A = H / W;          // window half-height in world units
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const clamp   = (v,a,b) => v < a ? a : (v > b ? b : v);
+  const clamp01 = (v) => v < 0 ? 0 : (v > 1 ? 1 : v);
+
+  // ---------------------------------------------------------------------------
+  //  WORLD CONSTANTS
+  //  The screen is a window at z = 0. The eye floats in front of it at +z,
+  //  the diorama lies behind it at -depth. Everything is an honest off-axis
+  //  (head-coupled) perspective projection, which is what makes leaning work.
+  // ---------------------------------------------------------------------------
+  const ROUND_MS   = 70000;
+  const HOLD_MS    = 950;      // exposure time needed to capture a light
+  const DECAY_MS   = 1500;     // charge bleed-off while hidden again
+  const SLOTS      = 4;        // lights alive at once
+  const EYE_Z0     = 2.3;      // neutral eye distance from the window
+  const FLOOR_Y    = -1.45;
+  const CEIL_Y     = 2.90;
+  const NP         = 11;       // pillars
+  const SOFT       = 0.24;     // clearance softness -> "hot / cold" feel
+  const SPIRIT_R   = 0.075;
+  const RELOCATE_MS= 24000;   // how long a light waits before giving up on you
+  const GAIN_X = 6.0, GAIN_Y = 5.2;
+  const EYE_X_MAX = 1.35, EYE_Y_MAX = 1.0;
+  const EYE_Z_MIN = 1.15, EYE_Z_MAX = 3.9;
+  const SAMPLE_F  = 0.8;       // solvability search stays well inside the range
+  const MAX_COST  = 1.30;      // hardest head pose a light is allowed to demand
+
+  const ROOT  = 220;                              // A3
+  const SCALE = [0, 2, 3, 7, 9, 12, 14, 15, 19];  // kumoi — dreamy, Japanese
+  const HUES  = [42, 328, 172, 286];
+
+  function ratio(semi){ return Math.pow(2, semi/12); }
+  function fogOf(d){ return Math.exp(-d * 0.27); }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, sfxBus = null, padBus = null;
+  let convolver = null, revGain = null, delay = null, fbGain = null, wetGain = null;
+  let droneGain = null, droneFilter = null, airGain = null;
+  let audioReady = false;
+  const voices = [];
+  const noiseBuf = { buf: null };
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate*seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch=0; ch<2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate*seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    return buf;
+  }
+
+  function makeVoice(){
+    const o  = actx.createOscillator(); o.type = 'sine';     o.frequency.value = ROOT;
+    const o2 = actx.createOscillator(); o2.type = 'triangle'; o2.frequency.value = ROOT*2; o2.detune.value = 7;
+    const g2 = actx.createGain(); g2.gain.value = 0.34;
+    const f  = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500; f.Q.value = 1.2;
+    const g  = actx.createGain(); g.gain.value = 0;
+    const pan= actx.createStereoPanner ? actx.createStereoPanner() : actx.createGain();
+    o.connect(f); o2.connect(g2); g2.connect(f); f.connect(g); g.connect(pan); pan.connect(padBus);
+    o.start(); o2.start();
+    return { o, o2, f, g, pan };
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -17; comp.knee.value = 22; comp.ratio.value = 3.2;
+    comp.attack.value = 0.005;  comp.release.value = 0.26;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(3.1, 2.3);
+    revGain = actx.createGain(); revGain.gain.value = 0.34;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    padBus = actx.createGain(); padBus.gain.value = 0.85;
+
+    delay  = actx.createDelay(1.2); delay.delayTime.value = 0.42;
+    fbGain = actx.createGain();     fbGain.gain.value = 0.32;
+    wetGain= actx.createGain();     wetGain.gain.value = 0.22;
+    padBus.connect(delay); delay.connect(fbGain); fbGain.connect(delay); delay.connect(wetGain);
+    wetGain.connect(master); wetGain.connect(convolver);
+
+    sfxBus.connect(master); sfxBus.connect(convolver);
+    padBus.connect(master); padBus.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(1.0);
+
+    // deep hall drone
+    droneFilter = actx.createBiquadFilter();
+    droneFilter.type = 'lowpass'; droneFilter.frequency.value = 210; droneFilter.Q.value = 3;
+    droneGain = actx.createGain(); droneGain.gain.value = 0.075;
+    for (const f of [55, 82.5]){
+      const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+      const g = actx.createGain(); g.gain.value = f > 60 ? 0.35 : 0.6;
+      o.connect(g); g.connect(droneFilter); o.start();
+    }
+    droneFilter.connect(droneGain); droneGain.connect(padBus);
+
+    // breath of air in the box
+    const air = actx.createBufferSource(); air.buffer = makeNoiseBuffer(3.0); air.loop = true;
+    const airBp = actx.createBiquadFilter(); airBp.type = 'bandpass'; airBp.frequency.value = 640; airBp.Q.value = 0.7;
+    airGain = actx.createGain(); airGain.gain.value = 0.014;
+    air.connect(airBp); airBp.connect(airGain); airGain.connect(padBus);
+    air.start();
+
+    for (let i=0;i<SLOTS;i++) voices.push(makeVoice());
+
+    audioReady = true;
+  }
+
+  function chime(freq){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const partials = [[1,0.17,1.7],[2,0.10,1.2],[3.01,0.05,0.85],[4.2,0.028,0.6]];
+    for (let i=0;i<partials.length;i++){
+      const r = partials[i][0], a = partials[i][1], dur = partials[i][2];
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq*r;
+      const g = actx.createGain();
+      const st = t + i*0.035;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(a, st+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, st+dur);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st+dur+0.06);
+    }
+  }
+
+  function ping(freq){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(freq, t);
+    o.frequency.exponentialRampToValueAtTime(freq*1.5, t+0.12);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.26);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t+0.3);
+  }
+
+  function whoosh(){
+    if (!audioReady || !noiseBuf.buf) return;
+    const t = actx.currentTime;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
+    bp.frequency.setValueAtTime(1900, t);
+    bp.frequency.exponentialRampToValueAtTime(300, t+0.5);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t+0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.55);
+    src.connect(bp); bp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t+0.6);
+  }
+
+  function comboStinger(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    [0,3,7,12].forEach((semi,i) => {
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = ROOT*2*ratio(semi);
+      const g = actx.createGain();
+      const st = t + i*0.055;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.13, st+0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, st+0.42);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st+0.45);
+    });
+  }
+
+  function tickWarn(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = 1320;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t+0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.1);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t+0.12);
+  }
+
+  function endChord(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    [0,-5,-12].forEach((semi,i) => {
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = ROOT*ratio(semi);
+      const g = actx.createGain();
+      const st = t + i*0.2;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.16, st+0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, st+1.3);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st+1.35);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  //  FACE TRACKING  (MediaPipe tasks-vision FaceLandmarker)
+  // ---------------------------------------------------------------------------
+  let faceLandmarker = null;
+  let lastDetectTs = -1;
+  const RESULT = { raw: null, t: 0 };
+
+  async function initFaceModel(){
+    const { FaceLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+    const fileset = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+    faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
+      baseOptions:{
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        delegate: 'GPU'
+      },
+      outputFaceBlendshapes: false,
+      runningMode: 'VIDEO',
+      numFaces: 1
+    });
+  }
+
+  function detectFace(){
+    if (!faceLandmarker || !video.videoWidth) return;
+    let now = performance.now();
+    if (now <= lastDetectTs) now = lastDetectTs + 1;
+    lastDetectTs = now;
+    let result = null;
+    try { result = faceLandmarker.detectForVideo(video, now); } catch(e){ result = null; }
+    if (!result) return;
+
+    const lms = result.faceLandmarks;
+    if (!lms || !lms.length) return;
+    const lm = lms[0];
+    if (!lm || lm.length < 468) return;
+
+    const outerR = lm[33], outerL = lm[263], innerR = lm[133], innerL = lm[362];
+    if (!outerR || !outerL || !innerR || !innerL) return;
+
+    const cx = (outerR.x + outerL.x + innerR.x + innerL.x) / 4;
+    const cy = (outerR.y + outerL.y + innerR.y + innerL.y) / 4;
+    const aspect = (video.videoWidth && video.videoHeight) ? (video.videoWidth / video.videoHeight) : (16/9);
+    // eye baseline in units of frame height -> a stable proxy for how close you are
+    const span = Math.hypot((outerR.x - outerL.x) * aspect, outerR.y - outerL.y);
+    if (!(span > 0.001)) return;
+
+    RESULT.raw = { nx: mirror ? (1 - cx) : cx, ny: cy, d: span };
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    base = null; calSum = null; calCount = 0;
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let recenterFlash = 0;
+  recenterBtn.addEventListener('click', () => {
+    if (!RESULT.raw) return;
+    base = { nx: RESULT.raw.nx, ny: RESULT.raw.ny, d: RESULT.raw.d };
+    calSum = null; calCount = 0;
+    recenterBtn.classList.add('active');
+    if (recenterFlash) clearTimeout(recenterFlash);
+    recenterFlash = setTimeout(() => recenterBtn.classList.remove('active'), 480);
+    ping(ROOT * 2);
+  });
+
+  let guideOn = true;
+  guideBtn.addEventListener('click', () => {
+    guideOn = !guideOn;
+    guideBtn.textContent = guideOn ? 'ヒント ON' : 'ヒント OFF';
+    guideBtn.classList.toggle('active', guideOn);
+  });
+
+  // ---------------------------------------------------------------------------
+  //  EYE (head-coupled viewpoint)
+  // ---------------------------------------------------------------------------
+  const eye = { x: 0, y: 0, z: EYE_Z0 };
+  let base = null, calSum = null, calCount = 0;
+  let faceFresh = false;
+
+  function feedCalibration(raw){
+    if (!calSum) calSum = { nx:0, ny:0, d:0 };
+    calSum.nx += raw.nx; calSum.ny += raw.ny; calSum.d += raw.d; calCount++;
+  }
+  function commitCalibration(){
+    if (calCount > 0 && calSum){
+      base = { nx: calSum.nx/calCount, ny: calSum.ny/calCount, d: calSum.d/calCount };
+    }
+    calSum = null; calCount = 0;
+  }
+
+  function updateEye(t){
+    faceFresh = !!RESULT.raw && (t - RESULT.t) < 500;
+    const raw = faceFresh ? RESULT.raw : null;
+    if (raw && !base) base = { nx: raw.nx, ny: raw.ny, d: raw.d };
+
+    let tx = eye.x, ty = eye.y, tz = eye.z;
+    if (raw && base){
+      tx = clamp((raw.nx - base.nx) * GAIN_X, -EYE_X_MAX, EYE_X_MAX);
+      ty = clamp((base.ny - raw.ny) * GAIN_Y, -EYE_Y_MAX, EYE_Y_MAX);
+      tz = clamp(EYE_Z0 * (base.d / Math.max(1e-4, raw.d)), EYE_Z_MIN, EYE_Z_MAX);
+    }
+    eye.x += (tx - eye.x) * 0.24;
+    eye.y += (ty - eye.y) * 0.24;
+    eye.z += (tz - eye.z) * 0.16;
+  }
+
+  // world -> window plane -> screen
+  function projX(wx){ return W/2 + wx * S; }
+  function projY(wy){ return H/2 - wy * S; }
+  function shrink(d, e){ return e.z / (e.z + d); }
+
+  // ---------------------------------------------------------------------------
+  //  SCENE
+  // ---------------------------------------------------------------------------
+  let pillars = [];
+  let motes = [];
+
+  function makePillars(){
+    const arr = [];
+    for (let i=0;i<NP;i++){
+      const d = 0.85 + (i/(NP-1))*1.75 + (Math.random()-0.5)*0.22;
+      const x = (Math.random()*2 - 1) * 1.15;
+      const hw = 0.10 + Math.random()*0.10;
+      const k = Math.random();
+      const top = k < 0.42 ? CEIL_Y : (k < 0.74 ? 0.95 + Math.random()*0.45 : 0.34 + Math.random()*0.30);
+      arr.push({
+        x, cx: x, d, hw, top,
+        hue: 204 + Math.random()*72,
+        ph: Math.random()*Math.PI*2,
+        amp: 0.010 + Math.random()*0.018
+      });
+    }
+    arr.sort((a,b) => b.d - a.d);
+    return arr;
+  }
+
+  function makeMotes(){
+    const arr = [];
+    for (let i=0;i<64;i++){
+      arr.push({
+        x: (Math.random()*2-1)*3.2,
+        y: FLOOR_Y + Math.random()*(CEIL_Y - FLOOR_Y),
+        d: 0.5 + Math.random()*5.6,
+        v: 0.00006 + Math.random()*0.00022,
+        ph: Math.random()*Math.PI*2
+      });
+    }
+    return arr;
+  }
+
+  function updateWorld(t, dt){
+    for (const p of pillars) p.cx = p.x + Math.sin(t*0.00023 + p.ph) * p.amp;
+    for (const m of motes){
+      m.y += m.v * dt;
+      if (m.y > CEIL_Y){ m.y = FLOOR_Y; m.x = (Math.random()*2-1)*3.2; }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  OCCLUSION
+  //  clearance > 0  => the light is visible past every pillar in front of it
+  // ---------------------------------------------------------------------------
+  function clearance(s, e){
+    let m = 1;
+    for (const p of pillars){
+      if (p.d >= s.d - 0.05) continue;
+      const u = (e.z + p.d) / (e.z + s.d);
+      const xr = e.x + (s.x - e.x) * u;
+      const yr = e.y + (s.y - e.y) * u;
+      // signed distance outside the pillar slab: positive means the sight-line clears it
+      const c = Math.max(Math.abs(xr - p.cx) - p.hw, yr - p.top, FLOOR_Y - yr);
+      if (c < m) m = c;
+    }
+    return m;
+  }
+
+  function inWindow(s, e){
+    const k = shrink(s.d, e);
+    const wx = e.x + (s.x - e.x) * k;
+    const wy = e.y + (s.y - e.y) * k;
+    return Math.abs(wx) < 0.92 && Math.abs(wy) < A * 0.92;
+  }
+
+  // The NEAREST head pose that reveals this light — both a solvability proof
+  // (no light is ever spawned that cannot be seen) and an honest hint direction.
+  function findSolution(s){
+    let best = null, bestCost = Infinity;
+    const zs = [EYE_Z_MIN + 0.35, 1.9, EYE_Z0, 3.0, EYE_Z_MAX - 0.5];
+    for (let ix=-4; ix<=4; ix++){
+      for (let iy=-3; iy<=3; iy++){
+        for (let iz=0; iz<zs.length; iz++){
+          const e = {
+            x: (ix/4) * EYE_X_MAX * SAMPLE_F,
+            y: (iy/3) * EYE_Y_MAX * SAMPLE_F,
+            z: zs[iz]
+          };
+          if (clearance(s, e) <= 0.02) continue;
+          if (!inWindow(s, e)) continue;
+          const cost = Math.abs(e.x)/EYE_X_MAX + Math.abs(e.y)/EYE_Y_MAX + Math.abs(e.z - EYE_Z0)/1.6;
+          if (cost < bestCost){ bestCost = cost; best = e; }
+        }
+      }
+    }
+    return best ? { e: best, cost: bestCost } : null;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GAME STATE
+  // ---------------------------------------------------------------------------
+  let state = 'idle';  // idle | countdown | playing | over
+  let score = 0, combo = 0, maxCombo = 0, capCount = 0, fleeCount = 0, deepest = 0;
+  let roundStart = 0, timeLeft = ROUND_MS, countdownStart = 0;
+  let lastTickSecond = -1, lastFrameT = 0;
+  let shake = 0, flashGlow = 0;
+  let captureSeq = 0;
+  const spirits = new Array(SLOTS).fill(null);
+  const respawnAt = new Array(SLOTS).fill(0);
+  const bursts = [];
+  const popups = [];
+  const rings  = [];
+
+  function spawnSpirit(slot, progress, now){
+    if (!pillars.length) return null;
+    const gapBase = Math.max(0.9, 1.75 - progress*0.8);
+    for (let attempt=0; attempt<40; attempt++){
+      const p = pillars[(Math.random()*pillars.length)|0];
+      const ds = Math.min(6.0, p.d + gapBase + Math.random()*0.7);
+      const u = (EYE_Z0 + p.d) / (EYE_Z0 + ds);
+      if (!(u > 0.05)) continue;
+      const xs = (p.cx + (Math.random()-0.5)*p.hw*0.7) / u;
+      let ys;
+      if (p.top > 1.6) ys = -0.25 + Math.random()*1.15;
+      else ys = (p.top - 0.12 - Math.random()*0.22) / u;
+      if (ys < FLOOR_Y + 0.35 || ys > 1.55) continue;
+
+      const cand = { x: xs, y: ys, d: ds };
+      const neutral = { x:0, y:0, z:EYE_Z0 };
+      if (!inWindow(cand, neutral)) continue;
+      if (clearance(cand, neutral) > 0) continue;   // must start hidden
+      const sol = findSolution(cand);
+      if (!sol) continue;
+      if (sol.cost > MAX_COST) continue;   // never ask for a contortion
+
+      const deg = (Math.random()*SCALE.length)|0;
+      const oct = ds > 3.6 ? -12 : 0;
+      return {
+        x: xs, y: ys, d: ds, sol: sol.e,
+        hue: (HUES[slot % HUES.length] + (Math.random()*24 - 12) + 360) % 360,
+        freq: ROOT * ratio(SCALE[deg] + oct),
+        born: now, charge: 0, prox: 0, exposed: false, wasExposed: false, inView: false,
+        hiddenFor: 0, drift: (Math.random()*2-1) * 0.000015, phase: Math.random()*Math.PI*2,
+        sx: W/2, sy: H/2, k: 0.4, captured: false
+      };
+    }
+    return null;
+  }
+
+  function projectSpirit(s){
+    const c = clearance(s, eye);
+    const k = shrink(s.d, eye);
+    const wx = eye.x + (s.x - eye.x) * k;
+    const wy = eye.y + (s.y - eye.y) * k;
+    s.k  = k;
+    s.sx = projX(wx);
+    s.sy = projY(wy);
+    s.inView = Math.abs(wx) < 0.92 && Math.abs(wy) < A * 0.92;
+    s.prox = clamp01((c + SOFT) / (SOFT*2)) * (s.inView ? 1 : 0.35);
+    s.exposed = (c > 0) && s.inView;
+  }
+
+  function computeSpiritState(){
+    for (let i=0;i<SLOTS;i++){
+      if (spirits[i]) projectSpirit(spirits[i]);
+    }
+  }
+
+  function advanceSpirits(dt, t, progress){
+    for (let i=0;i<SLOTS;i++){
+      const s = spirits[i];
+      if (!s){
+        if (t >= respawnAt[i]){
+          const ns = spawnSpirit(i, progress, t);
+          if (ns){ spirits[i] = ns; projectSpirit(ns); }
+          else respawnAt[i] = t + 260;
+        }
+        continue;
+      }
+      if (s.captured) continue;
+
+      // slow lateral drift keeps the hall alive
+      s.x += Math.sin(t*0.0004 + s.phase) * s.drift * dt;
+
+      if (s.exposed){
+        if (!s.wasExposed){ s.wasExposed = true; ping(s.freq * 2); }
+        s.charge += dt / HOLD_MS;
+        s.hiddenFor = 0;
+      } else {
+        s.wasExposed = false;
+        s.charge -= dt / DECAY_MS;
+        if (s.prox < 0.4) s.hiddenFor += dt; else s.hiddenFor = 0;
+      }
+      s.charge = clamp01(s.charge);
+
+      if (s.charge >= 1){ capture(i, t); continue; }
+
+      if (t - s.born > RELOCATE_MS && s.charge < 0.06){ flee(i, t); }
+    }
+  }
+
+  function capture(i, t){
+    const s = spirits[i];
+    if (!s || s.captured) return;
+    s.captured = true;
+    spirits[i] = null;
+    respawnAt[i] = t + 520;
+
+    capCount++;
+    combo++; maxCombo = Math.max(maxCombo, combo);
+    if (s.d > deepest) deepest = s.d;
+    const depthBonus = Math.round(Math.max(0, s.d - 1.6) * 45);
+    const pts = 100 + depthBonus + combo*10;
+    score += pts;
+
+    captureSeq++;
+    const deg = SCALE[(captureSeq - 1) % SCALE.length];
+    chime(ROOT * 2 * ratio(deg));
+    if (combo > 0 && combo % 5 === 0) comboStinger();
+
+    spawnPopup(s.sx, s.sy, '+' + pts, `hsl(${s.hue},100%,72%)`);
+    spawnBurst(s.sx, s.sy, s.hue, 26, 1 + s.k*3);
+    rings.push({ x: s.sx, y: s.sy, r: 10, hue: s.hue, a: 0.95, grow: 5.5 });
+    shake = 4; flashGlow = 0.7;
+
+    scoreEl.textContent = score;
+    comboEl.textContent = combo;
+    capEl.textContent = capCount;
+  }
+
+  function flee(i, t){
+    const s = spirits[i];
+    if (!s || s.captured) return;
+    s.captured = true;
+    spirits[i] = null;
+    respawnAt[i] = t + 700;
+    fleeCount++;
+    combo = 0;
+    whoosh();
+    spawnBurst(s.sx, s.sy, s.hue, 12, 0.7);
+    spawnPopup(s.sx, s.sy, '逃走', 'rgba(255,120,150,0.9)');
+    comboEl.textContent = combo;
+    fleeEl.textContent = fleeCount;
+  }
+
+  function spawnPopup(x, y, text, color){ popups.push({ x, y, text, color, life: 1, vy: -0.65 }); }
+  function spawnBurst(x, y, hue, n, sp){
+    for (let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2, v = (1 + Math.random()*4) * sp;
+      bursts.push({ x, y, vx: Math.cos(a)*v, vy: Math.sin(a)*v, life: 1, hue });
+    }
+  }
+
+  function resetGame(){
+    score = 0; combo = 0; maxCombo = 0; capCount = 0; fleeCount = 0; deepest = 0; captureSeq = 0;
+    pillars = makePillars();
+    motes = makeMotes();
+    for (let i=0;i<SLOTS;i++){ spirits[i] = null; respawnAt[i] = 0; }
+    bursts.length = 0; popups.length = 0; rings.length = 0;
+    scoreEl.textContent = '0'; comboEl.textContent = '0';
+    capEl.textContent = '0'; fleeEl.textContent = '0';
+    timeEl.textContent = Math.ceil(ROUND_MS/1000);
+    timeEl.classList.remove('low');
+    lastTickSecond = Math.ceil(ROUND_MS/1000);
+    timeLeft = ROUND_MS;
+    base = null; calSum = null; calCount = 0;
+    eye.x = 0; eye.y = 0; eye.z = EYE_Z0;
+  }
+
+  const COUNTDOWN_LABELS = ['まっすぐ前へ', '3', '2', '1'];
+  const COUNTDOWN_STEP = 700;
+
+  function startGame(){
+    resetGame();
+    state = 'countdown';
+    countdownStart = performance.now();
+    // seed the hall so the countdown isn't staring at an empty box
+    for (let i=0;i<SLOTS;i++){
+      const s = spawnSpirit(i, 0, performance.now());
+      if (s){ spirits[i] = s; projectSpirit(s); }
+    }
+  }
+
+  function endGame(){
+    if (state !== 'playing') return;
+    state = 'over';
+    endChord();
+    finalScore.textContent = score;
+    finalSub.textContent =
+      `捕獲 ${capCount} ・ 最大コンボ ${maxCombo} ・ 逃走 ${fleeCount} ・ 最深 ${deepest > 0 ? deepest.toFixed(1) : '0.0'}`;
+    resultBox.style.display = 'block';
+    eyebrow.style.display = 'none';
+    titleEl.textContent = 'TIME UP';
+    subEl.textContent = '';
+    hintEl.style.display = 'none';
+    startBtn.textContent = 'もう一度';
+    overlay.classList.remove('hidden');
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(4,3,11,0.72)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(26,20,58,0.72)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // the depth of the box: a warm far haze around the vanishing point
+    const vx = projX(eye.x * 0.35), vy = projY(eye.y * 0.35);
+    const hz = ctx.createRadialGradient(vx, vy, 0, vx, vy, Math.max(W,H)*0.62);
+    hz.addColorStop(0, 'rgba(66,48,120,0.34)');
+    hz.addColorStop(0.45, 'rgba(28,20,58,0.16)');
+    hz.addColorStop(1, 'rgba(4,3,11,0)');
+    ctx.fillStyle = hz; ctx.fillRect(0, 0, W, H);
+
+    const vg = ctx.createRadialGradient(W/2, H*0.48, Math.min(W,H)*0.16, W/2, H*0.5, Math.max(W,H)*0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,1,6,0.9)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  const DEPTH_LINES = [0.5, 0.8, 1.15, 1.55, 2.0, 2.55, 3.2, 4.0, 4.9, 5.9, 7.0];
+  const CROSS_LINES = [-3, -2.4, -1.8, -1.2, -0.6, 0, 0.6, 1.2, 1.8, 2.4, 3];
+
+  function planeLine(x1, y, d1, x2, d2, alpha, color){
+    const k1 = shrink(d1, eye), k2 = shrink(d2, eye);
+    const ax = projX(eye.x + (x1 - eye.x)*k1), ay = projY(eye.y + (y - eye.y)*k1);
+    const bx = projX(eye.x + (x2 - eye.x)*k2), by = projY(eye.y + (y - eye.y)*k2);
+    ctx.strokeStyle = color.replace('$A', alpha.toFixed(3));
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+  }
+
+  function drawGrid(){
+    ctx.save();
+    ctx.lineWidth = 1;
+    for (const plane of [FLOOR_Y, CEIL_Y]){
+      const isFloor = plane === FLOOR_Y;
+      const col = isFloor ? 'rgba(126,150,255,$A)' : 'rgba(96,110,190,$A)';
+      const mul = isFloor ? 1 : 0.5;
+      for (const d of DEPTH_LINES){
+        planeLine(-3.4, plane, d, 3.4, d, 0.30 * fogOf(d) * mul, col);
+      }
+      for (const x of CROSS_LINES){
+        planeLine(x, plane, 0.5, x, 7.0, 0.16 * mul, col);
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawPillar(p){
+    const k = shrink(p.d, eye);
+    const xl = projX(eye.x + (p.cx - p.hw - eye.x)*k);
+    const xr = projX(eye.x + (p.cx + p.hw - eye.x)*k);
+    const yt = projY(eye.y + (p.top   - eye.y)*k);
+    const yb = projY(eye.y + (FLOOR_Y - eye.y)*k);
+    if (xr < -40 || xl > W + 40 || yb < -40 || yt > H + 40) return;
+    const w = Math.max(1.2, xr - xl);
+    const h = Math.max(1.2, yb - yt);
+    const f = fogOf(p.d);
+
+    ctx.save();
+    // body — dark glass, hazier the further away it stands
+    const body = ctx.createLinearGradient(0, yt, 0, yb);
+    body.addColorStop(0,    `hsla(${p.hue},46%,${16 + (1-f)*16}%,${0.52 + f*0.34})`);
+    body.addColorStop(0.35, `hsla(${p.hue},40%,${10 + (1-f)*14}%,${0.66 + f*0.28})`);
+    body.addColorStop(1,    `hsla(${p.hue},34%,${5  + (1-f)*11}%,${0.70 + f*0.26})`);
+    ctx.fillStyle = body;
+    ctx.fillRect(xl, yt, w, h);
+
+    // neon rods down the edges
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.shadowBlur = 14 * f + 3; ctx.shadowColor = `hsla(${p.hue},95%,66%,${0.5*f})`;
+    ctx.strokeStyle = `hsla(${p.hue},92%,70%,${0.28 + 0.42*f})`;
+    ctx.lineWidth = Math.max(1, 1.6*k*2.2);
+    ctx.beginPath(); ctx.moveTo(xl, yt); ctx.lineTo(xl, yb); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xr, yt); ctx.lineTo(xr, yb); ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // capped pillars get a lit crown — the thing you crane your neck over
+    if (p.top < CEIL_Y - 0.2){
+      ctx.strokeStyle = `hsla(${p.hue},95%,76%,${0.35 + 0.45*f})`;
+      ctx.lineWidth = Math.max(1.2, 2.2*k*2.2);
+      ctx.beginPath(); ctx.moveTo(xl, yt); ctx.lineTo(xr, yt); ctx.stroke();
+    }
+    // pooled light at the foot
+    const pool = ctx.createLinearGradient(0, yb - h*0.16, 0, yb);
+    pool.addColorStop(0, `hsla(${p.hue},90%,60%,0)`);
+    pool.addColorStop(1, `hsla(${p.hue},90%,62%,${0.16*f})`);
+    ctx.fillStyle = pool;
+    ctx.fillRect(xl, yb - h*0.16, w, h*0.16);
+    ctx.restore();
+  }
+
+  function drawSpirit(s, t){
+    const r = Math.max(2.2, SPIRIT_R * s.k * S);
+    const puls = 0.82 + 0.18*Math.sin(t*0.005 + s.phase);
+    const bright = 0.35 + s.prox*0.65;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(s.sx, s.sy, 0, s.sx, s.sy, r*3.4);
+    g.addColorStop(0,    `hsla(${s.hue},100%,92%,${0.95*bright*puls})`);
+    g.addColorStop(0.25, `hsla(${s.hue},100%,68%,${0.55*bright*puls})`);
+    g.addColorStop(1,    `hsla(${s.hue},100%,58%,0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(s.sx, s.sy, r*3.4, 0, Math.PI*2); ctx.fill();
+
+    ctx.fillStyle = `hsla(${s.hue},100%,${86 + s.prox*12}%,${0.85*bright})`;
+    ctx.beginPath(); ctx.arc(s.sx, s.sy, r*0.62*puls, 0, Math.PI*2); ctx.fill();
+
+    // charge ring — the hold that captures it. Stays legible even for a far,
+    // tiny light, which is exactly when you most need to see it filling.
+    if (s.charge > 0.01){
+      const rr = Math.max(r*2.3, 17);
+      ctx.strokeStyle = `hsla(${s.hue},100%,80%,${0.35 + s.charge*0.6})`;
+      ctx.lineWidth = Math.max(2, r*0.28);
+      ctx.beginPath();
+      ctx.arc(s.sx, s.sy, rr, -Math.PI/2, -Math.PI/2 + Math.PI*2*s.charge);
+      ctx.stroke();
+      ctx.strokeStyle = `hsla(${s.hue},60%,70%,0.14)`;
+      ctx.lineWidth = Math.max(1, r*0.14);
+      ctx.beginPath(); ctx.arc(s.sx, s.sy, rr, 0, Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawScene(t){
+    const items = [];
+    for (const p of pillars) items.push({ d: p.d, p });
+    for (const s of spirits){ if (s) items.push({ d: s.d, s }); }
+    items.sort((a,b) => b.d - a.d);
+    for (const it of items){
+      if (it.p) drawPillar(it.p);
+      else if (it.s) drawSpirit(it.s, t);
+    }
+  }
+
+  function drawMotes(){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const m of motes){
+      const k = shrink(m.d, eye);
+      const x = projX(eye.x + (m.x - eye.x)*k);
+      const y = projY(eye.y + (m.y - eye.y)*k);
+      if (x < -20 || x > W+20 || y < -20 || y > H+20) continue;
+      const a = 0.30 * fogOf(m.d);
+      c.fillStyle = `hsla(214,80%,86%,${a})`;
+      c.beginPath(); c.arc(x, y, Math.max(0.6, 2.4*k), 0, Math.PI*2); c.fill();
+    }
+    c.restore();
+  }
+
+  // the light hidden behind a pillar still bleeds through the haze — your only clue
+  function drawBleed(t){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const s of spirits){
+      if (!s) continue;
+      const r = Math.max(2.2, SPIRIT_R * s.k * S);
+      const rr = r * (7 + s.prox*4);
+      const a = (0.055 + s.prox*0.26) * (s.inView ? 1 : 0.35);
+      const g = c.createRadialGradient(s.sx, s.sy, 0, s.sx, s.sy, rr);
+      g.addColorStop(0, `hsla(${s.hue},100%,72%,${a})`);
+      g.addColorStop(0.4, `hsla(${s.hue},100%,64%,${a*0.35})`);
+      g.addColorStop(1, `hsla(${s.hue},100%,60%,0)`);
+      c.fillStyle = g;
+      c.beginPath(); c.arc(s.sx, s.sy, rr, 0, Math.PI*2); c.fill();
+
+      if (s.exposed && bursts.length < 220 && Math.random() < 0.5){
+        const a2 = Math.random()*Math.PI*2, rad = r*(1 + Math.random()*2);
+        bursts.push({
+          x: s.sx + Math.cos(a2)*rad, y: s.sy + Math.sin(a2)*rad,
+          vx: Math.cos(a2)*0.5, vy: Math.sin(a2)*0.5 - 0.6, life: 0.7, hue: s.hue
+        });
+      }
+    }
+    c.restore();
+  }
+
+  // gentle arrow telling you which way to lean, only after you've been stuck a while
+  function drawHints(t){
+    if (!guideOn) return;
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const s of spirits){
+      if (!s || !s.sol || s.hiddenFor < 5000) continue;
+      let dx = s.sol.x - eye.x, dy = -(s.sol.y - eye.y);
+      const dz = s.sol.z - eye.z;
+      let len = Math.hypot(dx, dy);
+      if (len < 0.08){ dx = 0; dy = 0; len = 0; }
+      const pull = 0.35 + 0.25*Math.sin(t*0.005);
+      const a = clamp01((s.hiddenFor - 5000) / 2500) * 0.5;
+      // a deeply hidden light can project off-screen — keep its arrow reachable
+      const ax = clamp(s.sx, 46, Math.max(46, W - 46));
+      const ay = clamp(s.sy, 64, Math.max(64, H - 64));
+      if (len > 0){
+        const ux = dx/len, uy = dy/len;
+        const base = 26 + 16*pull;
+        const bx = ax + ux*base, by = ay + uy*base;
+        c.strokeStyle = `hsla(${s.hue},100%,80%,${a})`;
+        c.lineWidth = 2.4; c.lineCap = 'round'; c.lineJoin = 'round';
+        for (let i=0;i<3;i++){
+          const o = i*9;
+          c.beginPath();
+          c.moveTo(bx + ux*o - uy*7, by + uy*o + ux*7);
+          c.lineTo(bx + ux*(o+9), by + uy*(o+9));
+          c.lineTo(bx + ux*o + uy*7, by + uy*o - ux*7);
+          c.stroke();
+        }
+      }
+      if (Math.abs(dz) > 0.5){
+        c.fillStyle = `hsla(${s.hue},100%,84%,${a})`;
+        c.font = '700 11px sans-serif';
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(dz > 0 ? '離れて' : '近づいて', ax, ay - 40);
+      }
+    }
+    c.restore();
+  }
+
+  function updateDrawBursts(){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i=bursts.length-1;i>=0;i--){
+      const b = bursts[i];
+      b.x += b.vx; b.y += b.vy; b.vx *= 0.94; b.vy = b.vy*0.94 - 0.05; b.life -= 0.028;
+      if (b.life <= 0){ bursts.splice(i,1); continue; }
+      c.fillStyle = `hsla(${b.hue},100%,${68 + b.life*22}%,${b.life})`;
+      c.beginPath(); c.arc(b.x, b.y, 2.6*b.life + 0.7, 0, Math.PI*2); c.fill();
+    }
+    for (let i=rings.length-1;i>=0;i--){
+      const rg = rings[i];
+      rg.r += rg.grow; rg.a *= 0.9;
+      if (rg.a < 0.02){ rings.splice(i,1); continue; }
+      c.strokeStyle = `hsla(${rg.hue},100%,76%,${rg.a})`;
+      c.lineWidth = 2.4;
+      c.beginPath(); c.arc(rg.x, rg.y, rg.r, 0, Math.PI*2); c.stroke();
+    }
+    c.restore();
+  }
+
+  function updateDrawPopups(){
+    for (let i=popups.length-1;i>=0;i--){
+      const p = popups[i];
+      p.y += p.vy; p.life -= 0.018;
+      if (p.life <= 0){ popups.splice(i,1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.font = '800 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 12; ctx.shadowColor = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+  }
+
+  function drawCountdown(label, q){
+    const scale = 1 + (1 - Math.min(1, q/0.3))*0.5;
+    const alpha = q > 0.72 ? 1 - (q-0.72)/0.28 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(W/2, H*0.42);
+    ctx.scale(scale, scale);
+    ctx.font = label.length > 2 ? '800 34px sans-serif' : '800 88px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 28; ctx.shadowColor = 'rgba(255,207,107,0.85)';
+    ctx.fillStyle = '#ffcf6b';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO PER-FRAME
+  // ---------------------------------------------------------------------------
+  function updateAudio(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    let maxProx = 0;
+    for (let i=0;i<SLOTS;i++){
+      const v = voices[i], s = spirits[i];
+      if (!v) continue;
+      if (!s || state === 'over' || state === 'idle'){
+        v.g.gain.setTargetAtTime(0, t, 0.14);
+        continue;
+      }
+      if (s.prox > maxProx) maxProx = s.prox;
+      const amp = Math.pow(s.prox, 2.2) * (0.05 + s.charge*0.055);
+      v.o.frequency.setTargetAtTime(s.freq, t, 0.09);
+      v.o2.frequency.setTargetAtTime(s.freq*2, t, 0.09);
+      v.f.frequency.setTargetAtTime(360 + s.prox*2800, t, 0.1);
+      v.g.gain.setTargetAtTime(amp, t, 0.1);
+      if (v.pan.pan){
+        v.pan.pan.setTargetAtTime(clamp((s.sx / Math.max(1,W))*2 - 1, -1, 1) * 0.75, t, 0.16);
+      }
+    }
+    if (droneFilter) droneFilter.frequency.setTargetAtTime(190 + maxProx*520, t, 0.2);
+    if (airGain) airGain.gain.setTargetAtTime(0.012 + maxProx*0.02, t, 0.2);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HUD
+  // ---------------------------------------------------------------------------
+  function updateHud(){
+    leanXEl.style.width = Math.round(clamp01((eye.x + EYE_X_MAX) / (EYE_X_MAX*2)) * 100) + '%';
+    leanZEl.style.width = Math.round(clamp01((EYE_Z_MAX - eye.z) / (EYE_Z_MAX - EYE_Z_MIN)) * 100) + '%';
+    const near = eye.z < EYE_Z0 - 0.35, far = eye.z > EYE_Z0 + 0.35;
+    leanTxt.textContent = near ? '視野ひろい（近い）' : (far ? '拡大（遠い）' : '左右の傾き ／ 奥行き');
+
+    if (state === 'countdown'){
+      stateDot.textContent = '正面を向いて… 中心を測っています';
+      stateDot.className = 'silent';
+      return;
+    }
+    if (state !== 'playing') return;
+
+    if (!faceFresh){
+      stateDot.textContent = '顔をカメラに映してください';
+      stateDot.className = 'silent';
+      return;
+    }
+    let best = 0, charging = false;
+    for (const s of spirits){
+      if (!s) continue;
+      if (s.prox > best) best = s.prox;
+      if (s.charge > 0.05) charging = true;
+    }
+    if (charging){
+      stateDot.textContent = '灯を捉えた ── そのまま保って';
+      stateDot.className = 'hot';
+    } else if (best > 0.58){
+      stateDot.textContent = 'もう少し ── 陰の縁が光っている';
+      stateDot.className = 'near';
+    } else {
+      stateDot.textContent = '顔を動かして柱の陰をのぞきこむ';
+      stateDot.className = '';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+    const dt = lastFrameT ? Math.min(64, t - lastFrameT) : 16;
+    lastFrameT = t;
+
+    if (running) detectFace();
+    updateEye(t);
+    updateWorld(t, dt);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+      shake *= 0.86;
+    }
+    drawVideoBase();
+
+    // fade the additive layer -> afterglow trails
+    fctx.save();
+    fctx.setTransform(1,0,0,1,0,0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.26)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    let progress = 0;
+    if (state === 'countdown'){
+      if (faceFresh && RESULT.raw) feedCalibration(RESULT.raw);
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx >= COUNTDOWN_LABELS.length){
+        commitCalibration();
+        state = 'playing';
+        roundStart = t;
+      }
+    }
+    if (state === 'playing'){
+      const elapsed = t - roundStart;
+      timeLeft = Math.max(0, ROUND_MS - elapsed);
+      progress = Math.min(1, elapsed / ROUND_MS);
+    }
+
+    computeSpiritState();
+    if (state === 'playing') advanceSpirits(dt, t, progress);
+
+    drawGrid();
+    drawScene(t);
+    drawMotes();
+    drawBleed(t);
+    if (state === 'playing') drawHints(t);
+    updateDrawBursts();
+
+    // composite the glow layer
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    updateDrawPopups();
+
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx >= 0 && idx < COUNTDOWN_LABELS.length){
+        drawCountdown(COUNTDOWN_LABELS[idx], (el % COUNTDOWN_STEP) / COUNTDOWN_STEP);
+      }
+    }
+    ctx.restore();  // shake
+
+    if (state === 'playing'){
+      const sec = Math.ceil(timeLeft/1000);
+      if (sec !== lastTickSecond){
+        lastTickSecond = sec;
+        timeEl.textContent = sec;
+        timeEl.classList.toggle('low', sec <= 10);
+        if (sec <= 10 && sec > 0) tickWarn();
+      }
+      if (timeLeft <= 0) endGame();
+    }
+
+    flashGlow *= 0.9;
+    flashEl.style.background = `rgba(255,207,107,${(flashGlow*0.16).toFixed(3)})`;
+
+    updateAudio();
+    updateHud();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        if (!faceLandmarker) await initFaceModel();
+        await startStream();
+        running = true;
+        booted = true;
+        lastFrameT = 0;
+        requestAnimationFrame(frame);
+      } else {
+        if (actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      centerHud.classList.add('show');
+      guideBtn.classList.toggle('active', guideOn);
+      resultBox.style.display = 'none';
+      eyebrow.style.display = 'block';
+      titleEl.textContent = 'HAKONIWA';
+      subEl.textContent = '画面は箱庭を覗く窓。顔を動かして、柱の陰をのぞきこめ';
+      hintEl.style.display = 'block';
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+      startGame();
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+})();
+</script>
+</body>
+</html>
