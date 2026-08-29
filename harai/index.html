@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05020e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="ピンクのネオンに光る電脳蚊が体にたかってくる。腕を大きく振ってなぎ払え。一振りで何匹まとめて払えるかを競う60秒タイムアタック - HARAI">
+<title>HARAI ─ 電脳蚊ばらい</title>
+<style>
+  :root{
+    --void:#05020e; --haze:#1a0722; --ghost:#eef2ff;
+    --pink:#ff3ea5; --cyan:#46f0ff; --violet:#b06bff; --lime:#9dff4d; --gold:#ffd84d; --warn:#ff2b52;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #scan{ position:fixed; inset:0; z-index:6; pointer-events:none; mix-blend-mode:screen; opacity:.38;
+    background:repeating-linear-gradient(to bottom, rgba(255,120,200,0.06) 0px, rgba(255,120,200,0.06) 1px, transparent 2px, transparent 3px); }
+  #buzzFx{ position:fixed; inset:0; z-index:7; pointer-events:none; background:rgba(255,62,165,0.0);
+    transition:background .12s linear; }
+  #edge{ position:fixed; inset:0; z-index:7; pointer-events:none; opacity:0; transition:opacity .2s ease;
+    box-shadow:inset 0 0 90px rgba(255,43,82,0.55), inset 0 0 26px rgba(255,62,165,0.4); }
+
+  /* ---- Overlay / setup ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 38%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .55s ease, visibility .55s ease; text-align:center; padding:1.4rem;
+    overflow-y:auto;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(46px); opacity:.34; pointer-events:none;
+    animation:drift 13s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--pink),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--cyan),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--violet),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.14); } }
+
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.64rem; letter-spacing:0.46em; margin-bottom:0.9rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.16em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,var(--pink),var(--violet),var(--cyan),var(--lime),var(--pink));
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 7s linear infinite; margin-bottom:0.35rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.8rem; letter-spacing:0.08em; margin-bottom:1.3rem;
+    position:relative; white-space:pre-line; }
+
+  /* setup panel — the "game setup" screen */
+  #setup{ position:relative; width:min(23rem,92vw); margin-bottom:1.3rem;
+    background:rgba(10,4,22,0.55); border:1px solid rgba(255,62,165,0.28); padding:0.95rem 1rem 1.1rem;
+    backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px); }
+  .setLab{ font-size:0.54rem; letter-spacing:0.28em; color:rgba(238,242,255,0.45); margin-bottom:0.5rem; }
+  .chips{ display:flex; gap:0.45rem; justify-content:center; margin-bottom:0.9rem; }
+  .chip{ flex:1; font-family:inherit; font-size:0.72rem; font-weight:700; letter-spacing:0.06em;
+    color:rgba(238,242,255,0.62); background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,62,165,0.22); padding:0.5rem 0.2rem; cursor:pointer;
+    transition:all .16s ease;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
+  .chip:active{ transform:scale(0.95); }
+  .chip.on{ color:var(--void); background:linear-gradient(120deg,var(--pink),var(--violet));
+    border-color:transparent; box-shadow:0 0 18px rgba(255,62,165,0.5); }
+  .chipSub{ display:block; font-size:0.52rem; letter-spacing:0.1em; opacity:0.72; margin-top:0.15rem; font-weight:600; }
+  #bestEl{ font-size:1.35rem; font-weight:800; color:var(--gold); font-variant-numeric:tabular-nums; line-height:1.1; }
+  #bestSub{ font-size:0.56rem; letter-spacing:0.14em; color:rgba(238,242,255,0.4); margin-top:0.25rem; }
+
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.2em; font-family:inherit; font-weight:800;
+    color:var(--void); background:linear-gradient(90deg,var(--pink),var(--cyan)); border:none;
+    cursor:pointer; box-shadow:0 0 30px rgba(255,62,165,0.45);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 2.6s ease-in-out infinite;
+    clip-path:polygon(11px 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%,0 11px);
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(255,62,165,0.42); }
+    50%{ box-shadow:0 0 46px rgba(70,240,255,0.5); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{ position:relative; margin-top:1.9rem; max-width:23rem; color:rgba(238,242,255,0.5); font-size:0.75rem;
+    line-height:1.9; letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--pink); font-weight:700; }
+  #hint em{ color:var(--cyan); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.3rem; max-width:80%; color:var(--warn);
+    font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+  #resultBox{ display:none; position:relative; margin-bottom:1.3rem; }
+  #resultBox .rlab{ font-size:0.6rem; letter-spacing:0.3em; color:rgba(238,242,255,0.45); }
+  #resultBox .rscore{ font-size:2.7rem; font-weight:800; color:var(--gold); line-height:1.25; font-variant-numeric:tabular-nums; }
+  #resultBox .rsub{ font-size:0.74rem; color:rgba(238,242,255,0.6); letter-spacing:0.04em; line-height:1.8; }
+  #newBest{ display:none; font-size:0.66rem; letter-spacing:0.24em; color:var(--lime); font-weight:800; margin-top:0.2rem; }
+
+  /* ---- HUD ---- */
+  #hud{ position:fixed; z-index:12; left:0; right:0; top:0;
+    display:flex; align-items:flex-start; justify-content:space-between; padding:1rem 0.9rem 0;
+    pointer-events:none; opacity:0; transition:opacity .5s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(8,3,18,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(255,62,165,0.22); padding:0.55rem 0.85rem; color:var(--ghost); min-width:116px;
+    clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px); }
+  .panel .lab{ font-size:0.53rem; letter-spacing:0.24em; color:rgba(238,242,255,0.48); margin-bottom:0.22rem; }
+  .panel .val{ font-size:1.5rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--gold); }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .val{ color:var(--cyan); }
+  .panel[data-side="r"] .val.low{ color:var(--warn); }
+  .subLab{ font-size:0.6rem; letter-spacing:0.08em; color:rgba(238,242,255,0.5); margin-top:0.28rem; }
+  .meter{ height:4px; background:rgba(238,242,255,0.1); margin-top:0.42rem; overflow:hidden; }
+  .meter b{ display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,var(--cyan),var(--pink)); transition:width .12s linear; }
+  .meter.hot b{ background:linear-gradient(90deg,var(--pink),var(--warn)); }
+
+  #chainPop{ position:fixed; z-index:13; left:50%; top:26%; transform:translate(-50%,-50%) scale(0.7);
+    font-size:2.1rem; font-weight:800; letter-spacing:0.08em; color:var(--lime); pointer-events:none;
+    opacity:0; text-shadow:0 0 22px rgba(157,255,77,0.8); white-space:nowrap; }
+  #chainPop.pop{ animation:chainPop .7s ease-out; }
+  @keyframes chainPop{
+    0%{ opacity:0; transform:translate(-50%,-50%) scale(0.6); }
+    18%{ opacity:1; transform:translate(-50%,-50%) scale(1.15); }
+    60%{ opacity:1; transform:translate(-50%,-50%) scale(1); }
+    100%{ opacity:0; transform:translate(-50%,-58%) scale(1); }
+  }
+
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:1.3rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .5s ease; }
+  #centerHud.show{ opacity:1; }
+  #stateDot{ font-size:0.65rem; letter-spacing:0.15em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.4rem 1.05rem; border:1px solid rgba(255,62,165,0.22);
+    background:rgba(8,3,18,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .2s ease, border-color .2s ease, box-shadow .2s ease; white-space:nowrap;
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
+  #stateDot.hot{ color:var(--lime); border-color:rgba(157,255,77,0.5); box-shadow:0 0 16px rgba(157,255,77,0.25); }
+  #stateDot.warnState{ color:var(--warn); border-color:rgba(255,43,82,0.5); box-shadow:0 0 16px rgba(255,43,82,0.3); }
+  #stateDot.silent{ color:rgba(150,150,175,0.8); border-color:rgba(120,120,150,0.3); box-shadow:none; }
+
+  #topbar{ position:fixed; z-index:12; top:0; right:0; padding:1rem 0.9rem 0; display:flex; gap:.5rem;
+    opacity:0; transition:opacity .5s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.66rem; letter-spacing:0.08em; font-weight:700;
+    color:var(--ghost); background:rgba(8,3,18,0.55); border:1px solid rgba(255,62,165,0.22);
+    padding:0.46rem 0.8rem; cursor:pointer; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:transform .15s ease, background .15s ease; white-space:nowrap;
+    clip-path:polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
+  .btn:active{ transform:scale(0.94); }
+  .btn.active{ background:rgba(70,240,255,0.14); border-color:rgba(70,240,255,0.5); color:var(--cyan); }
+  #brand{ position:fixed; z-index:12; top:0; left:0; padding:1.1rem 0 0 1.1rem; pointer-events:none;
+    opacity:0; transition:opacity .5s ease; display:none; }
+  #brand .b1{ font-size:0.66rem; font-weight:800; letter-spacing:0.3em; color:rgba(238,242,255,0.85); }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="scan"></div>
+  <div id="buzzFx"></div>
+  <div id="edge"></div>
+
+  <div id="brand"><div class="b1">HARAI</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+    <button class="btn" id="boneBtn">ガイド ON</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">SCORE</div>
+      <div class="val" id="scoreEl">0</div>
+      <div class="subLab">払った <span id="swatEl">0</span> 匹</div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">TIME</div>
+      <div class="val" id="timeEl">60</div>
+      <div class="subLab">たかり <span id="latchEl">0</span> 匹</div>
+      <div class="meter" id="noiseMeter"><b id="noiseBar"></b></div>
+    </div>
+  </div>
+
+  <div id="chainPop"></div>
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA GAME</div>
+    <div id="resultBox">
+      <div class="rlab">TIME UP</div>
+      <div class="rscore" id="finalScore">0</div>
+      <div class="rsub" id="finalSub"></div>
+      <div id="newBest">NEW RECORD!</div>
+    </div>
+    <div id="title">HARAI</div>
+    <div id="sub">電脳蚊ばらい — たかってくる光を、腕でなぎ払え</div>
+
+    <div id="setup">
+      <div class="setLab">DIFFICULTY ／ 難易度</div>
+      <div class="chips">
+        <button class="chip" data-diff="easy">やさしい<span class="chipSub">ゆっくり</span></button>
+        <button class="chip on" data-diff="normal">ふつう<span class="chipSub">おすすめ</span></button>
+        <button class="chip" data-diff="hard">むずかしい<span class="chipSub">大群</span></button>
+      </div>
+      <div class="setLab">BEST SCORE ／ 最高記録</div>
+      <div id="bestEl">—</div>
+      <div id="bestSub">この難易度の記録</div>
+    </div>
+
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・カメラに<b>上半身</b>を映してください。ピンクの<b>電脳蚊</b>が寄ってきて体にたかります<br>
+      ・<b>腕を大きく速く振って</b>なぎ払う。ゆっくり触っても払えません<br>
+      ・<em>一振りで複数まとめて払うとCHAIN</em>。2匹目以降は得点が倍々に増えます<br>
+      ・たかられたままだと<b>羽音がうるさく</b>なり、画面が乱れて<b>もっと寄ってきます</b><br>
+      ・全部払い切ると<em>CLEAN BONUS</em>。制限時間は<b>60秒</b>
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas    = document.getElementById('stage');
+  const ctx       = canvas.getContext('2d');
+  const video     = document.getElementById('video');
+  const overlay   = document.getElementById('overlay');
+  const startBtn  = document.getElementById('startBtn');
+  const errorMsg  = document.getElementById('errorMsg');
+  const hud       = document.getElementById('hud');
+  const topbar    = document.getElementById('topbar');
+  const centerHud = document.getElementById('centerHud');
+  const stateDot  = document.getElementById('stateDot');
+  const flipBtn   = document.getElementById('flipBtn');
+  const boneBtn   = document.getElementById('boneBtn');
+  const scoreEl   = document.getElementById('scoreEl');
+  const swatEl    = document.getElementById('swatEl');
+  const timeEl    = document.getElementById('timeEl');
+  const latchEl   = document.getElementById('latchEl');
+  const noiseBar  = document.getElementById('noiseBar');
+  const noiseMeter= document.getElementById('noiseMeter');
+  const chainPop  = document.getElementById('chainPop');
+  const resultBox = document.getElementById('resultBox');
+  const finalScore= document.getElementById('finalScore');
+  const finalSub  = document.getElementById('finalSub');
+  const newBestEl = document.getElementById('newBest');
+  const eyebrow   = document.getElementById('eyebrow');
+  const titleEl   = document.getElementById('title');
+  const subEl     = document.getElementById('sub');
+  const hintEl    = document.getElementById('hint');
+  const setupEl   = document.getElementById('setup');
+  const bestEl    = document.getElementById('bestEl');
+  const buzzFxEl  = document.getElementById('buzzFx');
+  const edgeEl    = document.getElementById('edge');
+  const chipEls   = Array.from(document.querySelectorAll('.chip'));
+
+  // additive glow layer
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const clamp   = (v,a,b) => v < a ? a : (v > b ? b : v);
+  const clamp01 = (v) => v < 0 ? 0 : (v > 1 ? 1 : v);
+
+  // ---------------------------------------------------------------------------
+  //  GAME CONSTANTS
+  // ---------------------------------------------------------------------------
+  const ROUND_MS  = 60000;
+  const MAX_ORBS  = 26;
+  const MAX_LATCH = 14;          // noise meter is full here
+  const SWEEP_GAP = 260;         // ms of stillness that ends a sweep (chain window)
+  const LATCH_DIST= 0.34;        // of body radius
+  const CHAIN_CAP = 8;
+
+  const DIFF = {
+    easy:   { label:'やさしい', spawn0:1000, spawn1:620, speed:0.62, drawIn:0.9 },
+    normal: { label:'ふつう',   spawn0: 760, spawn1:420, speed:0.85, drawIn:1.0 },
+    hard:   { label:'むずかしい',spawn0: 520, spawn1:280, speed:1.10, drawIn:1.15 }
+  };
+  let diffKey = 'normal';
+
+  const SCALE = [0, 2, 4, 7, 9, 12, 14, 16];   // chain ascent
+  const ratio = (s) => Math.pow(2, s/12);
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, sfxBus = null, padBus = null;
+  let convolver = null, revGain = null;
+  let buzzGain = null, buzzFilter = null, buzzTrem = null;
+  let droneGain = null;
+  let audioReady = false;
+  const noiseBuf = { buf: null };
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.floor(rate*seconds);
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch=0; ch<2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.floor(rate*seconds);
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i=0;i<len;i++) d[i] = Math.random()*2-1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.knee.value = 20; comp.ratio.value = 3.4;
+    comp.attack.value = 0.004;  comp.release.value = 0.22;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(1.6, 2.6);
+    revGain = actx.createGain(); revGain.gain.value = 0.22;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    padBus = actx.createGain(); padBus.gain.value = 0.6;
+
+    sfxBus.connect(master); sfxBus.connect(convolver);
+    padBus.connect(master); padBus.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(1.0);
+
+    // low synthwave bed
+    const dFilter = actx.createBiquadFilter();
+    dFilter.type = 'lowpass'; dFilter.frequency.value = 240; dFilter.Q.value = 4;
+    droneGain = actx.createGain(); droneGain.gain.value = 0.06;
+    for (const f of [55, 82.5]){
+      const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+      const g = actx.createGain(); g.gain.value = f > 60 ? 0.3 : 0.6;
+      o.connect(g); g.connect(dFilter); o.start();
+    }
+    dFilter.connect(droneGain); droneGain.connect(padBus);
+
+    // the mosquito whine — rises with how many are clinging to you
+    buzzFilter = actx.createBiquadFilter();
+    buzzFilter.type = 'bandpass'; buzzFilter.frequency.value = 640; buzzFilter.Q.value = 7;
+    buzzGain = actx.createGain(); buzzGain.gain.value = 0;
+    for (const f of [618, 631]){
+      const o = actx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+      const g = actx.createGain(); g.gain.value = 0.5;
+      o.connect(g); g.connect(buzzFilter); o.start();
+    }
+    // tremolo makes the whine flutter like real wings
+    buzzTrem = actx.createGain(); buzzTrem.gain.value = 1;
+    const lfo = actx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 7.4;
+    const lfoAmt = actx.createGain(); lfoAmt.gain.value = 0.45;
+    lfo.connect(lfoAmt); lfoAmt.connect(buzzTrem.gain); lfo.start();
+    buzzFilter.connect(buzzTrem); buzzTrem.connect(buzzGain); buzzGain.connect(padBus);
+
+    audioReady = true;
+  }
+
+  // whoosh of the arm + a blip that climbs with the chain
+  function swatSound(chainIdx){
+    if (!audioReady || !noiseBuf.buf) return;
+    const t = actx.currentTime;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+    bp.frequency.setValueAtTime(3200, t);
+    bp.frequency.exponentialRampToValueAtTime(420, t+0.16);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.34, t+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.2);
+    src.connect(bp); bp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t+0.24);
+
+    const semi = SCALE[Math.min(SCALE.length-1, Math.max(0, chainIdx-1))];
+    const o = actx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(523.25*ratio(semi), t);
+    o.frequency.exponentialRampToValueAtTime(523.25*ratio(semi)*1.5, t+0.1);
+    const og = actx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.16, t+0.01);
+    og.gain.exponentialRampToValueAtTime(0.0001, t+0.3);
+    o.connect(og); og.connect(sfxBus);
+    o.start(t); o.stop(t+0.33);
+  }
+
+  function latchSound(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(880, t);
+    o.frequency.exponentialRampToValueAtTime(300, t+0.13);
+    const bp = actx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value = 700; bp.Q.value = 4;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.16);
+    o.connect(bp); bp.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t+0.18);
+  }
+
+  function cleanSound(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    [0,4,7,12,16].forEach((semi,i) => {
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = 659.25*ratio(semi);
+      const g = actx.createGain();
+      const st = t + i*0.05;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.15, st+0.014);
+      g.gain.exponentialRampToValueAtTime(0.0001, st+0.42);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st+0.45);
+    });
+  }
+
+  function tickWarn(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = 1180;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.08, t+0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.1);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t+0.12);
+  }
+
+  function countBeep(big){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'square';
+    o.frequency.value = big ? 880 : 440;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+(big?0.4:0.16));
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t+(big?0.45:0.2));
+  }
+
+  function endSound(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    [0,-4,-9].forEach((semi,i) => {
+      const o = actx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.value = 330*ratio(semi);
+      const g = actx.createGain();
+      const st = t + i*0.17;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.18, st+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st+0.7);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st+0.75);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  //  POSE
+  // ---------------------------------------------------------------------------
+  const IDX = { NOSE:0, LSH:11, RSH:12, LEL:13, REL:14, LWR:15, RWR:16, LHIP:23, RHIP:24 };
+  function vis(lm, i){ return !!lm && !!lm[i] && (lm[i].visibility === undefined || lm[i].visibility > 0.5); }
+
+  const RESULT = { lm: null, t: 0 };
+
+  let pose = null;
+  function initPose(){
+    pose = new Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+    pose.setOptions({
+      modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false,
+      minDetectionConfidence: 0.6, minTrackingConfidence: 0.5
+    });
+    pose.onResults(onPoseResults);
+  }
+  function onPoseResults(results){
+    const lm = results && results.poseLandmarks ? results.poseLandmarks : null;
+    if (!lm) return;
+    RESULT.lm = lm;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+  async function startCameraLoop(){
+    if (mpCamera){ mpCamera.stop && mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running) await pose.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    wrists.forEach(w => { w.trail.length = 0; w.has = false; });
+    try { await startStream(); } catch(e){ /* keep previous */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  let boneOn = true;
+  boneBtn.addEventListener('click', () => {
+    boneOn = !boneOn;
+    boneBtn.textContent = boneOn ? 'ガイド ON' : 'ガイド OFF';
+    boneBtn.classList.toggle('active', boneOn);
+  });
+
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  // ---------------------------------------------------------------------------
+  //  BODY  — stable anchor slots the bugs can cling to
+  //  Slot order never changes, so a latched bug keeps its spot across frames.
+  // ---------------------------------------------------------------------------
+  const ANCHOR_N = 9;
+  const body = {
+    ok: false,
+    r: 90,                                   // body radius in px (from shoulder span)
+    center: { x: 0, y: 0 },
+    anchors: new Array(ANCHOR_N).fill(null),
+    bones: []
+  };
+  const wrists = [
+    { x:0, y:0, px:0, py:0, has:false, speed:0, trail:[], sweep:0, sweepT:0 },
+    { x:0, y:0, px:0, py:0, has:false, speed:0, trail:[], sweep:0, sweepT:0 }
+  ];
+
+  function mid(a, b){ return { x:(a.x+b.x)/2, y:(a.y+b.y)/2 }; }
+  function lerpPt(a, b, t){ return { x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t }; }
+
+  // poseTick / poseDt come from the tracker's own clock, not the animation clock:
+  // wrist speed must mean the same thing on a 60Hz laptop and a 120Hz phone.
+  function updateBody(lm, poseTick, poseDt){
+    const A = body.anchors;
+    for (let i=0;i<ANCHOR_N;i++) A[i] = null;
+    body.bones.length = 0;
+    body.ok = false;
+    if (!lm) return;
+
+    const hasSh = vis(lm, IDX.LSH) && vis(lm, IDX.RSH);
+    if (!hasSh) return;
+
+    const lsh = { x: px(lm[IDX.LSH]), y: py(lm[IDX.LSH]) };
+    const rsh = { x: px(lm[IDX.RSH]), y: py(lm[IDX.RSH]) };
+    const neck = mid(lsh, rsh);
+    const shoulderW = Math.hypot(lsh.x - rsh.x, lsh.y - rsh.y);
+    body.r = clamp(shoulderW * 0.62, 46, Math.min(W, H) * 0.5);
+
+    // hips give a real torso; when the framing cuts them off, extend downward
+    let hip;
+    if (vis(lm, IDX.LHIP) && vis(lm, IDX.RHIP)){
+      hip = mid({ x: px(lm[IDX.LHIP]), y: py(lm[IDX.LHIP]) },
+                { x: px(lm[IDX.RHIP]), y: py(lm[IDX.RHIP]) });
+    } else {
+      hip = { x: neck.x, y: neck.y + shoulderW * 1.55 };
+    }
+
+    A[0] = vis(lm, IDX.NOSE) ? { x: px(lm[IDX.NOSE]), y: py(lm[IDX.NOSE]) }
+                             : { x: neck.x, y: neck.y - shoulderW * 0.72 };
+    A[1] = neck;
+    A[2] = lerpPt(neck, hip, 0.34);
+    A[3] = lerpPt(neck, hip, 0.72);
+    A[4] = lsh;
+    A[5] = rsh;
+    A[6] = vis(lm, IDX.LEL) ? { x: px(lm[IDX.LEL]), y: py(lm[IDX.LEL]) } : null;
+    A[7] = vis(lm, IDX.REL) ? { x: px(lm[IDX.REL]), y: py(lm[IDX.REL]) } : null;
+    A[8] = hip;
+
+    body.center = A[2];
+    body.ok = true;
+
+    body.bones.push([lsh, rsh]);
+    body.bones.push([neck, A[3]]);
+    body.bones.push([A[3], hip]);
+    if (A[0]) body.bones.push([neck, A[0]]);
+    if (A[6]) body.bones.push([lsh, A[6]]);
+    if (A[7]) body.bones.push([rsh, A[7]]);
+
+    // wrists drive the swat; keep a short trail for the sweep ribbon
+    const wl = [IDX.LWR, IDX.RWR];
+    for (let i=0;i<2;i++){
+      const w = wrists[i];
+      const ok = vis(lm, wl[i]);
+      if (ok){
+        const nx = px(lm[wl[i]]), ny = py(lm[wl[i]]);
+        if (poseTick){
+          if (w.has){ w.px = w.x; w.py = w.y; } else { w.px = nx; w.py = ny; }
+          w.x = nx; w.y = ny;
+          // px per 16.7ms, so the threshold is independent of tracker/display rate
+          w.speed = Math.hypot(w.x - w.px, w.y - w.py) * (16.7 / poseDt);
+          w.trail.push({ x: nx, y: ny });
+          if (w.trail.length > 10) w.trail.shift();
+        } else {
+          w.x = nx; w.y = ny;
+        }
+        w.has = true;
+        if (A[6] && i === 0) body.bones.push([A[6], { x:nx, y:ny }]);
+        if (A[7] && i === 1) body.bones.push([A[7], { x:nx, y:ny }]);
+      } else {
+        w.has = false; w.speed = 0;
+        if (poseTick && w.trail.length) w.trail.shift();
+      }
+    }
+  }
+
+  function anchorPos(i){
+    const a = body.anchors[i];
+    return a || null;
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GAME STATE
+  // ---------------------------------------------------------------------------
+  let state = 'idle';   // idle | countdown | playing | over
+  let score = 0, swatted = 0, bestChain = 0, cleanCount = 0, latchedEver = 0;
+  let roundStart = 0, timeLeft = ROUND_MS, countdownStart = 0;
+  let nextSpawnAt = 0, lastTickSecond = -1, lastFrameT = 0, lastPoseT = 0;
+  let shake = 0, buzzLevel = 0, flashT = 0, cleanArmed = false;
+  let lastCountIdx = -1;
+  const bugs = [];
+  const bursts = [];
+  const popups = [];
+  const rings = [];
+
+  function latchedCount(){
+    let n = 0;
+    for (const b of bugs) if (b.state === 'latch') n++;
+    return n;
+  }
+
+  function spawnBug(progress){
+    if (bugs.length >= MAX_ORBS) return;
+    const d = DIFF[diffKey] || DIFF.normal;
+    const cx = body.ok ? body.center.x : W/2;
+    const cy = body.ok ? body.center.y : H/2;
+    // come in from just outside the frame, from a random side
+    const ang = Math.random() * Math.PI * 2;
+    const rad = Math.max(W, H) * 0.62;
+    const x = W/2 + Math.cos(ang)*rad;
+    const y = H/2 + Math.sin(ang)*rad*0.9;
+    const sp = (1.6 + Math.random()*1.1) * d.speed * (1 + progress*0.35) * (Math.min(W,H)/720);
+    const toC = Math.atan2(cy - y, cx - x);
+    bugs.push({
+      x, y,
+      vx: Math.cos(toC)*sp, vy: Math.sin(toC)*sp,
+      state: 'fly',
+      anchor: -1, ox: 0, oy: 0,
+      hue: 320 + Math.random()*40,          // pink → magenta
+      phase: Math.random()*Math.PI*2,
+      wob: 0.6 + Math.random()*0.8,
+      born: performance.now(),
+      lastX: x, lastY: y,
+      sp
+    });
+  }
+
+  function distToSeg(px0, py0, ax, ay, bx, by){
+    const dx = bx-ax, dy = by-ay;
+    const L2 = dx*dx + dy*dy;
+    let t = L2 > 0 ? ((px0-ax)*dx + (py0-ay)*dy) / L2 : 0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    const qx = ax + dx*t, qy = ay + dy*t;
+    return Math.hypot(px0-qx, py0-qy);
+  }
+
+  function bugRadius(){ return Math.max(11, body.r * 0.15); }
+  function swatRadius(){ return Math.max(34, body.r * 0.34); }
+  // px per 16.7ms. Low enough that a brisk brush-off registers, high enough that
+  // slowly drifting a hand across your chest does nothing.
+  function swatSpeedMin(){ return Math.max(5.5, body.r * 0.075); }
+
+  function updateBugs(dt, t, progress, poseTick){
+    const R = bugRadius();
+    const latchD = body.r * LATCH_DIST;
+    const d = DIFF[diffKey] || DIFF.normal;
+
+    for (let i = bugs.length - 1; i >= 0; i--){
+      const b = bugs[i];
+      b.phase += dt * 0.006 * b.wob;
+
+      if (b.state === 'fly'){
+        if (body.ok){
+          // steer toward a free-ish spot on the body
+          const tx = body.center.x, ty = body.center.y;
+          const ax = tx - b.x, ay = ty - b.y;
+          const L = Math.hypot(ax, ay) || 1;
+          const pull = 0.055 * d.drawIn * (1 + progress*0.3);
+          b.vx += (ax/L) * b.sp * pull;
+          b.vy += (ay/L) * b.sp * pull;
+          // mosquito-ish wander
+          b.vx += Math.cos(b.phase*2.3) * 0.16;
+          b.vy += Math.sin(b.phase*1.9) * 0.16;
+          const sp = Math.hypot(b.vx, b.vy);
+          const maxSp = b.sp * 1.9;
+          if (sp > maxSp){ b.vx = b.vx/sp*maxSp; b.vy = b.vy/sp*maxSp; }
+          b.x += b.vx; b.y += b.vy;
+
+          if (L < latchD && latchedCount() < MAX_ORBS){
+            // cling where it actually arrived, on the nearest anchor slot
+            let best = -1, bestD = Infinity;
+            for (let k=0;k<ANCHOR_N;k++){
+              const a = body.anchors[k];
+              if (!a) continue;
+              const dd = Math.hypot(b.x-a.x, b.y-a.y);
+              if (dd < bestD){ bestD = dd; best = k; }
+            }
+            if (best >= 0){
+              const a = body.anchors[best];
+              b.state = 'latch';
+              b.anchor = best;
+              b.ox = (b.x - a.x) / Math.max(1, body.r);
+              b.oy = (b.y - a.y) / Math.max(1, body.r);
+              b.vx = 0; b.vy = 0;
+              latchedEver++;
+              latchSound();
+            }
+          }
+        } else {
+          // nobody detected yet — drift and hover near the middle
+          b.vx += (W/2 - b.x) * 0.00035;
+          b.vy += (H/2 - b.y) * 0.00035;
+          b.vx *= 0.985; b.vy *= 0.985;
+          b.x += b.vx + Math.cos(b.phase*2.1)*0.5;
+          b.y += b.vy + Math.sin(b.phase*1.7)*0.5;
+        }
+        // strays that wandered far off-screen are recycled
+        if (b.x < -W*0.9 || b.x > W*1.9 || b.y < -H*0.9 || b.y > H*1.9){ bugs.splice(i,1); continue; }
+      } else {
+        const a = anchorPos(b.anchor);
+        if (a){
+          const wobX = Math.sin(b.phase*3.1) * body.r * 0.035;
+          const wobY = Math.cos(b.phase*2.6) * body.r * 0.035;
+          b.x = a.x + b.ox * body.r + wobX;
+          b.y = a.y + b.oy * body.r + wobY;
+        } else {
+          // that body part went out of view — hover in place, still swattable
+          b.x += Math.cos(b.phase*2.1) * 0.6;
+          b.y += Math.sin(b.phase*1.8) * 0.6;
+        }
+      }
+      b.lastX = b.x; b.lastY = b.y;
+    }
+
+    if (latchedCount() >= 3) cleanArmed = true;
+
+    // ---- swat: a fast wrist sweeps a segment, everything along it is brushed off
+    if (state === 'playing' && poseTick){
+      const minSp = swatSpeedMin();
+      const swR = swatRadius();
+      for (let wi=0; wi<2; wi++){
+        const w = wrists[wi];
+        if (!w.has) continue;
+        if (t - w.sweepT > SWEEP_GAP) w.sweep = 0;
+        if (w.speed < minSp) continue;
+        w.sweepT = t;
+
+        // a bigger, faster swing sweeps a wider swath — so committing to a real
+        // arm swing clears more than a flick, instead of both being identical
+        const reach = swR * (0.72 + 0.55 * Math.min(1, w.speed / (minSp * 2.4)));
+
+        for (let i = bugs.length - 1; i >= 0; i--){
+          const b = bugs[i];
+          if (distToSeg(b.x, b.y, w.px, w.py, w.x, w.y) < reach + R){
+            bugs.splice(i, 1);
+            w.sweep++;
+            registerSwat(b, w.sweep);
+          }
+        }
+      }
+    }
+
+    // ---- spawn
+    if (state === 'playing' && t >= nextSpawnAt){
+      spawnBug(progress);
+      const noise = latchedCount() / MAX_LATCH;
+      const base = d.spawn0 + (d.spawn1 - d.spawn0) * progress;
+      // the more that are already on you, the more they call their friends in
+      const swarm = noise > 0.7 ? 0.62 : 1;
+      nextSpawnAt = t + base * swarm * (0.75 + Math.random()*0.5);
+    }
+  }
+
+  function registerSwat(b, chainIdx){
+    swatted++;
+    const c = Math.min(CHAIN_CAP, chainIdx);
+    const pts = 100 * c;
+    score += pts;
+    if (chainIdx > bestChain) bestChain = chainIdx;
+
+    swatSound(c);
+    spawnBurst(b.x, b.y, b.hue, 14 + c*2);
+    rings.push({ x:b.x, y:b.y, r:bugRadius()*0.8, hue:b.hue, a:0.85, grow:4.2 });
+    spawnPopup(b.x, b.y, '+' + pts, `hsl(${b.hue},100%,74%)`);
+    shake = Math.min(9, 2 + c);
+    flashT = 1;
+
+    if (chainIdx >= 2){
+      chainPop.textContent = 'CHAIN ×' + c;
+      chainPop.classList.remove('pop');
+      void chainPop.offsetWidth;   // restart the animation
+      chainPop.classList.add('pop');
+    }
+
+    scoreEl.textContent = score;
+    swatEl.textContent = swatted;
+
+    // Let a few pile on, then brush every one of them off in one go.
+    // Armed at 3+ clinging, paid out the moment the body is clear again — so the
+    // bonus rewards the gamble, not a lucky single swat.
+    if (cleanArmed && latchedCount() === 0){
+      cleanArmed = false;
+      cleanCount++;
+      score += 500;
+      scoreEl.textContent = score;
+      spawnPopup(W/2, H*0.36, 'CLEAN +500', '#9dff4d');
+      cleanSound();
+    }
+  }
+
+  function spawnPopup(x, y, text, color){ popups.push({ x, y, text, color, life:1, vy:-0.7 }); }
+  function spawnBurst(x, y, hue, n){
+    for (let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2, v = 1.5 + Math.random()*5;
+      bursts.push({ x, y, vx:Math.cos(a)*v, vy:Math.sin(a)*v, life:1, hue });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BEST SCORE
+  // ---------------------------------------------------------------------------
+  function bestKey(){ return 'harai.best.' + diffKey; }
+  function readBest(){
+    try {
+      const v = window.localStorage ? window.localStorage.getItem(bestKey()) : null;
+      const n = v === null ? 0 : parseInt(v, 10);
+      return isFinite(n) && n > 0 ? n : 0;
+    } catch(e){ return 0; }
+  }
+  function writeBest(v){
+    try { if (window.localStorage) window.localStorage.setItem(bestKey(), String(v)); } catch(e){}
+  }
+  function refreshBestLabel(){
+    const b = readBest();
+    bestEl.textContent = b > 0 ? String(b) : '—';
+  }
+
+  for (const chip of chipEls){
+    chip.addEventListener('click', () => {
+      const k = chip.getAttribute('data-diff');
+      if (!k || !DIFF[k]) return;
+      diffKey = k;
+      for (const c of chipEls) c.classList.toggle('on', c === chip);
+      refreshBestLabel();
+      countBeep(false);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER
+  // ---------------------------------------------------------------------------
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(5,2,14,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(48,14,66,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W/2, H*0.46, Math.min(W,H)*0.18, W/2, H*0.5, Math.max(W,H)*0.76);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(3,1,8,0.88)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  // synthwave horizon
+  function drawGrid(t){
+    const c = fctx;
+    const hy = H * 0.80;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    c.strokeStyle = 'rgba(255,62,165,0.16)'; c.lineWidth = 1;
+    for (let i=1;i<=9;i++){
+      const p = i/9;
+      const y = hy + (H - hy) * (p*p);
+      c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke();
+    }
+    for (let i=-7;i<=7;i++){
+      c.beginPath(); c.moveTo(W/2 + i*(W*0.055), hy); c.lineTo(W/2 + i*(W*0.42), H); c.stroke();
+    }
+    c.strokeStyle = 'rgba(70,240,255,0.30)'; c.lineWidth = 1.6;
+    c.beginPath(); c.moveTo(0, hy); c.lineTo(W, hy); c.stroke();
+    c.restore();
+  }
+
+  function drawBody(){
+    if (!boneOn || !body.ok) return;
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    c.strokeStyle = 'rgba(70,240,255,0.34)';
+    c.lineWidth = Math.max(2, body.r*0.045);
+    c.lineCap = 'round';
+    for (const [a, b] of body.bones){
+      c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+    }
+    for (let i=0;i<ANCHOR_N;i++){
+      const a = body.anchors[i];
+      if (!a) continue;
+      c.fillStyle = 'rgba(70,240,255,0.28)';
+      c.beginPath(); c.arc(a.x, a.y, Math.max(2.2, body.r*0.035), 0, Math.PI*2); c.fill();
+    }
+    c.restore();
+  }
+
+  // the bug itself: a neon orb with a little face and blurred wings
+  function drawBug(b, t){
+    const c = fctx;
+    const R = bugRadius();
+    const latched = b.state === 'latch';
+    const flap = Math.sin(b.phase*9) * 0.5 + 0.5;
+
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.translate(b.x, b.y);
+
+    // aura
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, R*3.1);
+    g.addColorStop(0,   `hsla(${b.hue},100%,86%,0.9)`);
+    g.addColorStop(0.3, `hsla(${b.hue},100%,64%,0.36)`);
+    g.addColorStop(1,   `hsla(${b.hue},100%,58%,0)`);
+    c.fillStyle = g;
+    c.beginPath(); c.arc(0, 0, R*3.1, 0, Math.PI*2); c.fill();
+
+    // wings
+    c.strokeStyle = `hsla(${(b.hue+40)%360},100%,80%,${0.22 + flap*0.3})`;
+    c.lineWidth = Math.max(1, R*0.14);
+    for (const s of [-1, 1]){
+      c.beginPath();
+      c.ellipse(s*R*0.85, -R*0.5, R*0.72, R*0.34*(0.5+flap*0.7), s*0.7, 0, Math.PI*2);
+      c.stroke();
+    }
+
+    // clinging legs when it has landed on you
+    if (latched){
+      c.strokeStyle = `hsla(${b.hue},100%,72%,0.5)`;
+      c.lineWidth = Math.max(1, R*0.1);
+      for (let i=0;i<4;i++){
+        const a = Math.PI*0.35 + i*0.42 + Math.sin(b.phase*2 + i)*0.08;
+        c.beginPath(); c.moveTo(0, 0);
+        c.lineTo(Math.cos(a)*R*1.5, Math.sin(a)*R*1.5);
+        c.stroke();
+      }
+    }
+
+    // body
+    c.fillStyle = `hsla(${b.hue},100%,72%,0.95)`;
+    c.beginPath(); c.arc(0, 0, R*0.92, 0, Math.PI*2); c.fill();
+    c.fillStyle = `hsla(${b.hue},100%,95%,0.95)`;
+    c.beginPath(); c.arc(0, 0, R*0.5, 0, Math.PI*2); c.fill();
+
+    // face — the "cute" half of cyberpunk-cute
+    c.fillStyle = 'rgba(20,2,26,0.9)';
+    const ex = R*0.34, ey = -R*0.08, er = R*0.18;
+    c.beginPath(); c.arc(-ex, ey, er, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.arc( ex, ey, er, 0, Math.PI*2); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.9)';
+    c.beginPath(); c.arc(-ex + er*0.3, ey - er*0.3, er*0.36, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.arc( ex + er*0.3, ey - er*0.3, er*0.36, 0, Math.PI*2); c.fill();
+    c.strokeStyle = 'rgba(20,2,26,0.75)';
+    c.lineWidth = Math.max(1, R*0.09);
+    c.beginPath();
+    c.arc(0, R*0.16, R*0.26, latched ? Math.PI*1.15 : 0.2, latched ? Math.PI*1.85 : Math.PI-0.2);
+    c.stroke();
+
+    c.restore();
+  }
+
+  // the sweep ribbon — makes a big arm swing read as a real swipe
+  function drawWristTrails(){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const w of wrists){
+      if (!w.has || w.trail.length < 2) continue;
+      const hot = w.speed >= swatSpeedMin();
+      const n = w.trail.length;
+      for (let i=1;i<n;i++){
+        const p0 = w.trail[i-1], p1 = w.trail[i];
+        const f = i/n;
+        c.strokeStyle = hot ? `hsla(180,100%,${68+f*22}%,${0.16 + f*0.6})`
+                            : `hsla(300,100%,72%,${0.05 + f*0.16})`;
+        c.lineWidth = (hot ? swatRadius()*0.85 : swatRadius()*0.32) * f;
+        c.lineCap = 'round';
+        c.beginPath(); c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.stroke();
+      }
+      const head = w.trail[n-1];
+      const rr = swatRadius() * (hot ? 0.62 : 0.34);
+      const g = c.createRadialGradient(head.x, head.y, 0, head.x, head.y, rr*2);
+      g.addColorStop(0, hot ? 'rgba(190,255,255,0.75)' : 'rgba(255,180,240,0.35)');
+      g.addColorStop(1, 'rgba(120,220,255,0)');
+      c.fillStyle = g;
+      c.beginPath(); c.arc(head.x, head.y, rr*2, 0, Math.PI*2); c.fill();
+    }
+    c.restore();
+  }
+
+  function updateDrawBursts(){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i=bursts.length-1;i>=0;i--){
+      const b = bursts[i];
+      b.x += b.vx; b.y += b.vy; b.vx *= 0.92; b.vy = b.vy*0.92 + 0.12; b.life -= 0.028;
+      if (b.life <= 0){ bursts.splice(i,1); continue; }
+      c.fillStyle = `hsla(${b.hue},100%,${70+b.life*22}%,${b.life})`;
+      c.beginPath(); c.arc(b.x, b.y, 2.8*b.life+0.8, 0, Math.PI*2); c.fill();
+    }
+    for (let i=rings.length-1;i>=0;i--){
+      const r = rings[i];
+      r.r += r.grow; r.a *= 0.88;
+      if (r.a < 0.02){ rings.splice(i,1); continue; }
+      c.strokeStyle = `hsla(${r.hue},100%,78%,${r.a})`;
+      c.lineWidth = 2.6;
+      c.beginPath(); c.arc(r.x, r.y, r.r, 0, Math.PI*2); c.stroke();
+    }
+    c.restore();
+  }
+
+  function updateDrawPopups(){
+    for (let i=popups.length-1;i>=0;i--){
+      const p = popups[i];
+      p.y += p.vy; p.life -= 0.018;
+      if (p.life <= 0){ popups.splice(i,1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.font = '800 20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowBlur = 12; ctx.shadowColor = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+  }
+
+  // cheap RGB-split glitch that only shows up when they've piled on
+  function drawGlitch(noise){
+    if (noise < 0.42) return;
+    const n = Math.floor((noise - 0.42) * 14);
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (let i=0;i<n;i++){
+      const y = Math.random()*H;
+      const h = 2 + Math.random()*10;
+      const off = (Math.random()-0.5) * 26 * noise;
+      ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,62,165,0.16)' : 'rgba(70,240,255,0.14)';
+      ctx.fillRect(off - 14, y, W + 28 + Math.abs(off), h);
+    }
+    ctx.restore();
+  }
+
+  const COUNT_LABELS = ['3','2','1','はらえ！'];
+  const COUNT_STEP = 620;
+
+  function drawCountdown(label, q){
+    const scale = 1 + (1 - Math.min(1, q/0.3))*0.55;
+    const alpha = q > 0.74 ? 1 - (q-0.74)/0.26 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(W/2, H*0.4);
+    ctx.scale(scale, scale);
+    ctx.font = label.length > 2 ? '800 46px sans-serif' : '800 92px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 30; ctx.shadowColor = 'rgba(255,62,165,0.9)';
+    ctx.fillStyle = '#ff3ea5';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  ROUND FLOW
+  // ---------------------------------------------------------------------------
+  function resetGame(){
+    score = 0; swatted = 0; bestChain = 0; cleanCount = 0; latchedEver = 0;
+    bugs.length = 0; bursts.length = 0; popups.length = 0; rings.length = 0;
+    for (const w of wrists){ w.sweep = 0; w.sweepT = 0; w.trail.length = 0; w.speed = 0; }
+    scoreEl.textContent = '0'; swatEl.textContent = '0'; latchEl.textContent = '0';
+    noiseBar.style.width = '0%';
+    noiseMeter.classList.remove('hot');
+    timeEl.textContent = Math.ceil(ROUND_MS/1000);
+    timeEl.classList.remove('low');
+    lastTickSecond = Math.ceil(ROUND_MS/1000);
+    timeLeft = ROUND_MS;
+    buzzLevel = 0; shake = 0; flashT = 0; cleanArmed = false;
+    lastCountIdx = -1;
+  }
+
+  function startGame(){
+    resetGame();
+    state = 'countdown';
+    countdownStart = performance.now();
+  }
+
+  function endGame(){
+    if (state !== 'playing') return;
+    state = 'over';
+    endSound();
+    const best = readBest();
+    const isNew = score > best;
+    if (isNew) writeBest(score);
+    finalScore.textContent = score;
+    finalSub.textContent =
+      `払った ${swatted} 匹 ・ 最大チェイン ×${Math.min(CHAIN_CAP, bestChain)} ・ CLEAN ${cleanCount} 回 ・ ${(DIFF[diffKey]||DIFF.normal).label}`;
+    newBestEl.style.display = isNew ? 'block' : 'none';
+    resultBox.style.display = 'block';
+    eyebrow.style.display = 'none';
+    titleEl.textContent = 'TIME UP';
+    subEl.textContent = '';
+    hintEl.style.display = 'none';
+    startBtn.textContent = 'もう一度';
+    refreshBestLabel();
+    overlay.classList.remove('hidden');
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+    const dt = lastFrameT ? Math.min(64, t - lastFrameT) : 16;
+    lastFrameT = t;
+
+    const fresh = RESULT.lm && (t - RESULT.t) < 500;
+    const poseTick = !!fresh && RESULT.t !== lastPoseT;
+    const poseDt = poseTick ? clamp(RESULT.t - lastPoseT, 8, 200) : 0;
+    if (poseTick) lastPoseT = RESULT.t;
+    updateBody(fresh ? RESULT.lm : null, poseTick, poseDt);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+      shake *= 0.85;
+    }
+    drawVideoBase();
+
+    fctx.save();
+    fctx.setTransform(1,0,0,1,0,0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.3)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    let progress = 0;
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNT_STEP);
+      if (idx !== lastCountIdx && idx >= 0 && idx < COUNT_LABELS.length){
+        lastCountIdx = idx;
+        countBeep(idx === COUNT_LABELS.length - 1);
+      }
+      if (idx >= COUNT_LABELS.length){
+        state = 'playing';
+        roundStart = t;
+        nextSpawnAt = t + 260;
+      }
+    }
+    if (state === 'playing'){
+      const elapsed = t - roundStart;
+      timeLeft = Math.max(0, ROUND_MS - elapsed);
+      progress = Math.min(1, elapsed / ROUND_MS);
+    }
+
+    if (state === 'playing' || state === 'countdown') updateBugs(dt, t, progress, poseTick);
+
+    const nLatch = latchedCount();
+    const noise = clamp01(nLatch / MAX_LATCH);
+    buzzLevel += (noise - buzzLevel) * 0.08;
+
+    drawGrid(t);
+    drawBody();
+    for (const b of bugs) drawBug(b, t);
+    drawWristTrails();
+    updateDrawBursts();
+
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    drawGlitch(buzzLevel);
+    updateDrawPopups();
+
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNT_STEP);
+      if (idx >= 0 && idx < COUNT_LABELS.length){
+        drawCountdown(COUNT_LABELS[idx], (el % COUNT_STEP) / COUNT_STEP);
+      }
+    }
+    ctx.restore();  // shake
+
+    if (state === 'playing'){
+      const sec = Math.ceil(timeLeft/1000);
+      if (sec !== lastTickSecond){
+        lastTickSecond = sec;
+        timeEl.textContent = sec;
+        timeEl.classList.toggle('low', sec <= 10);
+        if (sec <= 10 && sec > 0) tickWarn();
+      }
+      if (timeLeft <= 0) endGame();
+    }
+
+    // audio + screen response to how many are clinging
+    if (audioReady){
+      const at = actx.currentTime;
+      const playing = (state === 'playing');
+      buzzGain.gain.setTargetAtTime(playing ? buzzLevel*0.055 : 0, at, 0.15);
+      buzzFilter.frequency.setTargetAtTime(560 + buzzLevel*420, at, 0.2);
+      droneGain.gain.setTargetAtTime(playing ? 0.06 : 0.02, at, 0.3);
+    }
+    flashT *= 0.86;
+    buzzFxEl.style.background = `rgba(255,62,165,${(buzzLevel*0.10 + flashT*0.06).toFixed(3)})`;
+    edgeEl.style.opacity = (buzzLevel > 0.55 ? (buzzLevel-0.55)/0.45 : 0).toFixed(2);
+
+    latchEl.textContent = nLatch;
+    noiseBar.style.width = Math.round(noise*100) + '%';
+    noiseMeter.classList.toggle('hot', noise > 0.55);
+
+    if (state === 'playing'){
+      if (!body.ok){
+        stateDot.textContent = '上半身をカメラに映してください';
+        stateDot.className = 'silent';
+      } else if (noise > 0.62){
+        stateDot.textContent = '⚠ たかられすぎ！ 大きく払え';
+        stateDot.className = 'warnState';
+      } else if (nLatch > 0){
+        stateDot.textContent = `腕を振って払え（${nLatch}匹）`;
+        stateDot.className = 'hot';
+      } else {
+        stateDot.textContent = 'クリーン！ 次が来るぞ';
+        stateDot.className = '';
+      }
+    } else if (state === 'countdown'){
+      stateDot.textContent = '上半身をカメラに映して構えて';
+      stateDot.className = 'silent';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        if (typeof Pose === 'undefined' || typeof Camera === 'undefined'){
+          throw new Error('姿勢検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+        }
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        if (!pose) initPose();
+        await startStream();
+        await startCameraLoop();
+        running = true;
+        booted = true;
+        lastFrameT = 0;
+        requestAnimationFrame(frame);
+      } else {
+        if (actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      centerHud.classList.add('show');
+      boneBtn.classList.toggle('active', boneOn);
+      resultBox.style.display = 'none';
+      newBestEl.style.display = 'none';
+      eyebrow.style.display = 'block';
+      titleEl.textContent = 'HARAI';
+      subEl.textContent = '電脳蚊ばらい — たかってくる光を、腕でなぎ払え';
+      hintEl.style.display = 'block';
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+      startGame();
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+  refreshBestLabel();
+})();
+</script>
+</body>
+</html>
