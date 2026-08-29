@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#04030b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="人差し指で宙に漢字を書くカメラゲーム。光の筆路を筆順どおりになぞると一画ずつ音階が昇り、字が金色に灯る - KUUSHO 空書">
+<title>KUUSHO ─ 空書・宙に書く光の文字</title>
+<style>
+  :root{
+    --void:#04030b; --haze:#161033; --ghost:#eef2ff;
+    --ink:#7fb4ff; --gold:#ffd98a; --hot:#fff6d8; --violet:#b98bff; --warn:#ff5470; --accent:#8affe0;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ width:100%; height:100%; background:var(--void); overflow:hidden;
+    font-family:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  #stage{ position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  video{ position:absolute; width:2px; height:2px; opacity:0; pointer-events:none; }
+
+  #grain{ position:fixed; inset:0; z-index:6; pointer-events:none; mix-blend-mode:screen; opacity:.35;
+    background:repeating-linear-gradient(to bottom, rgba(160,190,255,0.035) 0px, rgba(160,190,255,0.035) 1px, transparent 2px, transparent 4px); }
+  #goldFlash{ position:fixed; inset:0; z-index:7; pointer-events:none; background:rgba(255,217,138,0.0); }
+
+  /* ---- Start / result overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, var(--haze) 0%, var(--void) 78%);
+    transition:opacity .7s ease, visibility .7s ease; text-align:center; padding:1.5rem;
+    overflow:hidden;
+  }
+  #overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .orb{ position:absolute; border-radius:50%; filter:blur(46px); opacity:.34; pointer-events:none;
+    animation:drift 15s ease-in-out infinite alternate; }
+  .orb.o1{ width:38vmin; height:38vmin; left:8%;  top:12%; background:radial-gradient(circle,var(--violet),transparent 70%); }
+  .orb.o2{ width:46vmin; height:46vmin; right:4%; top:30%; background:radial-gradient(circle,var(--ink),transparent 70%); animation-delay:-5s; }
+  .orb.o3{ width:34vmin; height:34vmin; left:30%; bottom:6%; background:radial-gradient(circle,var(--gold),transparent 70%); animation-delay:-9s; }
+  @keyframes drift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(6vmin,-4vmin) scale(1.14); } }
+
+  #eyebrow{ color:rgba(238,242,255,0.4); font-size:0.66rem; letter-spacing:0.5em; margin-bottom:1rem; position:relative; }
+  #title{
+    font-size:2.3rem; font-weight:800; letter-spacing:0.12em; line-height:1.2; position:relative;
+    background:linear-gradient(90deg,#7fb4ff,#b98bff,#ffd98a,#fff6d8,#8affe0,#7fb4ff);
+    background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:flow 8s linear infinite; margin-bottom:0.4rem;
+  }
+  @keyframes flow{ to{ background-position:300% 0; } }
+  #sub{ color:rgba(238,242,255,0.55); font-size:0.82rem; letter-spacing:0.08em; margin-bottom:1.6rem; position:relative; white-space:pre-line; }
+  #startBtn{
+    position:relative; padding:0.95rem 3rem; font-size:1rem; letter-spacing:0.18em; font-family:inherit; font-weight:700;
+    color:var(--void); background:linear-gradient(90deg,#ffd98a,#b98bff); border:none; border-radius:100px;
+    cursor:pointer; box-shadow:0 0 28px rgba(185,139,255,0.45);
+    transition:transform .18s ease, box-shadow .18s ease; animation:breathe 3s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ box-shadow:0 0 22px rgba(185,139,255,0.4); }
+    50%{ box-shadow:0 0 46px rgba(255,217,138,0.6); }
+  }
+  #startBtn:active{ transform:scale(0.96); }
+  #hint{ position:relative; margin-top:2rem; max-width:23.5rem; color:rgba(238,242,255,0.5); font-size:0.76rem; line-height:1.9;
+    letter-spacing:0.02em; text-align:left; }
+  #hint b{ color:var(--gold); font-weight:700; }
+  #hint em{ color:var(--ink); font-style:normal; font-weight:700; }
+  #errorMsg{ display:none; position:relative; margin-top:1.4rem; max-width:80%; color:var(--warn); font-size:0.78rem; line-height:1.6; white-space:pre-line; }
+
+  #resultBox{ display:none; position:relative; margin-bottom:1.4rem; }
+  #resultBox .rlab{ font-size:0.62rem; letter-spacing:0.3em; color:rgba(238,242,255,0.45); }
+  #resultBox .rrank{ font-size:1.5rem; font-weight:800; letter-spacing:0.3em; color:var(--violet); margin-top:.3rem; }
+  #resultBox .rscore{ font-size:2.6rem; font-weight:800; color:var(--gold); line-height:1.25; font-variant-numeric:tabular-nums; }
+  #resultBox .rsub{ font-size:0.76rem; color:rgba(238,242,255,0.6); letter-spacing:0.05em; line-height:1.7; white-space:pre-line; }
+
+  /* ---- HUD ---- */
+  #hud{ position:fixed; z-index:12; left:0; right:0; top:0;
+    display:flex; align-items:flex-start; justify-content:space-between; padding:1.05rem 1rem 0;
+    pointer-events:none; opacity:0; transition:opacity .6s ease; }
+  #hud.show{ opacity:1; }
+  .panel{ background:rgba(6,5,16,0.5); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    border:1px solid rgba(180,180,255,0.16); border-radius:14px; padding:0.6rem 0.9rem; color:var(--ghost); min-width:112px; }
+  .panel .lab{ font-size:0.56rem; letter-spacing:0.22em; color:rgba(238,242,255,0.5); margin-bottom:0.25rem; }
+  .panel .val{ font-size:1.5rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; color:var(--gold); }
+  .panel[data-side="r"]{ text-align:right; }
+  .panel[data-side="r"] .val{ color:var(--ink); }
+  .panel[data-side="r"] .val.low{ color:var(--warn); }
+  .subLab{ font-size:0.62rem; letter-spacing:0.09em; color:rgba(238,242,255,0.5); margin-top:0.3rem; }
+
+  #centerHud{ position:fixed; z-index:12; left:50%; bottom:3.6rem; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:.3rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; max-width:92vw; }
+  #centerHud.show{ opacity:1; }
+  #stateDot{ font-size:0.66rem; letter-spacing:0.14em; color:rgba(238,242,255,0.6); font-weight:700;
+    padding:0.42rem 1.1rem; border-radius:100px; border:1px solid rgba(180,180,255,0.16);
+    background:rgba(6,5,16,0.5); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    transition:color .2s ease, border-color .2s ease, box-shadow .2s ease; white-space:nowrap; }
+  #stateDot.hot{ color:var(--gold); border-color:rgba(255,217,138,0.55); box-shadow:0 0 18px rgba(255,217,138,0.28); }
+  #stateDot.silent{ color:rgba(150,150,175,0.85); border-color:rgba(120,120,150,0.32); box-shadow:none; }
+  #stateDot.guide{ color:var(--ink); border-color:rgba(127,180,255,0.45); box-shadow:0 0 16px rgba(127,180,255,0.2); }
+
+  #topbar{ position:fixed; z-index:12; bottom:0; right:0; padding:0 1rem 1.15rem; display:flex; gap:.55rem;
+    opacity:0; transition:opacity .6s ease; }
+  #topbar.show{ opacity:1; }
+  .btn{ pointer-events:auto; font-family:inherit; font-size:0.68rem; letter-spacing:0.1em; font-weight:700;
+    color:var(--ghost); background:rgba(6,5,16,0.55); border:1px solid rgba(180,180,255,0.18);
+    border-radius:100px; padding:0.5rem 0.9rem; cursor:pointer; backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px); transition:transform .15s ease, background .15s ease; }
+  .btn:active{ transform:scale(0.94); }
+  #brand{ position:fixed; z-index:12; bottom:0; left:0; padding:0 0 1.2rem 1.15rem; pointer-events:none;
+    opacity:0; transition:opacity .6s ease; }
+  #brand.show{ opacity:1; }
+  #brand .b1{ font-size:0.64rem; font-weight:800; letter-spacing:0.3em; color:rgba(238,242,255,0.75); }
+  #brand .b2{ font-size:0.54rem; letter-spacing:0.2em; color:rgba(238,242,255,0.38); margin-top:.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <video id="video" playsinline muted></video>
+  <div id="grain"></div>
+  <div id="goldFlash"></div>
+
+  <div id="brand"><div class="b1">KUUSHO</div><div class="b2">空書 / 宙に書く</div></div>
+
+  <div id="topbar">
+    <button class="btn" id="flipBtn">⟲ カメラ</button>
+  </div>
+
+  <div id="hud">
+    <div class="panel" data-side="l">
+      <div class="lab">SCORE</div>
+      <div class="val" id="scoreEl">0</div>
+      <div class="subLab">連続 <span id="comboEl">0</span> 字</div>
+    </div>
+    <div class="panel" data-side="r">
+      <div class="lab">TIME</div>
+      <div class="val" id="timeEl">80</div>
+      <div class="subLab">書いた字 <span id="charEl">0</span></div>
+    </div>
+  </div>
+
+  <div id="centerHud"><div id="stateDot">WAITING</div></div>
+
+  <div id="overlay">
+    <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    <div id="eyebrow">CAMERA GAME</div>
+    <div id="resultBox">
+      <div class="rlab">墨 尽 き た り</div>
+      <div class="rrank" id="finalRank">—</div>
+      <div class="rscore" id="finalScore">0</div>
+      <div class="rsub" id="finalSub"></div>
+    </div>
+    <div id="title">KUUSHO</div>
+    <div id="sub">空書 — 人差し指一本で、宙に文字を書く</div>
+    <button id="startBtn">はじめる</button>
+    <div id="hint">
+      ・<b>人差し指を一本だけ立てる</b>と、指先が光の筆になります<br>
+      ・宙に浮かぶ<b>光の筆路</b>を、指先でなぞってください<br>
+      ・なぞれるのは<em>筆順どおり・矢印の向き</em>だけ。始点の輪から入ります<br>
+      ・一画なぞるごとに音階が昇り、字が完成すると金色に灯ります<br>
+      ・ぴったりなぞるほど高評価（<b>神・優・良・可</b>）＝高得点＋<b>時間延長</b><br>
+      ・難しい字は<em>手をパーで1秒</em>かざすと飛ばせます（連続は途切れます）<br>
+      ・制限時間は<b>80秒</b>。進むほど画数の多い字が出ます
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------------
+  //  DOM
+  // ---------------------------------------------------------------------------
+  const canvas   = document.getElementById('stage');
+  const ctx      = canvas.getContext('2d');
+  const video    = document.getElementById('video');
+  const overlay  = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const errorMsg = document.getElementById('errorMsg');
+  const hud      = document.getElementById('hud');
+  const topbar   = document.getElementById('topbar');
+  const brand    = document.getElementById('brand');
+  const centerHud= document.getElementById('centerHud');
+  const stateDot = document.getElementById('stateDot');
+  const flipBtn  = document.getElementById('flipBtn');
+  const scoreEl  = document.getElementById('scoreEl');
+  const comboEl  = document.getElementById('comboEl');
+  const timeEl   = document.getElementById('timeEl');
+  const charEl   = document.getElementById('charEl');
+  const resultBox= document.getElementById('resultBox');
+  const finalScore = document.getElementById('finalScore');
+  const finalRank  = document.getElementById('finalRank');
+  const finalSub   = document.getElementById('finalSub');
+  const eyebrow  = document.getElementById('eyebrow');
+  const titleEl  = document.getElementById('title');
+  const subEl    = document.getElementById('sub');
+  const hintEl   = document.getElementById('hint');
+  const goldFlashEl = document.getElementById('goldFlash');
+
+  // additive glow layer — the brush trail, sparks and motes live here
+  const fx   = document.createElement('canvas');
+  const fctx = fx.getContext('2d');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fx.width = W * DPR; fx.height = H * DPR;
+    fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    layoutRails();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GLYPHS — anchors are in a 0..1 box (x right, y down), listed in true
+  //  Japanese stroke order, each stroke running in the true writing direction.
+  // ---------------------------------------------------------------------------
+  const GLYPHS = [
+    // --- 1〜2画 ---
+    { ch:'一', yomi:'いち',   s:[ [[0.08,0.50],[0.92,0.50]] ] },
+    { ch:'二', yomi:'に',     s:[ [[0.20,0.30],[0.80,0.30]], [[0.08,0.72],[0.92,0.72]] ] },
+    { ch:'十', yomi:'じゅう', s:[ [[0.08,0.44],[0.92,0.44]], [[0.50,0.06],[0.50,0.94]] ] },
+    { ch:'人', yomi:'ひと',   s:[ [[0.52,0.08],[0.30,0.50],[0.12,0.92]], [[0.46,0.44],[0.90,0.92]] ] },
+    { ch:'八', yomi:'はち',   s:[ [[0.44,0.16],[0.10,0.88]], [[0.58,0.16],[0.92,0.88]] ] },
+    { ch:'七', yomi:'しち',   s:[ [[0.08,0.34],[0.92,0.28]], [[0.58,0.08],[0.46,0.74],[0.90,0.82]] ] },
+    { ch:'力', yomi:'ちから', s:[ [[0.18,0.16],[0.76,0.16],[0.76,0.62],[0.56,0.86]], [[0.62,0.32],[0.12,0.92]] ] },
+    // --- 3画 ---
+    { ch:'三', yomi:'さん',   s:[ [[0.20,0.20],[0.80,0.20]], [[0.28,0.50],[0.72,0.50]], [[0.08,0.80],[0.92,0.80]] ] },
+    { ch:'大', yomi:'だい',   s:[ [[0.08,0.34],[0.92,0.34]], [[0.56,0.08],[0.34,0.52],[0.10,0.92]], [[0.50,0.42],[0.90,0.92]] ] },
+    { ch:'小', yomi:'しょう', s:[ [[0.50,0.10],[0.50,0.84]], [[0.24,0.26],[0.12,0.74]], [[0.76,0.26],[0.90,0.78]] ] },
+    { ch:'川', yomi:'かわ',   s:[ [[0.16,0.10],[0.08,0.88]], [[0.50,0.18],[0.50,0.94]], [[0.88,0.10],[0.88,0.86]] ] },
+    { ch:'山', yomi:'やま',   s:[ [[0.50,0.12],[0.50,0.60]], [[0.14,0.28],[0.14,0.86],[0.88,0.86]], [[0.88,0.20],[0.88,0.86]] ] },
+    { ch:'口', yomi:'くち',   s:[ [[0.18,0.14],[0.18,0.88]], [[0.18,0.14],[0.84,0.14],[0.84,0.88]], [[0.18,0.88],[0.84,0.88]] ] },
+    { ch:'上', yomi:'うえ',   s:[ [[0.40,0.10],[0.40,0.80]], [[0.40,0.46],[0.84,0.46]], [[0.08,0.82],[0.92,0.82]] ] },
+    { ch:'下', yomi:'した',   s:[ [[0.08,0.20],[0.92,0.20]], [[0.50,0.20],[0.50,0.92]], [[0.52,0.42],[0.82,0.50]] ] },
+    { ch:'土', yomi:'つち',   s:[ [[0.20,0.24],[0.80,0.24]], [[0.50,0.24],[0.50,0.80]], [[0.08,0.80],[0.92,0.80]] ] },
+    { ch:'工', yomi:'こう',   s:[ [[0.14,0.16],[0.86,0.16]], [[0.50,0.16],[0.50,0.84]], [[0.08,0.84],[0.92,0.84]] ] },
+    { ch:'千', yomi:'せん',   s:[ [[0.62,0.06],[0.22,0.26]], [[0.08,0.34],[0.92,0.34]], [[0.50,0.34],[0.50,0.94]] ] },
+    // --- 4画 ---
+    { ch:'天', yomi:'てん',   s:[ [[0.16,0.18],[0.84,0.18]], [[0.06,0.44],[0.94,0.44]], [[0.54,0.44],[0.32,0.68],[0.10,0.92]], [[0.50,0.50],[0.90,0.92]] ] },
+    { ch:'木', yomi:'き',     s:[ [[0.06,0.32],[0.94,0.32]], [[0.50,0.06],[0.50,0.94]], [[0.48,0.36],[0.12,0.90]], [[0.52,0.36],[0.88,0.90]] ] },
+    { ch:'日', yomi:'ひ',     s:[ [[0.26,0.08],[0.26,0.92]], [[0.26,0.08],[0.76,0.08],[0.76,0.92]], [[0.26,0.50],[0.76,0.50]], [[0.26,0.92],[0.76,0.92]] ] },
+    { ch:'中', yomi:'なか',   s:[ [[0.26,0.24],[0.26,0.72]], [[0.26,0.24],[0.74,0.24],[0.74,0.72]], [[0.26,0.72],[0.74,0.72]], [[0.50,0.06],[0.50,0.96]] ] },
+    { ch:'王', yomi:'おう',   s:[ [[0.14,0.18],[0.86,0.18]], [[0.26,0.50],[0.74,0.50]], [[0.50,0.18],[0.50,0.84]], [[0.08,0.84],[0.92,0.84]] ] },
+    { ch:'手', yomi:'て',     s:[ [[0.60,0.06],[0.24,0.22]], [[0.12,0.32],[0.88,0.32]], [[0.18,0.60],[0.82,0.60]], [[0.52,0.32],[0.52,0.88],[0.36,0.94]] ] },
+    // --- 5画 ---
+    { ch:'田', yomi:'た',     s:[ [[0.20,0.12],[0.20,0.88]], [[0.20,0.12],[0.80,0.12],[0.80,0.88]], [[0.50,0.12],[0.50,0.88]], [[0.20,0.50],[0.80,0.50]], [[0.20,0.88],[0.80,0.88]] ] },
+    { ch:'目', yomi:'め',     s:[ [[0.28,0.06],[0.28,0.94]], [[0.28,0.06],[0.74,0.06],[0.74,0.94]], [[0.28,0.35],[0.74,0.35]], [[0.28,0.64],[0.74,0.64]], [[0.28,0.94],[0.74,0.94]] ] },
+    { ch:'生', yomi:'せい',   s:[ [[0.58,0.06],[0.22,0.26]], [[0.14,0.30],[0.86,0.30]], [[0.22,0.58],[0.78,0.58]], [[0.50,0.08],[0.50,0.86]], [[0.08,0.86],[0.92,0.86]] ] }
+  ];
+
+  function tierOf(g){
+    const n = g.s.length;
+    if (n <= 2) return 0;
+    if (n === 3) return 1;
+    if (n === 4) return 2;
+    return 3;
+  }
+  const POOLS = [[], [], [], []];
+  for (const g of GLYPHS) POOLS[tierOf(g)].push(g);
+
+  function pickGlyph(progress, avoidCh){
+    let tiers;
+    if (progress < 0.18)      tiers = [0];
+    else if (progress < 0.42) tiers = [0, 1];
+    else if (progress < 0.68) tiers = [1, 2];
+    else                      tiers = [1, 2, 3];
+    const bag = [];
+    for (const t of tiers){ for (const g of POOLS[t]) bag.push(g); }
+    if (!bag.length) return GLYPHS[0];
+    for (let tries = 0; tries < 12; tries++){
+      const g = bag[(Math.random() * bag.length) | 0];
+      if (g.ch !== avoidCh) return g;
+    }
+    return bag[0];
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GAME CONSTANTS
+  // ---------------------------------------------------------------------------
+  const ROUND_MS  = 80000;
+  const MAX_TIME_MS = 99000;
+  const SKIP_HOLD_MS = 1000;
+  const GRADES = [
+    { key:'神', min:0.90, mult:2.0,  bonus:2600, color:'#fff6d8' },
+    { key:'優', min:0.74, mult:1.5,  bonus:1600, color:'#ffd98a' },
+    { key:'良', min:0.54, mult:1.1,  bonus:900,  color:'#8affe0' },
+    { key:'可', min:0.00, mult:0.75, bonus:350,  color:'#7fb4ff' }
+  ];
+  function gradeFor(acc){
+    for (const g of GRADES){ if (acc >= g.min) return g; }
+    return GRADES[GRADES.length - 1];
+  }
+
+  // ---------------------------------------------------------------------------
+  //  AUDIO ENGINE
+  // ---------------------------------------------------------------------------
+  let actx = null, master = null, comp = null, sfxBus = null, padBus = null;
+  let convolver = null, revGain = null;
+  let delay = null, fbGain = null, wetGain = null;
+  let voiceOscA = null, voiceOscB = null, voiceFilter = null, voiceGain = null;
+  let droneGain = null, windGain = null;
+  let audioReady = false;
+  const noiseBuf = { buf: null };
+
+  const BASE = 261.63;              // C4
+  const PENTA = [0, 2, 4, 7, 9];    // major pentatonic — one note per fifth of a stroke
+
+  function noteFor(strokeIndex, step){
+    const s = Math.max(0, Math.min(PENTA.length - 1, step));
+    const semi = PENTA[s] + Math.min(5, strokeIndex) * 3;
+    return BASE * Math.pow(2, semi / 12);
+  }
+
+  function makeImpulse(seconds, decayPow){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decayPow);
+    }
+    return buf;
+  }
+  function makeNoiseBuffer(seconds){
+    const rate = actx.sampleRate, len = Math.max(1, Math.floor(rate * seconds));
+    const buf = actx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  function buildAudio(){
+    if (audioReady) return;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+
+    master = actx.createGain(); master.gain.value = 0.9;
+    comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -17; comp.knee.value = 20; comp.ratio.value = 3.2;
+    comp.attack.value = 0.004;   comp.release.value = 0.24;
+
+    convolver = actx.createConvolver(); convolver.buffer = makeImpulse(3.0, 2.6);
+    revGain = actx.createGain(); revGain.gain.value = 0.34;
+
+    sfxBus = actx.createGain(); sfxBus.gain.value = 1.0;
+    padBus = actx.createGain(); padBus.gain.value = 0.55;
+
+    // dreamy tail on the brush voice
+    delay = actx.createDelay(1.0); delay.delayTime.value = 0.28;
+    fbGain = actx.createGain();    fbGain.gain.value = 0.32;
+    wetGain = actx.createGain();   wetGain.gain.value = 0.24;
+    delay.connect(fbGain); fbGain.connect(delay); delay.connect(wetGain);
+    wetGain.connect(master); wetGain.connect(convolver);
+
+    sfxBus.connect(master); sfxBus.connect(convolver);
+    padBus.connect(master); padBus.connect(convolver);
+    convolver.connect(revGain); revGain.connect(master);
+    master.connect(comp); comp.connect(actx.destination);
+
+    noiseBuf.buf = makeNoiseBuffer(1.6);
+
+    // --- the brush voice: a soft bowed tone that sings while the rail advances
+    voiceFilter = actx.createBiquadFilter();
+    voiceFilter.type = 'lowpass'; voiceFilter.frequency.value = 1700; voiceFilter.Q.value = 3;
+    voiceGain = actx.createGain(); voiceGain.gain.value = 0.0001;
+    voiceOscA = actx.createOscillator(); voiceOscA.type = 'triangle'; voiceOscA.frequency.value = BASE;
+    voiceOscB = actx.createOscillator(); voiceOscB.type = 'sine';     voiceOscB.frequency.value = BASE * 2;
+    const vgB = actx.createGain(); vgB.gain.value = 0.3;
+    voiceOscA.connect(voiceFilter); voiceOscB.connect(vgB); vgB.connect(voiceFilter);
+    voiceFilter.connect(voiceGain);
+    voiceGain.connect(master); voiceGain.connect(convolver); voiceGain.connect(delay);
+    voiceOscA.start(); voiceOscB.start();
+
+    // --- night bed: a low drone plus a breath of wind
+    const dOscA = actx.createOscillator(); dOscA.type = 'sawtooth'; dOscA.frequency.value = 65.41;
+    const dOscB = actx.createOscillator(); dOscB.type = 'sine';     dOscB.frequency.value = 98.0;
+    const dFilter = actx.createBiquadFilter(); dFilter.type = 'lowpass'; dFilter.frequency.value = 210; dFilter.Q.value = 1.6;
+    droneGain = actx.createGain(); droneGain.gain.value = 0.05;
+    dOscA.connect(dFilter); dOscB.connect(dFilter); dFilter.connect(droneGain); droneGain.connect(padBus);
+    dOscA.start(); dOscB.start();
+
+    const wind = actx.createBufferSource(); wind.buffer = noiseBuf.buf; wind.loop = true;
+    const wFilter = actx.createBiquadFilter(); wFilter.type = 'bandpass'; wFilter.frequency.value = 620; wFilter.Q.value = 0.7;
+    windGain = actx.createGain(); windGain.gain.value = 0.022;
+    wind.connect(wFilter); wFilter.connect(windGain); windGain.connect(padBus);
+    wind.start();
+
+    audioReady = true;
+  }
+
+  function setVoice(freq, amount){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    voiceOscA.frequency.setTargetAtTime(freq, t, 0.05);
+    voiceOscB.frequency.setTargetAtTime(freq * 2, t, 0.05);
+    voiceFilter.frequency.setTargetAtTime(900 + amount * 2600, t, 0.08);
+    voiceGain.gain.setTargetAtTime(Math.max(0.0001, amount * 0.10), t, amount > 0.05 ? 0.04 : 0.16);
+  }
+
+  // koto-ish pluck as the brush crosses into a new note of the phrase
+  function kotoPluck(freq, amp){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const partials = [[1, 1.0, 1.1], [2.01, 0.34, 0.65], [3.02, 0.14, 0.4], [4.98, 0.05, 0.26]];
+    for (const [ratio, a, dur] of partials){
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, a * amp), t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + dur + 0.06);
+    }
+  }
+
+  function strokeBell(strokeIndex){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const freq = BASE * Math.pow(2, (12 + Math.min(5, strokeIndex) * 2) / 12);
+    for (const [ratio, a, dur] of [[1, 0.18, 1.5], [2.76, 0.07, 0.9], [5.4, 0.03, 0.5]]){
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * ratio;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(a, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(sfxBus);
+      o.start(t); o.stop(t + dur + 0.08);
+    }
+  }
+
+  function glyphChime(quality){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const semis = quality >= 2 ? [0, 4, 7, 12, 16, 19] : (quality === 1 ? [0, 4, 7, 12] : [0, 5, 7]);
+    semis.forEach((semi, i) => {
+      const o = actx.createOscillator(); o.type = 'triangle';
+      o.frequency.value = BASE * 2 * Math.pow(2, semi / 12);
+      const g = actx.createGain();
+      const st = t + i * 0.062;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.15, st + 0.014);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.62);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.66);
+    });
+    // shimmer of air
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+    bp.frequency.setValueAtTime(1400, t);
+    bp.frequency.exponentialRampToValueAtTime(5200, t + 0.5);
+    const g2 = actx.createGain();
+    g2.gain.setValueAtTime(0.0001, t);
+    g2.gain.exponentialRampToValueAtTime(0.09, t + 0.06);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    src.connect(bp); bp.connect(g2); g2.connect(sfxBus);
+    src.start(t); src.stop(t + 0.75);
+  }
+
+  // かすれ — the dry scratch of a brush that has left the path
+  function kasure(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const src = actx.createBufferSource(); src.buffer = noiseBuf.buf;
+    src.playbackRate.value = 0.7 + Math.random() * 0.4;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
+    bp.frequency.setValueAtTime(1900, t);
+    bp.frequency.exponentialRampToValueAtTime(520, t + 0.18);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.10, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    src.connect(bp); bp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t + 0.26);
+  }
+
+  function skipSound(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    [0, -4, -9].forEach((semi, i) => {
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.value = BASE * Math.pow(2, semi / 12);
+      const g = actx.createGain();
+      const st = t + i * 0.09;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.11, st + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 0.34);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 0.36);
+    });
+  }
+
+  function tickWarn(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = 1046.5;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.12);
+  }
+
+  function countBell(i){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    const o = actx.createOscillator(); o.type = 'triangle';
+    o.frequency.value = BASE * Math.pow(2, (i * 4) / 12);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); o.stop(t + 0.55);
+  }
+
+  function gongEnd(){
+    if (!audioReady) return;
+    const t = actx.currentTime;
+    setVoice(BASE, 0);
+    [1, 1.51, 2.34, 3.6].forEach((ratio, i) => {
+      const o = actx.createOscillator(); o.type = 'sine';
+      o.frequency.value = 98 * ratio;
+      const g = actx.createGain();
+      const st = t + i * 0.02;
+      g.gain.setValueAtTime(0.0001, st);
+      g.gain.exponentialRampToValueAtTime(0.2 / (i + 1), st + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, st + 2.6);
+      o.connect(g); g.connect(sfxBus);
+      o.start(st); o.stop(st + 2.7);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  //  HAND TRACKING
+  // ---------------------------------------------------------------------------
+  const RESULT = { hands: [], t: 0 };
+
+  function d2(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
+
+  function analyzeHand(lm){
+    const wrist = lm[0];
+    const palm = d2(lm[0], lm[9]) || 1e-4;
+    const ext = (tip, pip) => d2(lm[tip], wrist) > d2(lm[pip], wrist) * 1.05;
+    const idx = ext(8, 6), mid = ext(12, 10), ring = ext(16, 14), pinky = ext(20, 18);
+    const thumb = (d2(lm[4], wrist) > d2(lm[2], wrist) * 1.02) && (d2(lm[4], lm[5]) / palm > 0.72);
+    const count = (thumb ? 1 : 0) + (idx ? 1 : 0) + (mid ? 1 : 0) + (ring ? 1 : 0) + (pinky ? 1 : 0);
+    return {
+      tip: lm[8],
+      center: lm[9],
+      pen: idx && !(mid && ring),   // index up, and not an open/flat hand
+      open: count >= 4,
+      count
+    };
+  }
+
+  let hands = null;
+  function initHands(){
+    hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
+    hands.onResults(onHandResults);
+  }
+  function onHandResults(results){
+    const out = [];
+    const lms = (results && results.multiHandLandmarks) ? results.multiHandLandmarks : [];
+    for (let i = 0; i < lms.length; i++){
+      const lm = lms[i];
+      if (!lm || lm.length < 21) continue;
+      out.push(analyzeHand(lm));
+    }
+    RESULT.hands = out;
+    RESULT.t = performance.now();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  CAMERA
+  // ---------------------------------------------------------------------------
+  let mpCamera = null, facing = 'user', mirror = true, running = false;
+
+  async function startStream(){
+    if (video.srcObject) video.srcObject.getTracks().forEach(tr => tr.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    mirror = (facing === 'user');
+  }
+  async function startCameraLoop(){
+    if (mpCamera){ if (mpCamera.stop) mpCamera.stop(); mpCamera = null; }
+    mpCamera = new Camera(video, {
+      onFrame: async () => { if (running && hands) await hands.send({ image: video }); },
+      width: 1280, height: 720
+    });
+    mpCamera.start();
+  }
+  async function flipCamera(){
+    facing = (facing === 'user') ? 'environment' : 'user';
+    try { await startStream(); } catch(e){ /* keep the previous stream */ }
+  }
+  flipBtn.addEventListener('click', flipCamera);
+
+  function px(pt){ return mirror ? (1 - pt.x) * W : pt.x * W; }
+  function py(pt){ return pt.y * H; }
+
+  // ---------------------------------------------------------------------------
+  //  RAILS — resample each stroke's anchors into a dense, arc-length polyline
+  // ---------------------------------------------------------------------------
+  function buildRail(anchors, bx, by, S){
+    const p = anchors.map(a => ({ x: bx + a[0] * S, y: by + a[1] * S }));
+    const cum = [0];
+    let total = 0;
+    for (let i = 1; i < p.length; i++){
+      total += Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y);
+      cum.push(total);
+    }
+    if (!(total > 0.5)){
+      const pts = [];
+      for (let i = 0; i < 24; i++) pts.push({ x: p[0].x, y: p[0].y });
+      return { pts, n: 24, total: 0 };
+    }
+    const n = Math.max(24, Math.min(400, Math.round(total / 5)));
+    const pts = [];
+    for (let i = 0; i < n; i++){
+      const target = total * (i / (n - 1));
+      let k = 1;
+      while (k < cum.length - 1 && cum[k] < target) k++;
+      const segLen = (cum[k] - cum[k - 1]) || 1;
+      const f = Math.max(0, Math.min(1, (target - cum[k - 1]) / segLen));
+      pts.push({
+        x: p[k - 1].x + (p[k].x - p[k - 1].x) * f,
+        y: p[k - 1].y + (p[k].y - p[k - 1].y) * f
+      });
+    }
+    return { pts, n, total };
+  }
+
+  // shortest distance from p to the segment a-b — used so that a fast fingertip
+  // that passes clean through a start ring between two frames still registers
+  function distToSeg(p, a, b){
+    const vx = b.x - a.x, vy = b.y - a.y;
+    const L2 = vx * vx + vy * vy;
+    if (L2 < 1e-6) return Math.hypot(p.x - a.x, p.y - a.y);
+    let q = ((p.x - a.x) * vx + (p.y - a.y) * vy) / L2;
+    q = Math.max(0, Math.min(1, q));
+    return Math.hypot(p.x - (a.x + vx * q), p.y - (a.y + vy * q));
+  }
+
+  function boxSize(){
+    return Math.max(210, Math.min(W * 0.60, H * 0.54));
+  }
+  function layoutRails(){
+    if (!cur || !cur.glyph) return;
+    const S = boxSize();
+    const bx = W / 2 - S / 2;
+    const by = H * 0.47 - S / 2;
+    cur.box = { x: bx, y: by, s: S };
+    cur.rails = cur.glyph.s.map(anchors => buildRail(anchors, bx, by, S));
+  }
+
+  // ---------------------------------------------------------------------------
+  //  GAME STATE
+  // ---------------------------------------------------------------------------
+  let state = 'idle';            // idle | countdown | playing | over
+  let score = 0, combo = 0, maxCombo = 0, charCount = 0, skipCount = 0;
+  const gradeTally = { '神':0, '優':0, '良':0, '可':0 };
+  let deadline = 0, timeLeft = ROUND_MS, lastTickSecond = -1;
+  let countdownStart = 0, lastCountIdx = -1;
+  let cur = null;                // { glyph, rails, box, si, progF, entered, done[], devSum, devN, offFrames, startedAt, step }
+  let lastCh = '';
+  let skipHold = 0, lastKasureAt = 0;
+  let traceHeat = 0, goldGlow = 0, shake = 0;
+
+  const trail = [];              // fingertip history for the brush ribbon
+  const sparks = [];
+  const motes = [];
+  const popups = [];
+  const flashes = [];
+
+  function resetMotes(){
+    motes.length = 0;
+    for (let i = 0; i < 70; i++){
+      motes.push({
+        x: Math.random(), y: Math.random(),
+        r: 0.6 + Math.random() * 1.8,
+        vy: -(0.00004 + Math.random() * 0.00012),
+        vx: (Math.random() - 0.5) * 0.00006,
+        ph: Math.random() * Math.PI * 2,
+        hue: 200 + Math.random() * 80
+      });
+    }
+  }
+  resetMotes();
+
+  function spawnSpark(x, y, hue, spread, n){
+    for (let i = 0; i < n; i++){
+      if (sparks.length > 320) break;
+      const a = Math.random() * Math.PI * 2;
+      const s = 0.4 + Math.random() * spread;
+      sparks.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.25, life: 1, decay: 0.014 + Math.random() * 0.02, r: 1 + Math.random() * 2.2, hue });
+    }
+  }
+  function spawnPopup(x, y, text, color, size){
+    popups.push({ x, y, text, color, size: size || 22, life: 1, vy: -0.7 });
+  }
+
+  function resetGame(){
+    score = 0; combo = 0; maxCombo = 0; charCount = 0; skipCount = 0;
+    gradeTally['神'] = 0; gradeTally['優'] = 0; gradeTally['良'] = 0; gradeTally['可'] = 0;
+    cur = null; lastCh = ''; skipHold = 0;
+    trail.length = 0; sparks.length = 0; popups.length = 0; flashes.length = 0;
+    timeLeft = ROUND_MS; lastTickSecond = Math.ceil(ROUND_MS / 1000);
+    scoreEl.textContent = '0';
+    comboEl.textContent = '0';
+    charEl.textContent = '0';
+    timeEl.textContent = String(Math.ceil(ROUND_MS / 1000));
+    timeEl.classList.remove('low');
+  }
+
+  function nextGlyph(){
+    const progress = Math.max(0, Math.min(1, 1 - (timeLeft / ROUND_MS)));
+    const g = pickGlyph(progress, lastCh);
+    lastCh = g.ch;
+    cur = {
+      glyph: g, rails: [], box: null,
+      si: 0, progF: 0, entered: false, step: -1,
+      done: new Array(g.s.length).fill(false),
+      devSum: 0, devN: 0, offFrames: 0,
+      startedAt: performance.now(),
+      off: 0
+    };
+    layoutRails();
+  }
+
+  function currentAccuracy(tol){
+    if (!cur || cur.devN === 0) return 0.5;
+    const mean = cur.devSum / cur.devN;
+    const raw = 1 - (mean / Math.max(1, tol)) * 0.95;
+    const penalty = Math.min(0.3, cur.offFrames * 0.0022);
+    return Math.max(0, Math.min(1, raw - penalty));
+  }
+
+  function completeStroke(tol){
+    if (!cur) return;
+    const rail = cur.rails[cur.si];
+    if (rail){
+      const end = rail.pts[rail.n - 1];
+      spawnSpark(end.x, end.y, 46, 2.4, 16);
+    }
+    strokeBell(cur.si);
+    cur.done[cur.si] = true;
+    cur.si++;
+    cur.progF = 0; cur.entered = false; cur.step = -1; cur.off = 0;
+    if (cur.si >= cur.rails.length) completeGlyph(tol);
+  }
+
+  function completeGlyph(tol){
+    if (!cur || state !== 'playing') return;
+    const g = cur.glyph;
+    const strokes = g.s.length;
+    const acc = currentAccuracy(tol);
+    const grade = gradeFor(acc);
+    const elapsedSec = (performance.now() - cur.startedAt) / 1000;
+    const speedBonus = Math.max(0, Math.round((strokes * 2.4 - elapsedSec) * 45));
+    const comboMult = 1 + Math.min(20, combo) * 0.05;
+    const gained = Math.round((120 * strokes * grade.mult + speedBonus) * comboMult);
+
+    score += gained;
+    combo++; maxCombo = Math.max(maxCombo, combo);
+    charCount++;
+    gradeTally[grade.key] = (gradeTally[grade.key] || 0) + 1;
+    deadline = Math.min(performance.now() + MAX_TIME_MS, deadline + grade.bonus);
+
+    const cx = cur.box ? cur.box.x + cur.box.s / 2 : W / 2;
+    const cy = cur.box ? cur.box.y + cur.box.s / 2 : H / 2;
+    flashes.push({ ch: g.ch, grade: grade.key, color: grade.color, x: cx, y: cy, life: 1 });
+    spawnPopup(cx, cy + (cur.box ? cur.box.s * 0.62 : 140),
+      `${grade.key} ・ +${gained} ・ +${(grade.bonus / 1000).toFixed(1)}秒`, grade.color, 21);
+    for (const rail of cur.rails){
+      for (let i = 0; i < rail.n; i += Math.max(1, Math.floor(rail.n / 10))){
+        spawnSpark(rail.pts[i].x, rail.pts[i].y, 44 + Math.random() * 16, 2.2, 2);
+      }
+    }
+    goldGlow = 1; shake = grade.key === '神' ? 7 : 4;
+    glyphChime(grade.key === '神' ? 2 : (grade.key === '優' ? 1 : 0));
+
+    scoreEl.textContent = String(score);
+    comboEl.textContent = String(combo);
+    charEl.textContent = String(charCount);
+
+    nextGlyph();
+  }
+
+  function skipGlyph(){
+    if (!cur || state !== 'playing') return;
+    const cx = cur.box ? cur.box.x + cur.box.s / 2 : W / 2;
+    const cy = cur.box ? cur.box.y + cur.box.s / 2 : H / 2;
+    spawnPopup(cx, cy, '見送り', '#7fb4ff', 26);
+    skipSound();
+    skipCount++;
+    combo = 0;
+    comboEl.textContent = '0';
+    nextGlyph();
+  }
+
+  const COUNTDOWN_LABELS = ['三', '二', '一', '書け'];
+  const COUNTDOWN_STEP = 700;
+  function startGame(){
+    resetGame();
+    state = 'countdown';
+    countdownStart = performance.now();
+    lastCountIdx = -1;
+  }
+
+  function endGame(){
+    if (state !== 'playing') return;
+    state = 'over';
+    cur = null;
+    setVoice(BASE, 0);
+    gongEnd();
+
+    let rank = '精 進', rankColor = '#7fb4ff';
+    if (score >= 18000){ rank = '神 筆'; rankColor = '#fff6d8'; }
+    else if (score >= 11000){ rank = '達 筆'; rankColor = '#ffd98a'; }
+    else if (score >= 6000){ rank = '能 筆'; rankColor = '#8affe0'; }
+
+    finalRank.textContent = rank;
+    finalRank.style.color = rankColor;
+    finalScore.textContent = String(score);
+    finalSub.textContent =
+      `書いた字 ${charCount} ・ 最長連続 ${maxCombo} ・ 見送り ${skipCount}\n` +
+      `神 ${gradeTally['神']} ・ 優 ${gradeTally['優']} ・ 良 ${gradeTally['良']} ・ 可 ${gradeTally['可']}`;
+    resultBox.style.display = 'block';
+    eyebrow.style.display = 'none';
+    titleEl.textContent = '筆 を 置 く';
+    subEl.textContent = '';
+    hintEl.style.display = 'none';
+    startBtn.textContent = 'もう一度';
+    overlay.classList.remove('hidden');
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — video base
+  // ---------------------------------------------------------------------------
+  function drawVideoBase(){
+    ctx.save();
+    if (mirror){ ctx.translate(W, 0); ctx.scale(-1, 1); }
+    const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    try { ctx.drawImage(video, dx, dy, dw, dh); } catch(e){}
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(4,3,11,0.56)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = 'rgba(38,30,86,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const vg = ctx.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.16, W / 2, H * 0.5, Math.max(W, H) * 0.74);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(2,1,7,0.88)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawMotes(t){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (const m of motes){
+      m.x += m.vx; m.y += m.vy;
+      if (m.y < -0.05) { m.y = 1.05; m.x = Math.random(); }
+      if (m.x < -0.05) m.x = 1.05;
+      if (m.x > 1.05)  m.x = -0.05;
+      const tw = 0.45 + 0.55 * Math.sin(t * 0.0016 + m.ph);
+      c.fillStyle = `hsla(${m.hue},80%,78%,${0.10 + tw * 0.22})`;
+      c.beginPath(); c.arc(m.x * W, m.y * H, m.r, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — the practice square, the ghost character and the rails
+  // ---------------------------------------------------------------------------
+  function drawFrame(box, t){
+    const { x, y, s } = box;
+    ctx.save();
+    // paper halo behind the glyph
+    const halo = ctx.createRadialGradient(x + s / 2, y + s / 2, s * 0.05, x + s / 2, y + s / 2, s * 0.86);
+    halo.addColorStop(0, 'rgba(120,110,220,0.16)');
+    halo.addColorStop(1, 'rgba(60,50,140,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(x - s * 0.4, y - s * 0.4, s * 1.8, s * 1.8);
+
+    // 十字リーダー — the practice-book guide cross
+    ctx.strokeStyle = 'rgba(150,170,255,0.16)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 9]);
+    ctx.beginPath();
+    ctx.moveTo(x + s / 2, y); ctx.lineTo(x + s / 2, y + s);
+    ctx.moveTo(x, y + s / 2); ctx.lineTo(x + s, y + s / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // corner ticks
+    ctx.strokeStyle = 'rgba(150,170,255,0.28)';
+    ctx.lineWidth = 1.6;
+    const k = s * 0.09;
+    const corners = [[x, y, 1, 1], [x + s, y, -1, 1], [x, y + s, 1, -1], [x + s, y + s, -1, -1]];
+    for (const [cx, cy, sx, sy] of corners){
+      ctx.beginPath();
+      ctx.moveTo(cx + sx * k, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + sy * k);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawGhostChar(box, ch, alpha){
+    const { x, y, s } = box;
+    ctx.save();
+    ctx.font = `${Math.round(s * 0.94)}px "Yu Mincho","Hiragino Mincho ProN","MS Mincho",serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = `rgba(158,180,255,${alpha})`;
+    ctx.fillText(ch, x + s / 2, y + s / 2 + s * 0.02);
+    ctx.restore();
+  }
+
+  // tapered polyline between two indices — gives the line a brush-like belly
+  function brushLine(c, pts, i0, i1, w0, w1, color, glow, alpha){
+    const a = Math.max(0, Math.floor(i0));
+    const b = Math.min(pts.length - 1, Math.ceil(i1));
+    if (b <= a) return;
+    c.save();
+    c.globalAlpha = alpha;
+    c.strokeStyle = color; c.lineCap = 'round'; c.lineJoin = 'round';
+    if (glow > 0){ c.shadowBlur = glow; c.shadowColor = color; }
+    const segs = 7;
+    for (let sIdx = 0; sIdx < segs; sIdx++){
+      const p0 = a + Math.floor((b - a) * sIdx / segs);
+      const p1 = a + Math.floor((b - a) * (sIdx + 1) / segs);
+      if (p1 <= p0) continue;
+      const f = segs > 1 ? sIdx / (segs - 1) : 0;
+      c.lineWidth = w0 + (w1 - w0) * f;
+      c.beginPath();
+      c.moveTo(pts[p0].x, pts[p0].y);
+      for (let i = p0 + 1; i <= p1; i++) c.lineTo(pts[i].x, pts[i].y);
+      c.stroke();
+    }
+    c.restore();
+  }
+
+  function drawArrow(c, from, to, color, size){
+    const ang = Math.atan2(to.y - from.y, to.x - from.x);
+    c.save();
+    c.translate(from.x, from.y);
+    c.rotate(ang);
+    c.fillStyle = color;
+    c.shadowBlur = 12; c.shadowColor = color;
+    c.beginPath();
+    c.moveTo(size * 1.3, 0);
+    c.lineTo(-size * 0.55, size * 0.7);
+    c.lineTo(-size * 0.55, -size * 0.7);
+    c.closePath();
+    c.fill();
+    c.restore();
+  }
+
+  function drawRails(t, tol){
+    if (!cur || !cur.box || !cur.rails.length) return;
+    const S = cur.box.s;
+    const baseW = Math.max(7, S * 0.045);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (let si = 0; si < cur.rails.length; si++){
+      const rail = cur.rails[si];
+      if (!rail || rail.n < 2) continue;
+      const pts = rail.pts;
+
+      if (cur.done[si]){
+        // finished strokes stay lit in gold, with a hot core
+        brushLine(ctx, pts, 0, rail.n - 1, baseW * 1.05, baseW * 0.55, 'rgba(255,201,102,0.95)', 20, 0.95);
+        brushLine(ctx, pts, 0, rail.n - 1, baseW * 0.34, baseW * 0.18, 'rgba(255,248,222,0.95)', 10, 0.9);
+        continue;
+      }
+
+      if (si > cur.si){
+        // not yet due — a faint hint of what's coming, with its stroke number
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.strokeStyle = 'rgba(120,150,230,0.55)';
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([3, 8]);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < rail.n; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = 'rgba(140,170,255,0.9)';
+        ctx.font = `700 ${Math.round(S * 0.052)}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(String(si + 1), pts[0].x, pts[0].y);
+        ctx.restore();
+        continue;
+      }
+
+      // --- the current stroke ---
+      const headIdx = cur.progF * (rail.n - 1);
+      const pulse = 0.5 + 0.5 * Math.sin(t * 0.006);
+
+      // untraced remainder: a cool, breathing rail
+      ctx.save();
+      ctx.globalAlpha = 0.55 + pulse * 0.2;
+      ctx.strokeStyle = 'rgba(127,180,255,0.85)';
+      ctx.lineWidth = 2.4;
+      ctx.shadowBlur = 12; ctx.shadowColor = 'rgba(127,180,255,0.8)';
+      ctx.setLineDash([7, 7]);
+      ctx.lineDashOffset = -(t * 0.05) % 14;
+      ctx.beginPath();
+      const startI = Math.max(0, Math.floor(headIdx));
+      ctx.moveTo(pts[startI].x, pts[startI].y);
+      for (let i = startI + 1; i < rail.n; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      // traced portion: molten gold
+      if (headIdx > 0.5){
+        brushLine(ctx, pts, 0, headIdx, baseW * 1.05, baseW * 0.6, 'rgba(255,201,102,0.95)', 22, 1);
+        brushLine(ctx, pts, 0, headIdx, baseW * 0.34, baseW * 0.2, 'rgba(255,248,222,0.95)', 12, 1);
+      }
+
+      // the head of the stroke
+      const hi = Math.max(0, Math.min(rail.n - 1, Math.round(headIdx)));
+      const hp = pts[hi];
+      const hr = baseW * (0.9 + pulse * 0.35);
+      const hg = ctx.createRadialGradient(hp.x, hp.y, 0, hp.x, hp.y, hr * 2.6);
+      hg.addColorStop(0, 'rgba(255,250,232,0.95)');
+      hg.addColorStop(0.4, 'rgba(255,201,102,0.5)');
+      hg.addColorStop(1, 'rgba(255,180,60,0)');
+      ctx.fillStyle = hg;
+      ctx.beginPath(); ctx.arc(hp.x, hp.y, hr * 2.6, 0, Math.PI * 2); ctx.fill();
+
+      // start ring + direction arrow while the stroke has not been entered
+      if (!cur.entered){
+        const r0 = pts[0];
+        const ahead = pts[Math.min(rail.n - 1, 8)];
+        const ringR = tol * (0.62 + pulse * 0.18);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,232,160,0.9)';
+        ctx.lineWidth = 2.4;
+        ctx.shadowBlur = 18; ctx.shadowColor = 'rgba(255,216,120,0.9)';
+        ctx.beginPath(); ctx.arc(r0.x, r0.y, ringR, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 0.35 + pulse * 0.3;
+        ctx.beginPath(); ctx.arc(r0.x, r0.y, ringR * 1.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+        drawArrow(ctx, r0, ahead, 'rgba(255,244,206,0.95)', Math.max(7, S * 0.035));
+
+        // a guide runner sweeps the stroke when you hesitate
+        if (cur.off > 1400){
+          const q = ((t % 1400) / 1400);
+          const gi = Math.min(rail.n - 1, Math.floor(q * (rail.n - 1)));
+          const gp = pts[gi];
+          const gg = ctx.createRadialGradient(gp.x, gp.y, 0, gp.x, gp.y, baseW * 1.6);
+          gg.addColorStop(0, 'rgba(200,225,255,0.85)');
+          gg.addColorStop(1, 'rgba(140,180,255,0)');
+          ctx.fillStyle = gg;
+          ctx.beginPath(); ctx.arc(gp.x, gp.y, baseW * 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  RENDER — brush ribbon, sparks, popups, flashes
+  // ---------------------------------------------------------------------------
+  function drawTrail(onRail){
+    if (trail.length < 2) return;
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    for (let i = 1; i < trail.length; i++){
+      const a = trail[i - 1], b = trail[i];
+      const f = i / trail.length;
+      c.strokeStyle = onRail
+        ? `rgba(255,214,130,${0.10 + f * 0.55})`
+        : `rgba(130,175,255,${0.07 + f * 0.35})`;
+      c.lineWidth = 1.4 + f * 5.4;
+      c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+    }
+    c.restore();
+  }
+
+  function drawTip(tipPt, penDown, onRail, t){
+    const c = fctx;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    const pulse = 0.5 + 0.5 * Math.sin(t * 0.009);
+    const r = penDown ? 9 + pulse * 4 : 5;
+    const hue = onRail ? '255,224,150' : (penDown ? '190,205,255' : '150,160,200');
+    const g = c.createRadialGradient(tipPt.x, tipPt.y, 0, tipPt.x, tipPt.y, r * 3.2);
+    g.addColorStop(0, `rgba(255,255,255,${penDown ? 0.95 : 0.55})`);
+    g.addColorStop(0.35, `rgba(${hue},${penDown ? 0.6 : 0.3})`);
+    g.addColorStop(1, `rgba(${hue},0)`);
+    c.fillStyle = g;
+    c.beginPath(); c.arc(tipPt.x, tipPt.y, r * 3.2, 0, Math.PI * 2); c.fill();
+    c.restore();
+  }
+
+  function updateDrawSparks(){
+    const c = fctx;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    for (let i = sparks.length - 1; i >= 0; i--){
+      const p = sparks[i];
+      p.x += p.vx; p.y += p.vy; p.vy -= 0.006; p.vx *= 0.985; p.life -= p.decay;
+      if (p.life <= 0){ sparks.splice(i, 1); continue; }
+      c.fillStyle = `hsla(${p.hue},100%,${66 + p.life * 22}%,${p.life * 0.9})`;
+      c.beginPath(); c.arc(p.x, p.y, p.r * p.life + 0.4, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  }
+
+  function updateDrawPopups(){
+    for (let i = popups.length - 1; i >= 0; i--){
+      const p = popups[i];
+      p.y += p.vy; p.life -= 0.011;
+      if (p.life <= 0){ popups.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.5));
+      ctx.fillStyle = p.color;
+      ctx.font = `800 ${p.size}px 'Hiragino Kaku Gothic ProN','Yu Gothic',sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowBlur = 14; ctx.shadowColor = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+  }
+
+  function updateDrawFlashes(){
+    for (let i = flashes.length - 1; i >= 0; i--){
+      const f = flashes[i];
+      f.life -= 0.016;
+      if (f.life <= 0){ flashes.splice(i, 1); continue; }
+      const q = 1 - f.life;
+      const S = boxSize();
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = Math.max(0, Math.min(1, f.life * 1.25));
+      ctx.translate(f.x, f.y);
+      ctx.scale(1 + q * 0.5, 1 + q * 0.5);
+      ctx.font = `${Math.round(S * 0.9)}px "Yu Mincho","Hiragino Mincho ProN","MS Mincho",serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowBlur = 40; ctx.shadowColor = f.color;
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.ch, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  function drawCountdown(label, q){
+    const scale = 1 + (1 - Math.min(1, q / 0.3)) * 0.7;
+    const alpha = q > 0.72 ? 1 - (q - 0.72) / 0.28 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(W / 2, H * 0.44);
+    ctx.scale(scale, scale);
+    ctx.font = `800 96px "Yu Mincho","Hiragino Mincho ProN",serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 34; ctx.shadowColor = 'rgba(255,217,138,0.9)';
+    ctx.fillStyle = '#ffd98a';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+
+  function drawSkipRing(pt, q){
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(127,180,255,0.85)';
+    ctx.lineWidth = 4;
+    ctx.shadowBlur = 16; ctx.shadowColor = 'rgba(127,180,255,0.9)';
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 34, -Math.PI / 2, -Math.PI / 2 + q * Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.6;
+    ctx.fillStyle = 'rgba(200,225,255,0.9)';
+    ctx.font = `700 12px 'Hiragino Kaku Gothic ProN',sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('見送り', pt.x, pt.y + 52);
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  //  MAIN LOOP
+  // ---------------------------------------------------------------------------
+  let smoothTip = null, prevTipPt = null;
+  let penTrue = 0, penFalse = 0, penDown = false;
+  let lastT = performance.now();
+
+  function frame(){
+    requestAnimationFrame(frame);
+    const t = performance.now();
+    const dt = Math.min(64, Math.max(0, t - lastT));
+    lastT = t;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if (shake > 0.2){
+      ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+      shake *= 0.86;
+    }
+    drawVideoBase();
+
+    // fade the additive layer -> afterglow trails
+    fctx.save();
+    fctx.setTransform(1, 0, 0, 1, 0, 0);
+    fctx.globalCompositeOperation = 'destination-out';
+    fctx.fillStyle = 'rgba(0,0,0,0.20)';
+    fctx.fillRect(0, 0, fx.width, fx.height);
+    fctx.restore();
+
+    drawMotes(t);
+
+    // ---- hand selection -----------------------------------------------------
+    const fresh = (t - RESULT.t) < 400;
+    const handsNow = fresh ? RESULT.hands : [];
+    let hand = null;
+    for (const h of handsNow){ if (h && h.pen){ hand = h; break; } }
+    if (!hand && handsNow.length) hand = handsNow[0];
+
+    // pen-down with hysteresis so a flicker never breaks a stroke
+    if (hand && hand.pen){ penTrue++; penFalse = 0; } else { penFalse++; penTrue = 0; }
+    if (!penDown && penTrue >= 2) penDown = true;
+    if (penDown && penFalse >= 4) penDown = false;
+
+    let tipPt = null;
+    if (hand && hand.tip){
+      const raw = { x: px(hand.tip), y: py(hand.tip) };
+      if (!smoothTip) smoothTip = { x: raw.x, y: raw.y };
+      else {
+        smoothTip.x += (raw.x - smoothTip.x) * 0.45;
+        smoothTip.y += (raw.y - smoothTip.y) * 0.45;
+      }
+      tipPt = { x: smoothTip.x, y: smoothTip.y };
+      trail.push(tipPt);
+      while (trail.length > 26) trail.shift();
+    } else {
+      // hand lost: forget the last point so the next sighting can't sweep a
+      // phantom segment across a start ring
+      smoothTip = null; prevTipPt = null;
+      if (trail.length) trail.shift();
+    }
+
+    // ---- countdown ----------------------------------------------------------
+    if (state === 'countdown'){
+      const el = t - countdownStart;
+      const idx = Math.floor(el / COUNTDOWN_STEP);
+      if (idx < COUNTDOWN_LABELS.length){
+        if (idx !== lastCountIdx){ lastCountIdx = idx; countBell(idx); }
+        const q = (el % COUNTDOWN_STEP) / COUNTDOWN_STEP;
+        drawCountdown(COUNTDOWN_LABELS[idx], q);
+      } else {
+        state = 'playing';
+        deadline = t + ROUND_MS;
+        timeLeft = ROUND_MS;
+        nextGlyph();
+      }
+    }
+
+    // ---- play ---------------------------------------------------------------
+    let onRail = false;
+    let tol = 40;
+
+    if (state === 'playing'){
+      timeLeft = Math.max(0, deadline - t);
+
+      if (cur && cur.box && cur.rails.length){
+        tol = Math.max(30, cur.box.s * 0.145);
+        const rail = cur.rails[cur.si];
+
+        if (rail && rail.n >= 2){
+          let advanced = false;
+          if (tipPt && penDown){
+            const pts = rail.pts, n = rail.n;
+            if (!cur.entered){
+              const enterD = prevTipPt
+                ? distToSeg(pts[0], prevTipPt, tipPt)
+                : Math.hypot(tipPt.x - pts[0].x, tipPt.y - pts[0].y);
+              if (enterD < tol * 1.2){
+                cur.entered = true;
+                cur.off = 0;
+              } else {
+                cur.off += dt;
+              }
+            }
+            if (cur.entered){
+              const i0 = Math.max(0, Math.min(n - 1, Math.floor(cur.progF * (n - 1))));
+              const lookIdx = Math.max(20, Math.ceil(n * 0.28));
+              const iEnd = Math.min(n - 1, i0 + lookIdx);
+              let best = i0, bestD = Infinity;
+              for (let i = i0; i <= iEnd; i++){
+                const d = Math.hypot(tipPt.x - pts[i].x, tipPt.y - pts[i].y);
+                if (d < bestD){ bestD = d; best = i; }
+              }
+              if (bestD <= tol){
+                onRail = true;
+                const f = best / (n - 1);
+                if (f > cur.progF + 0.0005){
+                  cur.progF = f;
+                  advanced = true;
+                  // accuracy is sampled only where the brush actually moved
+                  // forward, so resting on one point can't farm a good grade
+                  cur.devSum += bestD; cur.devN++;
+                }
+                cur.off = 0;
+              } else {
+                cur.off += dt;
+                cur.offFrames++;
+                if (bestD > tol * 1.9 && t - lastKasureAt > 620){
+                  lastKasureAt = t;
+                  kasure();
+                }
+              }
+
+              // sonify: five notes climb as the stroke fills
+              const step = Math.max(0, Math.min(4, Math.floor(cur.progF * 5)));
+              if (step !== cur.step){
+                cur.step = step;
+                kotoPluck(noteFor(cur.si, step), 0.20);
+                if (tipPt) spawnSpark(tipPt.x, tipPt.y, 46, 1.6, 5);
+              }
+              setVoice(noteFor(cur.si, Math.max(0, cur.step)), advanced ? 0.85 : (onRail ? 0.3 : 0));
+
+              if (cur.progF >= 0.999){
+                completeStroke(tol);
+              }
+            } else {
+              setVoice(noteFor(0, 0), 0);
+            }
+          } else {
+            if (cur) cur.off += dt;
+            setVoice(noteFor(0, 0), 0);
+          }
+
+          if (advanced && tipPt && Math.random() < 0.5) spawnSpark(tipPt.x, tipPt.y, 46, 1.1, 1);
+          traceHeat = traceHeat * 0.88 + (advanced ? 0.12 : 0);
+        }
+      }
+
+      // ---- skip gesture: an open palm, held ---------------------------------
+      if (hand && hand.open && !penDown){
+        skipHold += dt;
+        if (skipHold >= SKIP_HOLD_MS){
+          skipHold = 0;
+          skipGlyph();
+        }
+      } else {
+        skipHold = Math.max(0, skipHold - dt * 1.6);
+      }
+
+      // ---- clock -----------------------------------------------------------
+      const sec = Math.ceil(timeLeft / 1000);
+      if (sec !== lastTickSecond){
+        lastTickSecond = sec;
+        timeEl.textContent = String(sec);
+        timeEl.classList.toggle('low', sec <= 10);
+        if (sec <= 10 && sec > 0) tickWarn();
+      }
+      if (timeLeft <= 0) endGame();
+    } else {
+      setVoice(noteFor(0, 0), 0);
+    }
+
+    // ---- draw the board ------------------------------------------------------
+    if (cur && cur.box){
+      drawFrame(cur.box, t);
+      drawGhostChar(cur.box, cur.glyph.ch, 0.11 + traceHeat * 0.05);
+      drawRails(t, tol);
+    }
+
+    drawTrail(onRail);
+    if (tipPt) drawTip(tipPt, penDown, onRail, t);
+    updateDrawSparks();
+
+    // composite the glow layer
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(fx, 0, 0);
+    ctx.restore();
+
+    updateDrawFlashes();
+    updateDrawPopups();
+
+    if (state === 'playing' && skipHold > 60 && hand && hand.center){
+      drawSkipRing({ x: px(hand.center), y: py(hand.center) }, Math.min(1, skipHold / SKIP_HOLD_MS));
+    }
+
+    ctx.restore(); // shake
+
+    prevTipPt = tipPt;
+    goldGlow *= 0.9;
+    goldFlashEl.style.background = `rgba(255,217,138,${goldGlow * 0.16})`;
+
+    // ---- HUD text -----------------------------------------------------------
+    if (state === 'playing'){
+      const total = cur ? (cur.rails.length || cur.glyph.s.length) : 0;
+      const head = cur
+        ? `${cur.glyph.ch}（${cur.glyph.yomi}）${Math.min(total, cur.si + 1)}／${total}画`
+        : '';
+      if (!handsNow.length){
+        stateDot.textContent = '手をカメラに映してください';
+        stateDot.className = 'silent';
+      } else if (!penDown){
+        stateDot.textContent = head ? `${head} ・ ☝指を一本立てて` : '☝ 人差し指を一本だけ立てて';
+        stateDot.className = 'guide';
+      } else if (cur){
+        if (!cur.entered){
+          stateDot.textContent = `${head} ・ 光の輪から`;
+          stateDot.className = 'guide';
+        } else if (onRail){
+          stateDot.textContent = `${head} ・ なぞり ${Math.round(cur.progF * 100)}%`;
+          stateDot.className = 'hot';
+        } else {
+          stateDot.textContent = `${head} ・ 筆路から外れています`;
+          stateDot.className = 'guide';
+        }
+      }
+    } else if (state === 'countdown'){
+      stateDot.textContent = '筆を構えて…';
+      stateDot.className = 'guide';
+    } else if (state === 'over'){
+      stateDot.textContent = '筆 を 置 く';
+      stateDot.className = 'silent';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  //  BOOT
+  // ---------------------------------------------------------------------------
+  let booted = false;
+  async function boot(){
+    startBtn.disabled = true;
+    startBtn.textContent = '起動中…';
+    try {
+      if (!booted){
+        if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
+          throw new Error('手検出ライブラリ（MediaPipe）を読み込めませんでした。オンライン環境で開いてください。');
+        }
+        buildAudio();
+        if (actx.state === 'suspended') await actx.resume();
+        if (!hands) initHands();
+        await startStream();
+        await startCameraLoop();
+        running = true;
+        booted = true;
+        requestAnimationFrame(frame);
+      } else {
+        if (actx && actx.state === 'suspended') await actx.resume();
+      }
+
+      overlay.classList.add('hidden');
+      hud.classList.add('show');
+      topbar.classList.add('show');
+      brand.classList.add('show');
+      centerHud.classList.add('show');
+      resultBox.style.display = 'none';
+      eyebrow.style.display = 'block';
+      titleEl.textContent = 'KUUSHO';
+      subEl.textContent = '空書 — 人差し指一本で、宙に文字を書く';
+      hintEl.style.display = 'block';
+      startBtn.textContent = 'はじめる';
+      startBtn.disabled = false;
+      startGame();
+    } catch(err){
+      startBtn.disabled = false;
+      startBtn.textContent = 'はじめる';
+      errorMsg.style.display = 'block';
+      errorMsg.textContent = 'カメラを起動できませんでした：' + (err && err.message ? err.message : err) +
+        '\nHTTPS または localhost で開き、カメラの使用を許可してください。';
+    }
+  }
+  startBtn.addEventListener('click', boot);
+
+  window.addEventListener('resize', resize);
+  resize();
+})();
+</script>
+</body>
+</html>
