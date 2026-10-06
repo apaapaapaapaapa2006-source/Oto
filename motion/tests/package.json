@@ -1,0 +1,15 @@
+{
+  "name": "motion-editor-tests",
+  "private": true,
+  "description": "開発用テスト（成果物の index.html には含まれません）",
+  "scripts": {
+    "test": "playwright test",
+    "test:webkit": "playwright test --project=iphone-webkit",
+    "test:iphone-chromium": "playwright test --project=iphone-chromium",
+    "test:desktop": "playwright test --project=desktop-chromium",
+    "test:export": "playwright test --project=export-chrome"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
